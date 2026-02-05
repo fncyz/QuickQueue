@@ -8,20 +8,70 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { BlurView } from 'expo-blur'
 import { useRouter } from 'expo-router'
 import { useState } from 'react'
 
+import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { doc, setDoc } from 'firebase/firestore'
+import { auth, db } from '../../firebaseConfig'
+
 const SignUp = () => {
   const router = useRouter()
-  const [loginType, setLoginType] = useState('resident')
-  const [emailOrPhone, setEmailOrPhone] = useState('')
-  const [password, setPassword] = useState('')
 
-  const handleCreateAcc = () => {
-    // TODO: Implement sign-in logic
+  // 🔐 Auth
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loginType] = useState('resident')
+
+  // 👤 User Info
+  const [firstName, setFirstName] = useState('')
+  const [middleName, setMiddleName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [contactNumber, setContactNumber] = useState('')
+  const [address, setAddress] = useState('')
+
+  const handleCreateAcc = async () => {
+    if (!email || !password || !confirmPassword || !firstName || !lastName) {
+      Alert.alert('Error', 'Please fill in all required fields')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match')
+      return
+    }
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      )
+
+      const user = userCredential.user
+
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        role: loginType,
+        firstName,
+        middleName,
+        lastName,
+        contactNumber,
+        address,
+        createdAt: new Date(),
+      })
+
+      Alert.alert('Success', 'Account created successfully')
+      router.replace('/qq/res_login')
+    } catch (error) {
+      Alert.alert('Signup Failed', error.message)
+    }
   }
 
   const handleSignIn = () => {
@@ -30,27 +80,22 @@ const SignUp = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Blurred background - Index page content */}
+      {/* 🔽 EVERYTHING BELOW IS YOUR ORIGINAL UI */}
       <View style={styles.backgroundContainer} pointerEvents="none">
         <BlurView intensity={50} tint="natural" style={styles.blurOverlay}>
-          <ScrollView 
+          <ScrollView
             style={styles.backgroundScroll}
             contentContainerStyle={styles.backgroundContent}
           >
-            {/* Header */}
             <View style={styles.backgroundHeader}></View>
 
-            {/* Main Content Area */}
             <View style={styles.backgroundMainContent}>
               <View style={styles.backgroundLogoTitleContainer}>
-                {/* Logo */}
-                <Image 
-                  source={require('../../assets/images/logo.png')} 
+                <Image
+                  source={require('../../assets/images/logo.png')}
                   style={styles.backgroundLogo}
                   resizeMode="contain"
                 />
-                
-                {/* Title */}
                 <View style={styles.backgroundTitleContainer}>
                   <Text style={styles.backgroundTitle}>
                     <Text style={styles.backgroundTitleYellow}>Q</Text>
@@ -62,19 +107,16 @@ const SignUp = () => {
                 </View>
               </View>
 
-              {/* Buttons */}
               <View style={styles.backgroundButtonContainer}>
                 <View style={[styles.backgroundButton, styles.backgroundDownloadButton]}>
                   <Text style={styles.backgroundDownloadButtonText}>Download</Text>
                 </View>
-                
                 <View style={[styles.backgroundButton, styles.backgroundGetStartedButton]}>
                   <Text style={styles.backgroundGetStartedButtonText}>Get Started</Text>
                 </View>
               </View>
             </View>
 
-            {/* Footer */}
             <View style={styles.backgroundFooter}>
               <Text style={styles.backgroundFooterText}>
                 © Consolatrix College of Toledo City. All rights Reserved.
@@ -82,7 +124,6 @@ const SignUp = () => {
             </View>
           </ScrollView>
         </BlurView>
-        {/* White overlay for color scheme */}
         <View style={styles.whiteOverlay} />
       </View>
 
@@ -95,107 +136,84 @@ const SignUp = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Central login card */}
           <View style={styles.card}>
-
-            {/* Welcome */}
             <Text style={styles.welcomeTitle}>Create Account</Text>
-            <Text style={styles.welcomeSubtext}>
-              Join us to get Started!
-            </Text>
+            <Text style={styles.welcomeSubtext}>Join us to get Started!</Text>
 
             {/* Inputs */}
             <View style={styles.row}>
-             <View style={styles.inputFirst}>
-            <Text style={styles.inputLabel}>First Name</Text>
-            <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#9ca3af"
-            />
-             </View>
+              <View style={styles.inputFirst}>
+                <Text style={styles.inputLabel}>First Name</Text>
+                <TextInput style={styles.input} value={firstName} onChangeText={setFirstName} />
+              </View>
 
-            <View style={styles.inputMid}>
-            <Text style={styles.inputLabel}>Middle Name</Text>
-            <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor="#9ca3af"
-            />
-            </View>
+              <View style={styles.inputMid}>
+                <Text style={styles.inputLabel}>Middle Name</Text>
+                <TextInput style={styles.input} value={middleName} onChangeText={setMiddleName} />
+              </View>
             </View>
 
-                <View style={styles.inputGroup}>
+            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Last Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
-              />
+              <TextInput style={styles.input} value={lastName} onChangeText={setLastName} />
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Email Address</Text>
               <TextInput
                 style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
-                value={emailOrPhone}
-                onChangeText={setEmailOrPhone}
+                value={email}
+                onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoCorrect={false}
               />
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Contact Number</Text>
               <TextInput
                 style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
+                value={contactNumber}
+                onChangeText={setContactNumber}
+                keyboardType="phone-pad"
               />
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Baranggay Address</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
-              />
+              <TextInput style={styles.input} value={address} onChangeText={setAddress} />
             </View>
-             <View style={styles.inputGroup}>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Confirm Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
               />
             </View>
 
-            {/* Sign In */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Confirm Password</Text>
+              <TextInput
+                style={styles.input}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+              />
+            </View>
+
             <Pressable style={styles.signInBtn} onPress={handleCreateAcc}>
               <Text style={styles.signInBtnText}>Create Account</Text>
             </Pressable>
+
             <View style={styles.signUpRow}>
               <Text style={styles.signUpPrompt}>Already have an Account?</Text>
               <Pressable onPress={handleSignIn}>
                 <Text style={styles.signUpLink}>Sign In</Text>
               </Pressable>
             </View>
-            
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -8,11 +8,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { BlurView } from 'expo-blur'
 import { useRouter } from 'expo-router'
 import { useState } from 'react'
+
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../../firebaseConfig'
 
 const ResLogin = () => {
   const router = useRouter()
@@ -20,12 +25,71 @@ const ResLogin = () => {
   const [emailOrPhone, setEmailOrPhone] = useState('')
   const [password, setPassword] = useState('')
 
-  const handleSignIn = () => {
-    // TODO: Implement sign-in logic
+  const handleSignIn = async () => {
+    if (!emailOrPhone || !password) {
+      Alert.alert('Error', 'Please fill in all fields')
+      return
+    }
+
+    try {
+      // 🔐 Firebase Authentication (EMAIL ONLY)
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        emailOrPhone,
+        password
+      )
+
+      const user = userCredential.user
+
+      // 📄 Fetch user role from Firestore
+      const userRef = doc(db, 'users', user.uid)
+      const userSnap = await getDoc(userRef)
+
+      if (!userSnap.exists()) {
+        Alert.alert('Error', 'User data not found')
+        return
+      }
+
+      const { role } = userSnap.data()
+
+      // ❌ Prevent role mismatch
+      if (loginType !== role) {
+        Alert.alert(
+          'Access Denied',
+          `Please use the ${role} login`
+        )
+        return
+      }
+
+      // 🧭 Route user
+      if (role === 'resident') {
+        router.replace('/resident/home')
+        return
+      }
+
+      if (role === 'admin') {
+        router.replace('/admin/dashboard')
+        return
+      }
+
+      Alert.alert('Error', 'Invalid user role')
+
+    } catch (error) {
+      let message = 'Login failed'
+
+      if (error.code === 'auth/user-not-found') {
+        message = 'Account not found'
+      } else if (error.code === 'auth/wrong-password') {
+        message = 'Incorrect password'
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'Invalid email address'
+      }
+
+      Alert.alert('Error', message)
+    }
   }
 
   const handleSignUp = () => {
-    // TODO: Navigate to sign-up screen when available
     router.push('/qq/signup')
   }
 
@@ -38,20 +102,16 @@ const ResLogin = () => {
             style={styles.backgroundScroll}
             contentContainerStyle={styles.backgroundContent}
           >
-            {/* Header */}
             <View style={styles.backgroundHeader}></View>
 
-            {/* Main Content Area */}
             <View style={styles.backgroundMainContent}>
               <View style={styles.backgroundLogoTitleContainer}>
-                {/* Logo */}
                 <Image 
                   source={require('../../assets/images/logo.png')} 
                   style={styles.backgroundLogo}
                   resizeMode="contain"
                 />
                 
-                {/* Title */}
                 <View style={styles.backgroundTitleContainer}>
                   <Text style={styles.backgroundTitle}>
                     <Text style={styles.backgroundTitleYellow}>Q</Text>
@@ -63,7 +123,6 @@ const ResLogin = () => {
                 </View>
               </View>
 
-              {/* Buttons */}
               <View style={styles.backgroundButtonContainer}>
                 <View style={[styles.backgroundButton, styles.backgroundDownloadButton]}>
                   <Text style={styles.backgroundDownloadButtonText}>Download</Text>
@@ -75,7 +134,6 @@ const ResLogin = () => {
               </View>
             </View>
 
-            {/* Footer */}
             <View style={styles.backgroundFooter}>
               <Text style={styles.backgroundFooterText}>
                 © Consolatrix College of Toledo City. All rights Reserved.
@@ -83,7 +141,6 @@ const ResLogin = () => {
             </View>
           </ScrollView>
         </BlurView>
-        {/* White overlay for color scheme */}
         <View style={styles.whiteOverlay} />
       </View>
 
@@ -96,9 +153,7 @@ const ResLogin = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Central login card */}
           <View style={styles.card}>
-            {/* Logo */}
             <View style={styles.logoContainer}>
               <Image
                 source={require('../../assets/images/qq-logo.png')}
@@ -107,53 +162,57 @@ const ResLogin = () => {
               />
             </View>
 
-            {/* Welcome */}
             <Text style={styles.welcomeTitle}>WELCOME!</Text>
             <Text style={styles.welcomeSubtext}>
               Sign in to manage appointments and queues.
             </Text>
 
-            {/* Login type selector */}
             <View style={styles.loginTypeRow}>
               <Pressable
                 style={[
                   styles.loginTypeOption,
-                  loginType === 'resident' ? styles.loginTypeBtnActive : styles.loginTypeLinkWrap,
+                  loginType === 'resident'
+                    ? styles.loginTypeBtnActive
+                    : styles.loginTypeLinkWrap,
                 ]}
                 onPress={() => setLoginType('resident')}
               >
                 <Text
-                  style={[
-                    loginType === 'resident' ? styles.loginTypeBtnTextActive : styles.loginTypeLinkText,
-                  ]}
+                  style={
+                    loginType === 'resident'
+                      ? styles.loginTypeBtnTextActive
+                      : styles.loginTypeLinkText
+                  }
                 >
                   Resident Login
                 </Text>
               </Pressable>
+
               <Pressable
                 style={[
                   styles.loginTypeOption,
-                  loginType === 'admin' ? styles.loginTypeBtnActive : styles.loginTypeLinkWrap,
+                  loginType === 'admin'
+                    ? styles.loginTypeBtnActive
+                    : styles.loginTypeLinkWrap,
                 ]}
                 onPress={() => setLoginType('admin')}
               >
                 <Text
-                  style={[
-                    loginType === 'admin' ? styles.loginTypeBtnTextActive : styles.loginTypeLinkText,
-                  ]}
+                  style={
+                    loginType === 'admin'
+                      ? styles.loginTypeBtnTextActive
+                      : styles.loginTypeLinkText
+                  }
                 >
                   Admin Login
                 </Text>
               </Pressable>
             </View>
 
-            {/* Inputs */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email or Phone Number</Text>
+              <Text style={styles.inputLabel}>Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
                 value={emailOrPhone}
                 onChangeText={setEmailOrPhone}
                 keyboardType="email-address"
@@ -161,24 +220,21 @@ const ResLogin = () => {
                 autoCorrect={false}
               />
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder=""
-                placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
               />
             </View>
 
-            {/* Sign In */}
             <Pressable style={styles.signInBtn} onPress={handleSignIn}>
               <Text style={styles.signInBtnText}>Sign In</Text>
             </Pressable>
 
-            {/* Sign Up link */}
             <View style={styles.signUpRow}>
               <Text style={styles.signUpPrompt}>Don't have an account?</Text>
               <Pressable onPress={handleSignUp}>
@@ -193,6 +249,7 @@ const ResLogin = () => {
 }
 
 export default ResLogin
+
 
 const styles = StyleSheet.create({
   container: {
