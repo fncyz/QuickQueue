@@ -63,7 +63,7 @@ const ResLogin = () => {
 
       // 🧭 Route user
       if (role === 'resident') {
-        router.replace('/resident/home')
+        router.replace('/qq/res_dashboard/res_index')
         return
       }
 
