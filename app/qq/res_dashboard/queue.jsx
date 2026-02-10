@@ -45,7 +45,14 @@ const QueueStatus = () => {
 
           <Text style={[styles.navLink, styles.navLinkActive]}>Queue Status</Text>
 
-          <Text style={styles.navLink}>About</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              router.push('/qq/res_dashboard/about')
+            }}
+          >
+            <Text style={styles.navLink}>About</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -199,11 +206,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#1F3C88',
   },
+
   logoutText: {
     color: '#FF4D4D',
     fontSize: 22,
     fontWeight: '700',
   },
+  
   header: {
     padding: 24,
   },

@@ -86,7 +86,9 @@ const Book = () => {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => {}}
+            onPress={() => {
+              router.push('/qq/res_dashboard/about')
+            }}
           >
             <Text style={styles.navLink}>About</Text>
           </TouchableOpacity>

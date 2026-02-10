@@ -53,7 +53,7 @@ const ResidentHome = () => {
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => {
-              // TODO: router.push('/qq/res_dashboard/about') when page exists
+              router.push('/qq/res_dashboard/about')
             }}
           >
             <Text style={styles.navLink}>About</Text>
