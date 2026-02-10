@@ -37,7 +37,7 @@ const ResidentHome = () => {
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => {
-              // TODO: router.push('/qq/res_dashboard/book') when page exists
+              router.push('/qq/res_dashboard/book')
             }}
           >
             <Text style={styles.navLink}>Book Now</Text>
@@ -184,10 +184,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: '#EF4444',
+    backgroundColor: '#1F3C88',
   },
   logoutText: {
-    color: '#FFFFFF',
+    color: '#FF4D4D',
     fontSize: 22,
     fontWeight: '700',
   },
