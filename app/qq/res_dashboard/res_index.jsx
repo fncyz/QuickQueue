@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   navLink: {
-    fontSize: 16,
+    fontSize: 22,
     color: '#1F2933',
     fontWeight: '500',
   },
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '700',
   },
   heroSection: {
@@ -172,14 +172,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroTitle: {
-    fontSize: 32,
+    fontSize: 45,
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 12,
   },
   heroSubtitle: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#E5E7EB',
     textAlign: 'center',
     marginBottom: 16,
@@ -255,11 +255,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hoursLabel: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#4B5563',
   },
   hoursValue: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#111827',
     fontWeight: '500',
   },
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   predictionText: {
-    fontSize: 14,
+    fontSize: 17,
     color: '#4B5563',
   },
 })
