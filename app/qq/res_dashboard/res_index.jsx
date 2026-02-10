@@ -83,7 +83,7 @@ const ResidentHome = () => {
           <TouchableOpacity
             style={[styles.ctaButton, styles.bookButton]}
             onPress={() => {
-              // Navigate to booking page when available
+              router.push('/qq/res_dashboard/book')
             }}
           >
             <Ionicons name="calendar" size={20} color="#0B3B91" style={styles.ctaIcon} />

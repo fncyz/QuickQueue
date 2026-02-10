@@ -45,47 +45,75 @@ const Book = () => {
   ]
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* NAVBAR */}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Top navigation bar - same as res_index */}
       <View style={styles.navbar}>
         <View style={styles.navLeft}>
-          <Image source={require('../../../assets/images/qq-logo.png')} style={styles.logo} />
-          <Image source={require('../../../assets/images/toledo.png')} style={styles.logo} />
-          <Image source={require('../../../assets/images/cctc.png')} style={styles.logo} />
+          <Image
+            source={require('../../../assets/images/qq-logo.png')}
+            style={styles.mainLogo}
+            resizeMode="contain"
+          />
+          <Image
+            source={require('../../../assets/images/toledo.png')}
+            style={styles.partnerLogo}
+            resizeMode="contain"
+          />
+          <Image
+            source={require('../../../assets/images/cctc.png')}
+            style={styles.partnerLogo}
+            resizeMode="contain"
+          />
         </View>
 
         <View style={styles.navLinks}>
-          <TouchableOpacity onPress={() => router.push('/qq/res_dashboard/res_index')}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/qq/res_dashboard/res_index')}
+          >
             <Text style={styles.navLink}>Home</Text>
           </TouchableOpacity>
-          <Text style={[styles.navLink, styles.active]}>Book Now</Text>
-          <Text style={styles.navLink}>Queue Status</Text>
-          <Text style={styles.navLink}>About</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/qq/res_dashboard/book')}>
+            <Text style={[styles.navLink, styles.navLinkActive]}>Book Now</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {}}
+          >
+            <Text style={styles.navLink}>Queue Status</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {}}
+          >
+            <Text style={styles.navLink}>About</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={styles.logout}
+          style={styles.logoutButton}
           onPress={() => router.replace('/qq/res_login')}
         >
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
-      {/* HEADER */}
-      <View style={styles.header}>
+      {/* Header - same hero section styling as res_index */}
+      <View style={styles.heroSection}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>ONLINE BOOKING</Text>
         </View>
-        <Text style={styles.title}>Schedule Your Appointment</Text>
-        <Text style={styles.subtitle}>
+        <Text style={styles.heroTitle}>Schedule Your Appointment</Text>
+        <Text style={styles.heroSubtitle}>
           Book your visit in advance and skip the waiting room. Get instant confirmation
           and queue number.
         </Text>
       </View>
 
-      {/* FORM */}
+      {/* Form card - same card style as res_index */}
       <View style={styles.card}>
-        <Text style={styles.section}>Personal Information</Text>
+        <Text style={styles.cardTitle}>Personal Information</Text>
+        <View style={styles.cardDivider} />
 
         {/* NAME */}
         <View style={styles.row}>
@@ -207,32 +235,66 @@ const Book = () => {
 export default Book
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#24478F' },
-
+  // Same as res_index
+  container: {
+    flex: 1,
+    backgroundColor: '#0B3B91',
+  },
+  content: {
+    paddingBottom: 32,
+  },
   navbar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    backgroundColor: '#FFF',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
   },
-
-  navLeft: { flexDirection: 'row', gap: 10 },
-  logo: { width: 40, height: 40 },
-
-  navLinks: { flexDirection: 'row', gap: 25 },
-  navLink: { fontSize: 18, color: '#1F2933' },
-  active: { color: '#FBBF24', fontWeight: '700' },
-
-  logout: {
-    backgroundColor: '#1F3C88',
+  navLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mainLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+  },
+  partnerLogo: {
+    width: 40,
+    height: 40,
+  },
+  navLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  navLink: {
+    fontSize: 22,
+    color: '#1F2933',
+    fontWeight: '500',
+  },
+  navLinkActive: {
+    color: '#FBBF24',
+  },
+  logoutButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 30,
+    borderRadius: 999,
+    backgroundColor: '#1F3C88',
   },
-  logoutText: { color: '#FF4D4D', fontWeight: '700' },
-
-  header: { alignItems: 'center', paddingVertical: 30 },
+  logoutText: {
+    color: '#FF4D4D',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  heroSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    backgroundColor: '#0B3B91',
+    alignItems: 'center',
+  },
   badge: {
     backgroundColor: '#FBBF24',
     paddingHorizontal: 25,
@@ -241,21 +303,42 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   badgeText: { color: '#FFF', fontWeight: '700' },
-  title: { fontSize: 32, fontWeight: '800', color: '#DCE7FF' },
-  subtitle: { color: '#E5E7EB', textAlign: 'center', maxWidth: 600 },
-
-  card: {
-    backgroundColor: '#FFF',
-    marginHorizontal: 40,
-    borderRadius: 15,
-    padding: 25,
-  },
-
-  section: {
+  heroTitle: {
+    fontSize: 45,
+    fontWeight: '800',
+    color: '#FFFFFF',
     textAlign: 'center',
-    fontWeight: '700',
+    marginBottom: 12,
+  },
+  heroSubtitle: {
+    fontSize: 20,
+    color: '#E5E7EB',
+    textAlign: 'center',
+    marginBottom: 16,
+    maxWidth: 640,
+  },
+  card: {
+    marginHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 32,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardTitle: {
     fontSize: 18,
-    marginBottom: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 12,
   },
 
   row: { flexDirection: 'row', gap: 15, marginBottom: 15 },
