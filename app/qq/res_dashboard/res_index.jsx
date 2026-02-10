@@ -28,10 +28,36 @@ const ResidentHome = () => {
         </View>
 
         <View style={styles.navLinks}>
-          <Text style={[styles.navLink, styles.navLinkActive]}>Home</Text>
-          <Text style={styles.navLink}>Book Now</Text>
-          <Text style={styles.navLink}>Queue Status</Text>
-          <Text style={styles.navLink}>About</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/qq/res_dashboard/res_index')}
+          >
+            <Text style={[styles.navLink, styles.navLinkActive]}>Home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              // TODO: router.push('/qq/res_dashboard/book') when page exists
+            }}
+          >
+            <Text style={styles.navLink}>Book Now</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              // TODO: router.push('/qq/res_dashboard/queue-status') when page exists
+            }}
+          >
+            <Text style={styles.navLink}>Queue Status</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              // TODO: router.push('/qq/res_dashboard/about') when page exists
+            }}
+          >
+            <Text style={styles.navLink}>About</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
