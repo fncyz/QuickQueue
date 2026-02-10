@@ -43,7 +43,7 @@ const QueueStatus = () => {
             <Text style={styles.navLink}>Book Now</Text>
           </TouchableOpacity>
 
-          <Text style={[styles.navLink, styles.navActive]}>Queue Status</Text>
+          <Text style={[styles.navLink, styles.navLinkActive]}>Queue Status</Text>
 
           <Text style={styles.navLink}>About</Text>
         </View>
@@ -162,41 +162,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
   },
 
-  navLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  mainLogo: { width: 40, height: 40, borderRadius: 20 },
-  partnerLogo: { width: 40, height: 40 },
-
-  navLinks: { flexDirection: 'row', gap: 24 },
-  navLink: { fontSize: 18, color: '#1F2933' },
-  navActive: { color: '#FBBF24', fontWeight: '700' },
-
-  logoutButton: {
-    backgroundColor: '#1F3C88',
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+  navLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mainLogo: {
+    width: 40,
+    height: 40,
     borderRadius: 999,
   },
+  partnerLogo: { width: 40, height: 40 },
 
-  logoutText: {
-    color: '#FF4D4D',
-    fontWeight: '700',
-    fontSize: 16,
+  navLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  navLink: {
+    fontSize: 22,
+    color: '#1F2933',
+    fontWeight: '500',
+  },
+  navLinkActive: {
+    color: '#FBBF24',
   },
 
+  logoutButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#1F3C88',
+  },
+  logoutText: {
+    color: '#FF4D4D',
+    fontSize: 22,
+    fontWeight: '700',
+  },
   header: {
     padding: 24,
   },
 
-  liveRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
+liveRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 10,
+},
+
 
   liveBadge: {
     backgroundColor: '#16A34A',
@@ -209,9 +227,26 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16A34A' },
   updatedText: { color: '#E5E7EB' },
 
-  headerRow: { flexDirection: 'row', gap: 20 },
-  headerTitle: { fontSize: 36, fontWeight: '800', color: '#FFFFFF' },
-  headerSubtitle: { color: '#E5E7EB', marginTop: 8 },
+headerRow: {
+  flexDirection: 'row',
+  justifyContent: 'center',
+  fontSize: 18,
+},
+
+headerTitle: {
+  fontSize: 36,
+  fontWeight: '800',
+  color: '#FFFFFF',
+  textAlign: 'center',
+},
+
+headerSubtitle: {
+  color: '#E5E7EB',
+  marginTop: 8,
+  textAlign: 'center',
+  fontSize: 20,
+},
+
 
   bigNumber: {
     backgroundColor: '#FCD34D',
