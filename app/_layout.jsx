@@ -11,6 +11,7 @@ export default function RootLayout() {
         <Stack.Screen name="qq/signup" options={{ headerShown: false }} />
         <Stack.Screen name="qq/res_dashboard/res_index" options={{ headerShown: false }} />
         <Stack.Screen name="qq/res_dashboard/book" options={{ headerShown: false }} />
+        <Stack.Screen name="qq/res_dashboard/queue" options={{ headerShown: false }} />
       </Stack>
     </>
   )

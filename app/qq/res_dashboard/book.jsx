@@ -78,7 +78,9 @@ const Book = () => {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => {}}
+            onPress={() => {
+              router.push('/qq/res_dashboard/queue')
+            }}
           >
             <Text style={styles.navLink}>Queue Status</Text>
           </TouchableOpacity>

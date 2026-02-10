@@ -45,7 +45,7 @@ const ResidentHome = () => {
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => {
-              // TODO: router.push('/qq/res_dashboard/queue-status') when page exists
+              router.push('/qq/res_dashboard/queue')
             }}
           >
             <Text style={styles.navLink}>Queue Status</Text>
