@@ -50,10 +50,13 @@ const ResLogin = () => {
         return
       }
 
-      const { role } = userSnap.data()
+      // Normalize role values (handles casing/whitespace like "Resident", "resident ", etc.)
+      const roleRaw = userSnap.data()?.role
+      const role = String(roleRaw ?? '').trim().toLowerCase()
+      const loginTypeNormalized = String(loginType ?? '').trim().toLowerCase()
 
       // ❌ Prevent role mismatch
-      if (loginType !== role) {
+      if (loginTypeNormalized !== role) {
         Alert.alert(
           'Access Denied',
           `Please use the ${role} login`
