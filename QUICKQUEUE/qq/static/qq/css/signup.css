@@ -1,0 +1,67 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body { color: #151515; font-family: "Poppins", Arial, sans-serif; }
+
+.signup-page { display: grid; min-height: 100vh; place-items: center; padding: 2rem; background: #21478b; }
+.signup-card { width: min(100%, 960px); padding: 30px 64px 30px; background: #fff; border-radius: 26px; }
+.signup-header { text-align: center; }
+.signup-header h1 { margin: 0; color: #21478b; font-size: 32px; font-weight: 800; line-height: 1.35; }
+.signup-header p { margin: -2px 0 16px; color: #81786e; font-size: 17px; }
+.signup-form fieldset { min-width: 0; margin: 0 0 8px; padding: 0; border: 0; }
+.signup-form legend { width: 100%; margin-bottom: 8px; color: #438fff; font-size: 16px; font-weight: 500; text-transform: uppercase; }
+.form-errors { margin: 0 0 10px; padding: 8px 12px; color: #8c1c1c; font-size: 10px; background: #ffe5e5; border: 1px solid #e8a0a0; border-radius: 5px; }
+.form-errors p { margin: 0; }
+.section-icon { display: inline-block; width: 20px; color: #3688ff; font-size: 21px; font-weight: 400; line-height: 0; text-align: center; transform: translateY(2px); }
+.section-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.form-grid { display: grid; gap: 12px 20px; }
+.personal-grid { grid-template-columns: repeat(4, 1fr); }
+.account-grid, .address-grid { grid-template-columns: repeat(3, 1fr); }
+.span-2 { grid-column: span 2; }
+.signup-form label { display: block; font-size: 13px; font-weight: 600; }
+.signup-form b { color: #ef302b; font-weight: 800; }
+.signup-form em { color: #a9a19b; font-size: 12px; font-style: normal; font-weight: 400; }
+.signup-form input:not([type="checkbox"]), .signup-form select { display: block; width: 100%; height: 34px; margin-top: 4px; padding: 4px 9px; color: #202020; font: inherit; font-size: 13px; background: #fff; border: 1px solid #cecece; border-radius: 4px; }
+.signup-form select { padding-right: 3px; }
+.signup-form .terms-summary { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 46px; margin: 16px 5px 14px; padding: 10px 18px; color: #171717; font-size: 13px; font-weight: 600; text-align: center; background: #eef6ff; border-radius: 7px; box-shadow: 0 1px 4px rgba(30, 76, 131, .08); }
+.signup-form .terms-summary input { display: block; flex: 0 0 auto; width: 21px; height: 21px; margin: 0; accent-color: #21478b; }
+.signup-form .terms-summary span { line-height: 1.35; }
+.terms-summary a, .terms a { color: #398cf5; text-decoration: none; }
+.terms-modal { width: min(96vw, 990px); max-height: min(80vh, 560px); padding: 0; color: #171717; background: #eef6ff; border: 0; border-radius: 10px; box-shadow: 0 8px 28px rgba(12, 37, 83, .3); }
+.terms-modal::backdrop { background: rgba(15, 35, 78, .32); }
+.terms-modal-content { position: relative; padding: 30px 36px 26px; }
+.terms-modal h2 { margin: 0 0 14px; color: #21478b; font-size: 20px; font-weight: 800; text-align: center; }
+.terms-copy { padding: 0 0 14px; color: #6b6b6b; font-size: 15px; font-weight: 400; line-height: 1.55; }
+.terms-copy p { margin: 0 0 23px; }
+.terms-copy p:last-child { margin-bottom: 4px; }
+.terms { display: flex !important; align-items: center; justify-content: center; gap: 26px; min-height: 25px; padding: 0; text-align: center; }
+.terms input { width: 17px; height: 17px; margin: 0; accent-color: #21478b; }
+.terms span { font-size: 10px; font-weight: 600; }
+.terms-summary a:hover, .terms a:hover, .signin-prompt a:hover { text-decoration: underline; }
+.signup-form button { width: 100%; height: 42px; border: 0; border-radius: 9px; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; background: #193a78; }
+.signup-form button:hover, .signup-form button:focus-visible { background: #123066; }
+.signin-prompt { margin: 12px 0 0; font-size: 13px; font-weight: 700; text-align: center; }
+.signin-prompt a { color: #398cf5; text-decoration: none; }
+.admin-registration-card { display: flex; align-items: center; gap: 11px; margin-top: 11px; padding: 9px 11px; color: #193a78; text-decoration: none; background: #f7fbff; border: 1px solid #b9d4ff; border-radius: 7px; box-shadow: 0 1px 4px rgba(30, 76, 131, .08); }
+.admin-registration-card:hover { background: #eef6ff; border-color: #80aff5; }
+.admin-registration-icon { display: grid; flex: 0 0 36px; width: 36px; height: 36px; place-items: center; color: #fff; background: #2474de; border-radius: 8px; }
+.admin-registration-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.admin-registration-copy { display: grid; gap: 2px; min-width: 0; }
+.admin-registration-copy strong { font-size: 10px; font-weight: 700; }
+.admin-registration-copy small { color: #193a78; font-size: 8px; font-weight: 500; line-height: 1.35; }
+.admin-registration-link { margin-left: auto; padding: 6px 9px; color: #2474de; font-size: 9px; font-weight: 700; white-space: nowrap; border: 1px solid #8cb8fa; border-radius: 5px; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid #398cf5; outline-offset: 2px; }
+
+@media (max-width: 680px) {
+  .signup-page { padding: 1rem; }
+  .signup-card { padding: 22px 24px; }
+  .personal-grid, .account-grid, .address-grid { grid-template-columns: repeat(2, 1fr); }
+  .span-2 { grid-column: span 2; }
+}
+@media (max-width: 430px) {
+  .signup-card { border-radius: 18px; }
+  .personal-grid, .account-grid, .address-grid { grid-template-columns: 1fr; }
+  .span-2 { grid-column: auto; }
+  .terms-summary { gap: 10px; }
+  .admin-registration-card { align-items: flex-start; flex-wrap: wrap; }
+  .admin-registration-link { margin-left: 47px; }
+}

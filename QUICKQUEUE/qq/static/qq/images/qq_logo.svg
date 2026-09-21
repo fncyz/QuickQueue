@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">QuickQueue logo</title>
+  <defs>
+    <clipPath id="inner-circle">
+      <circle cx="256" cy="256" r="190"/>
+    </clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="234" fill="#21478b" stroke="#ffe16a" stroke-width="9"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#ffe16a" stroke-width="9"/>
+  <circle cx="256" cy="256" r="194" fill="#21478b" stroke="#ffe16a" stroke-width="9"/>
+  <image href="logo.png" x="66" y="66" width="380" height="380" preserveAspectRatio="xMidYMid slice" clip-path="url(#inner-circle)"/>
+</svg>

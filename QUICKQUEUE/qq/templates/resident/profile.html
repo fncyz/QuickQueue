@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'resident/css/profile.css' %}"><link rel="stylesheet" href="{% static 'resident/css/layout.css' %}?v=3">
+</head>
+<body>
+    {% include 'resident/includes/navigation.html' %}
+    <main class="profile-page">
+        <h1>My Profile</h1><p class="lead">View and manage your personal information</p>
+        {% if messages %}<div class="messages">{% for message in messages %}<p class="{{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}
+        <section class="profile-card"><h2><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 21c.8-4.1 3.1-6.2 7-6.2s6.2 2.1 7 6.2"></path></svg><span>Personal Information</span></h2>
+            <div class="profile-summary"><div class="avatar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 22c.9-5 3.6-7.5 8-7.5s7.1 2.5 8 7.5"></path></svg><span class="camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h4l1.5-2h5L16 7h4v12H4Z"></path><circle cx="12" cy="13" r="3"></circle></svg></span></div><strong>{{ resident.first_name }} {{ resident.last_name }}</strong><span>Resident</span><b class="profile-username"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 21c.8-4.1 3.1-6.2 7-6.2s6.2 2.1 7 6.2"></path></svg>@{{ resident.user.username }}</b><small><svg class="member-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Member since {{ resident.created_at|date:'M j, Y' }}</small></div>
+            <div class="profile-data"><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 21c.8-4.1 3.1-6.2 7-6.2s6.2 2.1 7 6.2"></path></svg></i><b>Age</b><em>:</em><span>{{ resident.age }}</span></p><p><i>⚥</i><b>Sex</b><em>:</em><span>{{ resident.get_sex_display }}</span></p><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg></i><b>Birthdate</b><em>:</em><span>{{ resident.birthdate|date:'F j, Y' }}</span></p><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></i><b>Barangay</b><em>:</em><span>{{ resident.barangay.name }}</span></p><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V5h8v16M11 9h10v12M6 8h2M6 12h2M6 16h2M14 12h2M18 12h1M14 16h2M18 16h1"></path></svg></i><b>Municipality</b><em>:</em><span>{{ resident.municipality }}</span></p><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"></path><path d="M9 3v15M15 6v15"></path></svg></i><b>Province</b><em>:</em><span>{{ resident.province }}</span></p><p><i><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5 9.5 7l-2 2.2c1.2 2.5 3.2 4.5 5.7 5.7l2.2-2 3.5 2.9-1.3 4c-.4 1.1-1.6 1.7-2.7 1.4C8.4 19.5 4.5 15.6 2.8 9.1 2.5 8 3.1 6.8 4.2 6.4z"></path></svg></i><b>Contact Number</b><em>:</em><span>{{ resident.contact_number }}</span></p><p><i>✉</i><b>Email Address</b><em>:</em><span>{{ resident.email|default:'Not provided' }}</span></p></div>
+            <details class="edit-panel"><summary>✎ <span>Edit Profile</span></summary><form class="edit-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="profile"><div><label>First name<input name="first_name" value="{{ resident.first_name }}" required></label><label>Last name<input name="last_name" value="{{ resident.last_name }}" required></label><label>Middle name<input name="middle_name" value="{{ resident.middle_name }}"></label><label>Email<input name="email" type="email" value="{{ resident.email|default_if_none:'' }}"></label><label>Contact number<input name="contact_number" inputmode="numeric" pattern="[0-9]*" maxlength="15" value="{{ resident.contact_number }}" required></label></div><button>Save Profile</button></form></details>
+        </section>
+        <section class="password-card"><h2><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"></path></svg><span>Update Password</span></h2><p>For your security, use a strong password and do not share it with others.</p><form method="post">{% csrf_token %}<input type="hidden" name="action" value="password"><label>Current Password</label><div class="password-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input type="password" name="current_password" placeholder="Enter your current password" required><span>◉</span></div><label>New Password</label><div class="password-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input type="password" name="new_password" placeholder="Enter your new password" required><span>◉</span><small>Password must be at least 8 characters long and include letters and numbers.</small></div><label>Confirm New Password</label><div class="password-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input type="password" name="confirm_password" placeholder="Confirm your new password" required><span>◉</span></div><button><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>Update Password</button></form></section>
+        <section class="security-tip"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6z"></path><path d="m9 12 2 2 4-4"></path></svg></span><div><strong>Keep your account secure</strong><p>Make sure to use a strong password and update it regularly.</p></div></section>
+    </main>
+    {% include 'resident/includes/footer.html' %}
+    <script>
+        document.querySelectorAll('[name="contact_number"]').forEach((contactNumber) => {
+            contactNumber.addEventListener('input', () => {
+                const digitsOnly = contactNumber.value.replace(/\D/g, '');
+                if (contactNumber.value !== digitsOnly) {
+                    contactNumber.value = digitsOnly;
+                    alert('Contact number can contain digits only.');
+                }
+            });
+        });
+        {% if messages %}
+            {% for message in messages %}
+                alert('{{ message|escapejs }}');
+            {% endfor %}
+        {% endif %}
+    </script>
+</body>
+</html>

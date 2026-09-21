@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Django
+db.sqlite3
+
+# React Native / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Environment variables / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

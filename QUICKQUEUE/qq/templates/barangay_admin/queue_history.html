@@ -1,0 +1,318 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Queue History | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_sidebar.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_queue_history.css' %}">
+</head>
+<body>
+    <div class="shell">
+        {% include 'barangay_admin/includes/sidebar.html' %}
+
+        <main class="dashboard history-page">
+            <header class="dashboard-header">
+                <div>
+                    <h1>Queue History</h1>
+                    <p class="breadcrumb">Queue Management &gt; Queue History</p>
+                    <p>View and manage past queue transactions and their document status.</p>
+                </div>
+                <div class="header-tools">
+                    <a href="{% url 'barangay_notifications' %}" class="alert-bell" aria-label="Notifications">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        {% if unread_notifications %}<span>{{ unread_notifications }}</span>{% endif %}
+                    </a>
+                    <div class="date-chip">
+                        <span class="barangay-label">
+                            <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            Barangay {{ barangay.name }}
+                        </span>
+                        <form class="date-range-form" method="get">
+                            <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3.5v3M16 3.5v3M3.5 10h17"/></svg>
+                            <input type="date" name="start" value="{{ start_date|date:'Y-m-d' }}">
+                            <span>—</span>
+                            <input type="date" name="end" value="{{ end_date|date:'Y-m-d' }}">
+                            {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+                            <button type="submit">Apply</button>
+                        </form>
+                    </div>
+                </div>
+            </header>
+
+            {% if messages %}
+            <div class="page-messages">
+                {% for message in messages %}
+                <p class="{{ message.tags }}">{{ message }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <section class="panel history-section claim-section" id="to-be-claimed">
+                <header class="section-head">
+                    <div>
+                        <h2>
+                            <svg class="section-icon warn" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.5"/></svg>
+                            To Be Claimed
+                        </h2>
+                        <p>Documents ready for pickup after additional processing.</p>
+                    </div>
+                    {% if not show_all_claims and claim_total > 5 %}
+                    <a href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}&claims=all#to-be-claimed">View All To Be Claimed →</a>
+                    {% elif show_all_claims %}
+                    <a href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}#to-be-claimed">Show Less</a>
+                    {% endif %}
+                </header>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Queue No.</th>
+                                <th>Resident</th>
+                                <th>Service</th>
+                                <th>Completed On</th>
+                                <th>Processing Time</th>
+                                <th>Status</th>
+                                <th>Requirements</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in claim_tickets %}
+                            <tr>
+                                <td class="queue-no">{{ ticket.queue_number }}</td>
+                                <td>
+                                    <span class="resident-cell">
+                                        <i>{{ ticket.appointment.resident.first_name|first|upper }}</i>
+                                        {{ ticket.appointment.resident }}
+                                    </span>
+                                </td>
+                                <td>{{ ticket.appointment.service.name }}</td>
+                                <td>{% if ticket.completed_at %}{{ ticket.completed_at|date:'M j, Y g:i A' }}{% else %}—{% endif %}</td>
+                                <td>{{ ticket.duration_label }}</td>
+                                <td>
+                                    {% if ticket.claim_status == 'P' %}
+                                    <span class="status-pill processing">Processing</span>
+                                    {% else %}
+                                    <span class="status-pill ready">Ready for Claiming</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ ticket.requirements|default:'—' }}</td>
+                                <td class="actions">
+                                    {% if ticket.claim_status == 'P' %}
+                                    <form method="post" action="{% url 'barangay_mark_claim_ready' ticket.pk %}">
+                                        {% csrf_token %}
+                                        <button class="btn-ready" type="submit">Mark as Ready</button>
+                                    </form>
+                                    {% else %}
+                                    <form method="post" action="{% url 'barangay_mark_claimed' ticket.pk %}">
+                                        {% csrf_token %}
+                                        <button class="btn-claimed" type="submit">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-8"/></svg>
+                                            Claimed
+                                        </button>
+                                    </form>
+                                    <a class="btn-view" href="#ticket-{{ ticket.pk }}">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        View
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="8" class="empty-row">No documents waiting to be claimed in this date range.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <footer class="claim-summary">
+                    <span>Total Documents: <b>{{ claim_total }}</b></span>
+                    <span class="processing">Processing: <b>{{ processing_count }}</b></span>
+                    <span class="ready">Ready for Claiming: <b>{{ ready_count }}</b></span>
+                    <span class="claimed">Claimed Today: <b>{{ claimed_today }}</b></span>
+                </footer>
+            </section>
+
+            <section class="panel history-section completed-section" id="completed">
+                <header class="section-head">
+                    <div>
+                        <h2>
+                            <svg class="section-icon ok" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8"/></svg>
+                            Completed Appointments
+                        </h2>
+                        <p>List of all completed and claimed appointments.</p>
+                    </div>
+                </header>
+
+                <form class="history-filters" method="get">
+                    <input type="hidden" name="start" value="{{ start_date|date:'Y-m-d' }}">
+                    <input type="hidden" name="end" value="{{ end_date|date:'Y-m-d' }}">
+                    <label class="search-field">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                        <input type="search" name="q" value="{{ search }}" placeholder="Search resident name or queue no.">
+                    </label>
+                    <a class="btn-clear" href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}#completed">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.2-5.5"/><path d="M20 4v5h-5"/></svg>
+                        Clear Filter
+                    </a>
+                    <button type="submit">Search</button>
+                </form>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Queue No.</th>
+                                <th>Resident</th>
+                                <th>Service</th>
+                                <th>Date</th>
+                                <th>Time Slot</th>
+                                <th>Called At</th>
+                                <th>Served At</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in completed_page %}
+                            <tr id="ticket-{{ ticket.pk }}">
+                                <td class="queue-no">{{ ticket.queue_number }}</td>
+                                <td>
+                                    <span class="resident-cell">
+                                        <i>{{ ticket.appointment.resident.first_name|first|upper }}</i>
+                                        {{ ticket.appointment.resident }}
+                                    </span>
+                                </td>
+                                <td>{{ ticket.appointment.service.name }}</td>
+                                <td>{{ ticket.appointment.appointment_date|date:'M j, Y' }}</td>
+                                <td>{{ ticket.appointment.time_slot.start_time|time:'g:i A' }} - {{ ticket.appointment.time_slot.end_time|time:'g:i A' }}</td>
+                                <td>{% if ticket.called_at %}{{ ticket.called_at|time:'g:i A' }}{% else %}—{% endif %}</td>
+                                <td>{% if ticket.completed_at %}{{ ticket.completed_at|time:'g:i A' }}{% else %}—{% endif %}</td>
+                                <td>{{ ticket.duration_label }}</td>
+                                <td><span class="status-pill completed">Completed</span></td>
+                                <td>{{ ticket.display_notes }}</td>
+                                <td class="actions">
+                                    <a class="btn-view" href="#ticket-{{ ticket.pk }}">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="11" class="empty-row">No completed appointments in this date range.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <footer class="table-pager">
+                    <span>
+                        Showing {{ completed_page.start_index|default:0 }} to {{ completed_page.end_index|default:0 }} of {{ completed_total }} completed appointments.
+                    </span>
+                    <div class="pager-links">
+                        {% if completed_page.has_previous %}
+                        <a href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}&q={{ search }}&per_page={{ per_page }}&page={{ completed_page.previous_page_number }}#completed">‹</a>
+                        {% endif %}
+                        {% for num in completed_page.paginator.page_range %}
+                            {% if num == completed_page.number %}
+                            <span class="current">{{ num }}</span>
+                            {% elif num >= completed_page.number|add:'-2' and num <= completed_page.number|add:'2' %}
+                            <a href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}&q={{ search }}&per_page={{ per_page }}&page={{ num }}#completed">{{ num }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if completed_page.has_next %}
+                        <a href="?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}&q={{ search }}&per_page={{ per_page }}&page={{ completed_page.next_page_number }}#completed">›</a>
+                        {% endif %}
+                    </div>
+                    <form method="get" class="rows-form">
+                        <input type="hidden" name="start" value="{{ start_date|date:'Y-m-d' }}">
+                        <input type="hidden" name="end" value="{{ end_date|date:'Y-m-d' }}">
+                        <input type="hidden" name="q" value="{{ search }}">
+                        <label>
+                            Rows per page:
+                            <select name="per_page" onchange="this.form.submit()">
+                                <option value="5" {% if per_page == 5 %}selected{% endif %}>5</option>
+                                <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
+                                <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                            </select>
+                        </label>
+                    </form>
+                </footer>
+            </section>
+
+            <section class="panel history-section other-section" id="other">
+                <header class="section-head">
+                    <div>
+                        <h2>
+                            <svg class="section-icon info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 10v5M12 7.5h.01"/></svg>
+                            Other Appointments
+                        </h2>
+                        <p>Cancelled or expired appointments.</p>
+                    </div>
+                </header>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Queue No.</th>
+                                <th>Resident</th>
+                                <th>Service</th>
+                                <th>Date</th>
+                                <th>Time Slot</th>
+                                <th>Status</th>
+                                <th>Reason / Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in other_tickets %}
+                            <tr>
+                                <td class="queue-no">{{ ticket.queue_number }}</td>
+                                <td>
+                                    <span class="resident-cell">
+                                        <i>{{ ticket.appointment.resident.first_name|first|upper }}</i>
+                                        {{ ticket.appointment.resident }}
+                                    </span>
+                                </td>
+                                <td>{{ ticket.appointment.service.name }}</td>
+                                <td>{{ ticket.appointment.appointment_date|date:'M j, Y' }}</td>
+                                <td>{{ ticket.appointment.time_slot.start_time|time:'g:i A' }} - {{ ticket.appointment.time_slot.end_time|time:'g:i A' }}</td>
+                                <td>
+                                    {% if ticket.status == 'X' %}
+                                    <span class="status-pill cancelled">Cancelled</span>
+                                    {% else %}
+                                    <span class="status-pill expired">Expired</span>
+                                    {% endif %}
+                                </td>
+                                <td class="{% if ticket.status == 'X' %}note-cancelled{% else %}note-expired{% endif %}">{{ ticket.display_notes }}</td>
+                                <td class="actions">
+                                    <a class="btn-view" href="#other-{{ ticket.pk }}">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="8" class="empty-row">No cancelled or expired appointments in this date range.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer class="dashboard-footer">© {% now 'Y' %} QuickQueue. All rights reserved.</footer>
+        </main>
+    </div>
+</body>
+</html>

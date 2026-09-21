@@ -1,0 +1,86 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Now | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'resident/css/booking.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'resident/css/layout.css' %}?v=2">
+</head>
+<body>
+    {% include 'resident/includes/navigation.html' %}
+
+    <main class="booking-page">
+        <p class="eyebrow">ONLINE BOOKING</p>
+        <h1>Schedule Your Appointment</h1>
+        <p class="subtitle">Book your visit in advance and skip the waiting room.</p>
+
+        {% if messages %}{% for message in messages %}<p class="booking-message {{ message.tags }}">{{ message }}</p>{% endfor %}{% endif %}
+        <form class="booking-card" method="post">
+            {% csrf_token %}
+            <h2>Personal Information</h2>
+            <div class="form-grid personal-grid">
+                <label>First Name<input value="{{ resident.first_name }}" readonly></label>
+                <label>Last Name<input value="{{ resident.last_name }}" readonly></label>
+                <label>Middle Initial<input value="{{ resident.middle_name }}" readonly></label>
+                <label>Suffix <span>(Extension)</span><input value="{{ resident.suffix }}" readonly></label>
+                <label>Birthdate<input type="date" value="{{ resident.birthdate|date:'Y-m-d' }}" readonly></label>
+                <label>Barangay<input value="{{ resident.barangay.name }}" readonly></label>
+                <label>Age<input value="{{ resident.age }}" readonly></label>
+                <label>Sex<input value="{{ resident.get_sex_display }}" readonly></label>
+            </div>
+            <div class="form-grid service-location-grid">
+                <label>Service Type
+                    <select name="service" required>
+                        <option value="">Select a service</option>
+                        {% for service in services %}<option value="{{ service.pk }}">{{ service.name }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label>Sitio/Purok<input name="sitio" maxlength="100" value="{{ request.POST.sitio }}" placeholder="Enter your sitio or purok" required></label>
+            </div>
+            <label>Purpose<textarea name="purpose" placeholder="Briefly describe the purpose of your request."></textarea></label>
+            <div class="form-grid appointment-grid">
+                <label>Date<input name="appointment_date" type="date" min="{% now 'Y-m-d' %}" required></label>
+                <label>Select Time
+                    <select name="time_slot" required>
+                        <option value="">Select time...</option>
+                        {% for slot in time_slots %}
+                        <option value="{{ slot.pk }}">{{ slot.start_time|time:'g:i A' }} - {{ slot.end_time|time:'g:i A' }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <button type="submit">Confirm Booking</button>
+        </form>
+    </main>
+    {% include 'resident/includes/footer.html' %}
+    <script>
+        const bookingForm = document.querySelector('.booking-card');
+        const appointmentDate = bookingForm.querySelector('[name="appointment_date"]');
+        const now = new Date();
+        const today = [
+            now.getFullYear(),
+            String(now.getMonth() + 1).padStart(2, '0'),
+            String(now.getDate()).padStart(2, '0'),
+        ].join('-');
+
+        bookingForm.addEventListener('submit', (event) => {
+            if (appointmentDate.value && appointmentDate.value < today) {
+                event.preventDefault();
+                alert('Please choose today or a future appointment date.');
+                appointmentDate.focus();
+            }
+        });
+
+        {% if messages %}
+            {% for message in messages %}
+                alert('{{ message|escapejs }}');
+            {% endfor %}
+        {% endif %}
+    </script>
+</body>
+</html>

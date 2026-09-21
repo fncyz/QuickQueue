@@ -1,0 +1,44 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'qq/css/index.css' %}">
+</head>
+<body>
+    <header class="top-bar"></header>
+
+    <main class="hero">
+        <div class="hero-content">
+            <img
+                src="{% static 'qq/images/logo.png' %}"
+                alt="QuickQueue logo"
+                class="logo"
+            >
+
+            <div class="hero-text">
+                <h1 class="title">
+                    <span class="title-q title-q-yellow">Q</span>uick<span class="title-q title-q-red">Q</span>ueue
+                </h1>
+                <p class="subtitle">
+                    A Smart Online Appointment and Queue Management System for Barangays
+                </p>
+
+                <div class="actions">
+                    <a href="#" class="btn btn-download">Download</a>
+                    <a href="{% url 'signin' %}" class="btn btn-get-started">Get Started</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <p>&copy; Consolatrix College of Toledo City. All rights reserved.</p>
+    </footer>
+</body>
+</html>

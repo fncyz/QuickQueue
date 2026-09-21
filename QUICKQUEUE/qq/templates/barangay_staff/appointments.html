@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Appointments | QuickQueue Staff</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'barangay_staff/css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointments.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_review.css' %}"></head><body>
+{% include 'barangay_staff/includes/sidebar.html' %}<main class="staff-main appointments">
+<header class="topbar"><div><h1>Appointments</h1><p>Review requests, confirm schedules, and prepare residents for today’s queue.</p></div><div class="user-tools"><a class="bell" href="{% url 'barangay_notifications' %}">♧{% if unread_notifications %}<i></i>{% endif %}</a><span class="avatar">{{ staff.initials }}</span><span><b>{{ staff.full_name }}</b><small>{{ staff.get_role_display }}</small></span></div></header>
+<div class="workspace"><section class="summary">
+<article><i class="blue"></i><span><small>Appointments Today</small><b>{{ today_total }}</b><em>Across {{ selected_slots|length }} service windows</em></span></article>
+<article><i class="orange"></i><span><small>Needs Confirmation</small><b>{{ pending_count }}</b><em>Awaiting staff review</em></span></article>
+<article><i class="green"></i><span><small>Confirmed</small><b>{{ confirmed_count }}</b><em>Ready for service</em></span></article>
+<article><i class="purple"></i><span><small>Tomorrow</small><b>{{ tomorrow_count }}</b><em>Advance bookings</em></span></article></section>
+<section class="calendar-panel"><header><div><em>SCHEDULE OVERVIEW</em><h2>Appointment Calendar</h2><p>Daily capacity combines active service windows.</p></div><div class="legend"><span><i class="green"></i>Available</span><span><i class="orange"></i>Almost Full</span><span><i class="red"></i>Full</span></div></header>
+<div class="calendar-body"><div class="month"><div class="month-head"><h3>{{ month_label }}</h3><b>{{ daily_capacity }} slots per day</b></div><div class="week names"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+{% for week in calendar_weeks %}<div class="week">{% for day in week %}{% if day.in_month %}<a class="day {{ day.level }}{% if day.selected %} selected{% endif %}" href="?date={{ day.date|date:'Y-m-d' }}"><strong>{{ day.date.day }}</strong><i></i><b>{{ day.count }}/{{ daily_capacity }}</b><small>{% if day.level == 'full' %}Full{% elif day.count %}{{ day.remaining }} slots left{% else %}Open{% endif %}</small></a>{% else %}<span class="day blank"></span>{% endif %}{% endfor %}</div>{% endfor %}</div>
+<aside class="selected"><header><span><em>SELECTED DATE</em><h3>{{ selected_date|date:'F j, Y' }}</h3><p>{{ selected_remaining }} appointment slots still available.</p></span><b>{{ selected_count }}/{{ daily_capacity }}</b></header><div class="capacity"><i style="width:{% widthratio selected_count daily_capacity 100 %}%"></i></div><div class="slot-grid">{% for item in selected_slots %}<span>{{ item.slot.start_time|time:'g' }}–{{ item.slot.end_time|time:'g A' }} <b>{{ item.booked }}/{{ item.capacity }}</b></span>{% endfor %}</div><div class="selected-list">{% for item in selected_appointments %}<article><i>{{ item.resident.first_name|first }}{{ item.resident.last_name|first }}</i><span><b>{{ item.resident }}</b><small>{{ item.service.name }}</small></span><time><b>{{ item.time_slot.start_time|time:'g:i A' }}</b><small>{{ item.get_status_display }}</small></time></article>{% empty %}<p>No appointments on this date.</p>{% endfor %}</div></aside></div></section>
+<section class="review-layout"><div class="review-panel"><nav class="tabs"><a class="{% if tab == 'pending' %}active{% endif %}" href="?tab=pending">Needs Confirmation <b>{{ pending_count }}</b></a><a class="{% if tab == 'rejected' %}active{% endif %}" href="?tab=rejected">Rejected</a><a class="{% if tab == 'all' %}active{% endif %}" href="?tab=all">All Appointments</a></nav>
+<form class="filters"><input type="hidden" name="tab" value="{{ tab }}"><label>⌕<input name="q" value="{{ filters.q }}" placeholder="Search resident, ID, or service"></label><select name="service"><option value="">All Services</option>{% for service in services %}<option value="{{ service.pk }}" {% if filters.service == service.pk|stringformat:'s' %}selected{% endif %}>{{ service.name }}</option>{% endfor %}</select><input class="date-filter" type="date" name="filter_date" value="{{ filters.filter_date }}"><button>Apply</button><a href="?tab={{ tab }}">Clear Filters</a></form>
+<div class="table-scroll"><table><thead><tr><th>APPOINTMENT ID</th><th>RESIDENT</th><th>SERVICE</th><th>APPOINTMENT DATE</th><th>PUROK / SITIO</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{% for item in appointments %}<tr><td><b>QQ-{{ item.created_at|date:'Y' }}-{{ item.pk|stringformat:'06d' }}</b></td><td><span class="resident-cell"><i>{{ item.resident.first_name|first }}{{ item.resident.last_name|first }}</i><span><b>{{ item.resident }}</b><small>{{ item.queue_number }}</small></span></span></td><td>{{ item.service.name }}</td><td><b>{{ item.appointment_date|date:'M j, Y' }}</b><small>{{ item.time_slot.start_time|time:'g:i A' }}</small></td><td>{{ item.sitio|default:'—' }}</td><td><b class="pill status-{{ item.status }}">{{ item.get_status_display }}</b></td><td>{% if item.status == 'P' %}<form method="post" action="{% url 'barangay_confirm_appointment' item.pk %}">{% csrf_token %}<button class="review-btn">Review &amp; Confirm</button></form>{% else %}<span class="muted">Reviewed</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="empty">No appointments match this tab.</td></tr>{% endfor %}</tbody></table></div></div>
+<aside class="availability"><h3>Today’s Slot Availability</h3><p>Confirmed bookings by service window</p>{% for item in selected_slots %}<article><span><b>{{ item.slot.start_time|time:'g:i' }}–{{ item.slot.end_time|time:'g:i A' }}</b><strong>{{ item.booked }} / {{ item.capacity }}</strong></span><small>{{ item.remaining }} slot{{ item.remaining|pluralize }} available</small><div><i style="width:{{ item.percent }}%"></i></div></article>{% empty %}<p>No active slots.</p>{% endfor %}</aside></section>
+</div></main>
+{% for item in appointments %}{% if item.status == 'P' %}
+<dialog class="appointment-review-modal" id="review-{{ item.pk }}">
+  <div class="review-modal-head"><div><small>APPOINTMENT REQUEST</small><h2>QQ-{{ item.created_at|date:'Y' }}-{{ item.pk|stringformat:'06d' }}</h2></div><button type="button" class="review-modal-close" aria-label="Close">&times;</button></div>
+  <div class="review-modal-body">
+    <div class="review-status"><b>Pending</b><span>This appointment ID remains unchanged throughout the transaction.</span></div>
+    <div class="review-info-grid">
+      <section><h3>Resident Information</h3><dl><dt>Full Name</dt><dd>{{ item.resident }}</dd><dt>Address</dt><dd>{{ item.sitio|default:'—' }}, Barangay {{ barangay.name }}</dd><dt>Contact Number</dt><dd>{{ item.resident.contact_number }}</dd></dl></section>
+      <section><h3>Appointment Information</h3><dl><dt>Requested Service</dt><dd>{{ item.service.name }}</dd><dt>Purpose</dt><dd>{{ item.purpose|default:'No purpose provided' }}</dd><dt>Schedule</dt><dd>{{ item.appointment_date|date:'M j, Y' }} · {{ item.time_slot.start_time|time:'g:i A' }}</dd></dl></section>
+    </div>
+    <section class="review-activity"><h3>Appointment Activity</h3><p><i></i>{{ item.created_at|timesince }} ago — Appointment submitted by resident</p></section>
+  </div>
+  <form class="review-modal-actions" method="post" action="{% url 'staff_review_appointment' item.pk %}">{% csrf_token %}<button class="reject-appointment" name="decision" value="reject">Reject Appointment</button><button class="approve-appointment" name="decision" value="approve">Approve Appointment</button></form>
+</dialog>
+{% endif %}{% endfor %}
+<script>
+document.querySelectorAll('.review-btn').forEach(function (button) {
+  button.addEventListener('click', function (event) {
+    event.preventDefault();
+    var match = button.closest('form').action.match(/appointments\/(\d+)\//);
+    var modal = match && document.getElementById('review-' + match[1]);
+    if (modal) modal.showModal();
+  });
+});
+document.querySelectorAll('.appointment-review-modal').forEach(function (modal) {
+  modal.querySelector('.review-modal-close').addEventListener('click', function () { modal.close(); });
+  modal.addEventListener('click', function (event) {
+    if (event.target === modal) modal.close();
+  });
+});
+</script>
+</body></html>

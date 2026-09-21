@@ -1,0 +1,17 @@
+{% load static %}
+<header class="site-header">
+    <a class="brand" href="{% url 'resident_home' %}" aria-label="QuickQueue home">
+        <img class="brand-mark" src="{% static 'qq/images/qq_logo.png' %}" alt="QuickQueue">
+        <img class="seal" src="{% static 'qq/images/cctc.png' %}" alt="Consolatrix College of Toledo City">
+        <img class="seal" src="{% static 'qq/images/toledo.png' %}" alt="City of Toledo official seal">
+    </a>
+    <nav aria-label="Main navigation">
+        <a class="{% if active_page == 'home' %}active{% endif %}" href="{% url 'resident_home' %}">Home</a>
+        <a class="{% if active_page == 'booking' %}active{% endif %}" href="{% url 'resident_booking' %}">Book Now</a>
+        <a class="{% if active_page == 'queue' %}active{% endif %}" href="{% url 'resident_queue_status' %}">Queue Status</a>
+        <a class="{% if active_page == 'transactions' %}active{% endif %}" href="{% url 'resident_transactions' %}">Transactions</a>
+        <a class="{% if active_page == 'about' %}active{% endif %}" href="{% url 'resident_about' %}">About</a>
+        <a class="{% if active_page == 'profile' %}active{% endif %}" href="{% url 'resident_profile' %}">Profile</a>
+        <a class="logout" href="{% url 'resident_logout' %}">Logout</a>
+    </nav>
+</header>

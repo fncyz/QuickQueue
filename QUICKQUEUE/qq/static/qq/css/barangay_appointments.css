@@ -1,0 +1,458 @@
+/* Appointments page — extends barangay dashboard tokens */
+
+.appointments-page .header-tools {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.alert-bell {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.alert-bell svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.alert-bell span {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef3b3b;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+.page-messages {
+    margin-top: 12px;
+}
+
+.page-messages p {
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.page-messages .success {
+    background: #e4f7ea;
+    color: #008b45;
+}
+
+.page-messages .error {
+    background: #ffe6e5;
+    color: #d42727;
+}
+
+.appointments-stats .stat-card {
+    min-height: 92px;
+}
+
+.appointments-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 16px;
+    margin-top: 18px;
+    align-items: start;
+}
+
+.appointments-main {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.table-panel {
+    overflow: hidden;
+    padding-bottom: 0;
+}
+
+.table-panel > h2,
+.slot-panel > h2 {
+    margin: 0;
+}
+
+.table-banner {
+    padding: 12px 16px;
+}
+
+.table-banner h2 {
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.pending-banner {
+    background: #fff4e8;
+    color: #c45d00;
+}
+
+.confirmed-banner {
+    background: #e7f8ee;
+    color: #0a7a45;
+}
+
+.tomorrow-banner {
+    background: #eaf2ff;
+    color: #0a4fbf;
+}
+
+.table-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+.search-field {
+    position: relative;
+    flex: 1 1 180px;
+    min-width: 160px;
+}
+
+.search-field svg {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    width: 14px;
+    height: 14px;
+    transform: translateY(-50%);
+    fill: none;
+    stroke: #8a96ad;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.search-field input,
+.table-filters select,
+.table-filters button {
+    height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font: 600 11px Poppins, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+}
+
+.search-field input {
+    width: 100%;
+    padding: 0 12px 0 32px;
+}
+
+.table-filters select {
+    min-width: 130px;
+    padding: 0 10px;
+}
+
+.table-filters button {
+    padding: 0 14px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    cursor: pointer;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.table-panel table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.table-panel th,
+.table-panel td {
+    padding: 11px 12px;
+    border-bottom: 1px solid #eef2f8;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.table-panel th {
+    color: #7b879d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    background: #fafcff;
+}
+
+.resident-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.resident-cell i {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e8f1ff;
+    color: #0663ff;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.queue-no {
+    color: #0a7a45;
+    font-weight: 700;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.status-pill.pending {
+    background: #fff0db;
+    color: #c45d00;
+}
+
+.status-pill.confirmed {
+    background: #e4f7ea;
+    color: #0a7a45;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.actions form {
+    margin: 0;
+}
+
+.btn-view,
+.btn-confirm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font: 700 10px Poppins, Arial, sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.btn-view {
+    border: 1px solid #9fc0f5;
+    color: #0b5ce9;
+    background: #fff;
+}
+
+.btn-confirm {
+    border: 0;
+    color: #fff;
+    background: #11a34d;
+}
+
+.empty-row {
+    color: var(--muted);
+    text-align: center !important;
+    padding: 14px 12px !important;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.appointments-page .empty {
+    margin: 0;
+    padding: 8px 0;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.table-footer a {
+    color: var(--accent);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.slot-panel {
+    padding: 16px;
+    position: sticky;
+    top: 16px;
+}
+
+.slot-panel h2 {
+    margin: 0 0 14px;
+    padding: 0;
+    font-size: 14px;
+}
+
+.slot-list {
+    display: grid;
+    gap: 12px;
+}
+
+.slot-card {
+    padding: 10px 0 4px;
+    border-bottom: 1px solid #eef2f8;
+}
+
+.slot-card:last-child {
+    border-bottom: 0;
+}
+
+.slot-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.slot-top b {
+    color: #0a4fbf;
+    font-size: 12px;
+}
+
+.slot-top span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.slot-card small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.slot-bar {
+    height: 7px;
+    margin-top: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #edf0f5;
+}
+
+.slot-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+}
+
+.level-full .slot-bar i { background: #ef3b3b; }
+.level-almost .slot-bar i { background: #ff9419; }
+.level-available .slot-bar i { background: #11a34d; }
+.level-empty .slot-bar i { background: #c5cede; }
+
+.slot-card em {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.level-full em { color: #ef3b3b; }
+.level-almost em { color: #ff9419; }
+.level-available em { color: #11a34d; }
+.level-empty em { color: #8a96ad; }
+
+.slot-legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.slot-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.slot-legend .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+.slot-legend .dot.full { background: #ef3b3b; }
+.slot-legend .dot.almost { background: #ff9419; }
+.slot-legend .dot.available { background: #11a34d; }
+.slot-legend .dot.empty { background: #c5cede; }
+
+@media (max-width: 1100px) {
+    .appointments-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .slot-panel {
+        position: static;
+    }
+}
+
+@media (max-width: 640px) {
+    .appointments-page .header-tools {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .table-footer {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

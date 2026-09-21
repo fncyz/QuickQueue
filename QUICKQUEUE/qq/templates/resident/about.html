@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'resident/css/about.css' %}?v=2"><link rel="stylesheet" href="{% static 'resident/css/layout.css' %}?v=2">
+</head>
+<body>
+    {% include 'resident/includes/navigation.html' %}
+    <main class="about-page">
+        <section class="about-intro">
+            <h1>About Us</h1>
+            <p>Welcome to QQ, a smart digital platform designed to make barangay services<br>more accessible and organized. As communities continue to grow with technology,<br>QQ aims to improve how residents connect with their barangay by providing a<br>convenient and efficient way to book appointments and manage queues online.</p>
+            <p>This website is created to reduce waiting time, improve service flow, and<br>ensure a smoother and more transparent experience for both residents and<br>barangay staff anytime and anywhere.</p>
+        </section>
+        <section class="college">
+            <h2>Consolatrix College<br>of Toledo City, Inc.</h2>
+            <img src="{% static 'qq/images/cctc.png' %}" alt="Consolatrix College of Toledo City">
+            <div class="vision-mission">
+                <article><h3>Vision</h3><p>Commits to:</p><ol><li>Strengthen fraternal charity through God-filled friendship and renewed evangelization.</li><li>Facilitate the integral development of the learners towards transformation through current researches, relevant curricular offerings, and responsive community extension services.</li><li>Fortify leadership and professional development of stakeholders through continuing education and intensive Augustinian Recollect formation.</li><li>Develop a community of Christ-centered Augustinian Recollect stewards who are environmentally caring and global leaders.</li><li>Nurture one another in the shared mission for the sustainability of the A.R. schools and the social relevance of programs and services.</li></ol></article>
+                <article><h3>Mission</h3><p>Consolatrix College envisions a life-giving and innovating education ministry committed to transforming community of learners into Christ-centered Augustinian recollect stewards.</p></article>
+            </div>
+        </section>
+        <section class="developers"><h2>Developers</h2><div class="developer-list"><img src="{% static 'qq/images/lead.jpg' %}" alt="Lead developer"><img src="{% static 'qq/images/assistant.jpg' %}" alt="Assistant developer"><img src="{% static 'qq/images/ui.png' %}" alt="UI developer"><img src="{% static 'qq/images/tester.jpg' %}" alt="Tester"></div></section>
+    </main>
+    {% include 'resident/includes/footer.html' %}
+</body>
+</html>

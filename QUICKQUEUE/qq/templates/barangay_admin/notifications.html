@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Notifications | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_sidebar.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_notifications.css' %}">
+</head>
+<body>
+    <div class="shell">
+        {% include 'barangay_admin/includes/sidebar.html' %}
+        <main class="dashboard notifications-page">
+            <header class="dashboard-header">
+                <div>
+                    <h1>Notifications</h1>
+                    <p>Recent appointment and queue updates for Barangay {{ barangay.name }}.</p>
+                </div>
+                {% if unread_notifications %}
+                <form method="post">
+                    {% csrf_token %}
+                    <button class="mark-read" type="submit">Mark all as read</button>
+                </form>
+                {% endif %}
+            </header>
+
+            {% if messages %}
+            <ul class="notification-messages">
+                {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+
+            <section class="notification-list" aria-label="Notifications">
+                {% for notification in notifications %}
+                <article class="notification-item{% if not notification.admin_is_read %} unread{% endif %}">
+                    <span class="notification-dot" aria-hidden="true"></span>
+                    <div>
+                        <h2>{{ notification.title }}</h2>
+                        <p>{{ notification.message }}</p>
+                        <time datetime="{{ notification.created_at|date:'c' }}">{{ notification.created_at|date:'F j, Y, g:i A' }}</time>
+                    </div>
+                </article>
+                {% empty %}
+                <div class="empty-notifications">No notifications yet.</div>
+                {% endfor %}
+            </section>
+        </main>
+    </div>
+</body>
+</html>

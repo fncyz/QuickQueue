@@ -1,0 +1,30 @@
+from django.contrib.auth import authenticate, login
+from django.shortcuts import redirect, render
+
+from qq.models import BarangayStaff
+
+
+def signin(request):
+    """Authenticate a registered resident with Django's database-backed auth."""
+    if request.method == "POST":
+        user = authenticate(
+            request,
+            username=request.POST.get("username", ""),
+            password=request.POST.get("password", ""),
+        )
+        if user is not None:
+            login(request, user)
+            if user.is_staff and hasattr(user, "barangay_profile"):
+                return redirect("barangay_dashboard")
+            if hasattr(user, "staff_profile"):
+                if user.staff_profile.role == BarangayStaff.Role.ADMIN:
+                    return redirect("barangay_dashboard")
+                return redirect("staff_dashboard")
+            return redirect("resident_home")
+        return render(
+            request,
+            "qq/signin.html",
+            {"signin_error": "Invalid username or password."},
+        )
+
+    return render(request, "qq/signin.html")

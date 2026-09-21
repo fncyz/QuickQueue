@@ -1,0 +1,48 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body { color: #151515; font-family: "Poppins", Arial, sans-serif; }
+.registration-page { display: grid; min-height: 100vh; place-items: center; padding: 2rem; background: #21478b; }
+.registration-card { width: min(100%, 1000px); padding: 30px 64px 36px; background: #fff; border-radius: 27px; }
+.registration-header { text-align: center; }
+.registration-header h1 { margin: 0; color: #21478b; font-size: 32px; font-weight: 800; line-height: 1.35; }
+.registration-header p { margin: -2px 0 14px; color: #81786e; font-size: 17px; }
+.review-note { width: min(100%, 480px); margin: 0 auto 16px; padding: 10px 14px 10px 48px; color: #5c626c; font-size: 13px; line-height: 1.45; background: #edf6ff; border: 1px solid #c8e1ff; border-radius: 5px; box-shadow: inset 0 0 0 1px #c8e1ff; }
+.review-note span { float: left; width: 23px; height: 23px; margin: 0 0 0 -32px; color: #fff; font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; line-height: 23px; text-align: center; background: #257bfa; border-radius: 50%; }
+fieldset { min-width: 0; margin: 0; padding: 0 0 12px; border: 0; }
+fieldset + fieldset { padding-top: 10px; border-top: 1px solid #d7d7d7; }
+legend { width: 100%; margin-bottom: 8px; color: #438fff; font-size: 16px; font-weight: 500; text-transform: uppercase; }
+.section-icon { display: inline-block; width: 23px; color: #3688ff; font-size: 24px; line-height: 0; text-align: center; transform: translateY(2px); }
+.person-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.form-grid { display: grid; gap: 14px 24px; }
+.barangay-grid { grid-template-columns: repeat(3, 1fr); }
+.account-grid { grid-template-columns: repeat(6, 1fr); }
+.span-2 { grid-column: span 2; }
+label { display: block; font-size: 13px; font-weight: 600; }
+b { color: #ef302b; font-weight: 800; }
+input, select { display: block; width: 100%; height: 34px; margin-top: 4px; padding: 4px 9px; color: #202020; font: inherit; font-size: 13px; background: #fff; border: 1px solid #cecece; border-radius: 4px; }
+input::placeholder { color: #aaa; }
+.account-grid > label { grid-column: span 2; }
+.account-grid > .password-field { grid-column: span 3; }
+.terms-summary { margin: 2px 0 16px; padding: 12px 14px; color: #171717; font-size: 13px; font-weight: 600; text-align: center; background: #eef6ff; border-radius: 6px; box-shadow: 0 1px 4px rgba(30, 76, 131, .08); }
+.terms { display: flex; align-items: center; justify-content: center; gap: 24px; min-height: 36px; margin: 2px 0 0; padding: 8px 12px; text-align: center; background: #eef6ff; border-radius: 6px; box-shadow: 0 1px 4px rgba(30, 76, 131, .08); }
+.terms input { width: 17px; height: 17px; margin: 0; accent-color: #21478b; }
+.terms span { font-size: 13px; font-weight: 600; }
+.terms a, .terms-summary a { color: #398cf5; text-decoration: none; }
+.terms-modal { width: min(96vw, 880px); max-height: min(80vh, 650px); padding: 0; color: #171717; background: #eef6ff; border: 0; border-radius: 10px; box-shadow: 0 8px 28px rgba(12, 37, 83, .3); }
+.terms-modal::backdrop { background: rgba(15, 35, 78, .32); }
+.terms-modal-content { padding: 22px 30px 20px; }
+.terms-modal h2 { margin: 0 0 10px; color: #21478b; font-size: 19px; font-weight: 800; }
+.terms-copy { color: #666; font-size: 12px; line-height: 1.45; }
+.terms-copy p { margin: 0 0 4px; }
+.terms-copy ol { margin: 0; padding-left: 22px; }
+.terms-copy li { margin-bottom: 2px; }
+button { width: 100%; height: 42px; border: 0; border-radius: 9px; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; background: #193a78; }
+button:hover, button:focus-visible { background: #123066; }
+.form-errors { margin: 0 0 10px; padding: 10px 14px; color: #8c1c1c; font-size: 13px; background: #ffe5e5; border: 1px solid #e8a0a0; border-radius: 5px; }
+.form-errors p { margin: 0; }
+.success-message { display: grid; gap: 8px; max-width: 440px; margin: 36px auto; padding: 24px; color: #21478b; font-size: 13px; text-align: center; background: #eef6ff; border: 1px solid #b9d4ff; border-radius: 8px; }
+.success-message strong { font-size: 17px; }
+.success-message a { color: #2474de; font-weight: 700; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid #398cf5; outline-offset: 2px; }
+@media (max-width: 680px) { .registration-page { padding: 1rem; } .registration-card { padding: 22px 24px; } .barangay-grid, .account-grid { grid-template-columns: repeat(2, 1fr); } .account-grid > label, .account-grid > .password-field { grid-column: auto; } }
+@media (max-width: 430px) { .registration-card { border-radius: 18px; } .barangay-grid, .account-grid { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } .terms { gap: 10px; } .terms-modal-content { padding: 18px; } }

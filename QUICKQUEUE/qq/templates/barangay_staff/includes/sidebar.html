@@ -1,0 +1,139 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'barangay_staff/css/icons.css' %}">
+<link rel="stylesheet" href="{% static 'barangay_staff/css/notification_menu.css' %}">
+<link rel="stylesheet" href="{% static 'barangay_staff/css/interactions.css' %}">
+<aside class="staff-sidebar">
+  <a class="staff-brand" href="{% url 'staff_dashboard' %}"><img src="{% static 'qq/images/qq_logo.png' %}" alt=""><span><b>QuickQueue</b><small>Barangay Staff Portal</small></span></a>
+  <div class="staff-profile"><i>{% if staff.profile_photo %}<img src="{{ staff.profile_photo.url }}" alt="">{% else %}{{ staff.initials }}{% endif %}<em></em></i><span><b>{{ staff.full_name }}</b><small>{{ staff.get_role_display }}</small></span></div>
+  <nav>
+    <a class="{% if active_page == 'dashboard' %}active{% endif %}" href="{% url 'staff_dashboard' %}"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
+    <a class="{% if active_page == 'appointments' %}active{% endif %}" href="{% url 'staff_appointments' %}"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Appointments</a>
+    <a class="{% if active_page == 'queue' %}active{% endif %}" href="{% url 'staff_live_queue' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Live Queue</a>
+    <a class="{% if active_page == 'documents' %}active{% endif %}" href="{% url 'staff_document_processing' %}"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM15 3v5h5M9 12h7M9 16h7"/></svg>Document Processing</a>
+    <a class="{% if active_page == 'completed' %}active{% endif %}" href="{% url 'staff_completed_documents' %}"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg>Completed Documents</a>
+    <a class="{% if active_page == 'logbook' %}active{% endif %}" href="{% url 'staff_resident_logbook' %}"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 19c1-4 3-5 6-5s5 1 6 5M15 14c3 0 5 2 5 5"/></svg>Resident Logbook</a>
+    <a class="{% if active_page == 'settings' %}active{% endif %}" href="{% url 'staff_settings' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Account Settings</a>
+  </nav>
+  <a class="staff-logout" href="{% url 'resident_logout' %}"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 16l4-4-4-4M18 12H9"/></svg>Logout</a>
+</aside>
+<div id="staff-notification-root" data-url="{% url 'staff_document_notifications' %}">{% csrf_token %}</div>
+<style>
+  .user-tools .avatar{overflow:hidden}
+  .user-tools .avatar img{width:100%;height:100%;object-fit:cover}
+  .staff-profile>i>img{width:49px;height:49px;border-radius:50%;object-fit:cover}
+  .settings-page .photo img{width:70px;height:70px;object-fit:cover;border-radius:50%}
+  .settings-page .photo-row{grid-template-columns:70px 1fr auto}
+  .settings-page .photo{width:70px;height:70px}
+  .settings-page .photo-row span{min-width:0}
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const savedPhoto = document.querySelector(".staff-profile img");
+  const headerAvatar = document.querySelector(".user-tools .avatar");
+  if (savedPhoto && headerAvatar) {
+    const image = document.createElement("img");
+    image.src = savedPhoto.src;
+    image.alt = "{{ staff.full_name|escapejs }}";
+    headerAvatar.replaceChildren(image);
+  }
+
+  const photoInput = document.getElementById("photo");
+  const settingsPreview = document.querySelector(".settings-page .photo");
+  if (photoInput) {
+    photoInput.addEventListener("change", function () {
+      const file = this.files && this.files[0];
+      if (!file) return;
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        alert("Please choose a JPG or PNG image.");
+        this.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert("The profile photo must not exceed 5 MB.");
+        this.value = "";
+        return;
+      }
+      const previewUrl = URL.createObjectURL(file);
+      [settingsPreview, headerAvatar].forEach(function (target) {
+        if (!target) return;
+        const image = document.createElement("img");
+        image.src = previewUrl;
+        image.alt = "New profile photo preview";
+        target.replaceChildren(image);
+      });
+    });
+  }
+
+  const bell = document.querySelector(".user-tools .bell");
+  const notificationRoot = document.getElementById("staff-notification-root");
+  if (bell && notificationRoot) {
+    bell.addEventListener("click", async function (event) {
+      event.preventDefault();
+      const existing = document.querySelector(".staff-notification-menu");
+      if (existing) {
+        existing.remove();
+        return;
+      }
+      const response = await fetch(notificationRoot.dataset.url, {
+        headers: {"X-Requested-With": "XMLHttpRequest"}
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const menu = document.createElement("section");
+      menu.className = "staff-notification-menu";
+      menu.innerHTML = '<h3>Document Notifications</h3>';
+      if (!data.items.length) {
+        menu.insertAdjacentHTML("beforeend", '<p class="notification-empty">No residents are waiting for a pickup notification.</p>');
+      }
+      data.items.forEach(function (item) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.innerHTML = "<b></b><small></small>";
+        button.querySelector("b").textContent = item.resident;
+        button.querySelector("small").textContent = item.service + " · ready for pickup";
+        button.addEventListener("click", function () {
+          menu.remove();
+          openNotificationModal(item);
+        });
+        menu.appendChild(button);
+      });
+      document.body.appendChild(menu);
+      const box = bell.getBoundingClientRect();
+      menu.style.top = (box.bottom + 8) + "px";
+      menu.style.right = Math.max(20, window.innerWidth - box.right - 145) + "px";
+    });
+  }
+
+  function openNotificationModal(item) {
+    const overlay = document.createElement("div");
+    overlay.className = "notify-overlay";
+    overlay.innerHTML = '<section class="notify-dialog"><header><span><em>RESIDENT NOTIFICATION</em><h2></h2></span><button type="button">×</button></header><div class="notify-body"><div class="notify-summary"><i></i><span><b></b><p></p></span></div><div class="message-preview"><b>MESSAGE PREVIEW</b><p></p></div></div><footer><button class="cancel" type="button">Cancel</button><button class="send" type="button">Send Notification</button></footer></section>';
+    overlay.querySelector("h2").textContent = "Notify " + item.resident + "?";
+    overlay.querySelector(".notify-summary b").textContent = item.service + " is ready for pickup";
+    overlay.querySelector(".notify-summary p").textContent = "A notification will be sent to " + item.contact + ". The resident may claim the document at the Barangay Hall during office hours.";
+    overlay.querySelector(".message-preview p").textContent = "Good day, " + item.resident + ". Your " + item.service + " (" + item.document_id + ") is ready to claim at Barangay " + item.barangay + ". Please bring a valid ID. Thank you.";
+    const close = function () { overlay.remove(); };
+    overlay.querySelector("header button").addEventListener("click", close);
+    overlay.querySelector(".cancel").addEventListener("click", close);
+    overlay.addEventListener("click", function (event) { if (event.target === overlay) close(); });
+    overlay.querySelector(".send").addEventListener("click", async function () {
+      this.disabled = true;
+      const csrfInput = notificationRoot.querySelector("input[name=csrfmiddlewaretoken]");
+      const csrf = document.cookie.split("; ").find(function (row) { return row.startsWith("csrftoken="); });
+      const response = await fetch(notificationRoot.dataset.url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": csrfInput ? csrfInput.value : (csrf ? decodeURIComponent(csrf.split("=")[1]) : "")},
+        body: JSON.stringify({ticket_id: item.ticket_id})
+      });
+      if (response.ok) {
+        close();
+        const dot = bell.querySelector("i");
+        if (dot) dot.remove();
+      } else {
+        this.disabled = false;
+      }
+    });
+    document.body.appendChild(overlay);
+  }
+});
+</script>

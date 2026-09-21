@@ -1,0 +1,104 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barangay Admin Registration | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_admin_registration.css' %}?v=2">
+</head>
+<body>
+    <main class="registration-page">
+        <section class="registration-card" aria-labelledby="registration-heading">
+            <header class="registration-header">
+                <h1 id="registration-heading">Barangay Admin Registration</h1>
+                <p>Create your account to manage your barangay</p>
+            </header>
+
+            {% if submitted %}
+                <div class="success-message" role="status">
+                    <strong>Registration submitted.</strong>
+                    <span>Your request is now pending review by the Super Admin. You will be notified once it is approved.</span>
+                    <a href="{% url 'signup' %}">Return to resident registration</a>
+                </div>
+            {% else %}
+                <p class="review-note"><span aria-hidden="true">i</span>Your registration will be reviewed by the Super Admin.<br>You will be notified once your request is approved.</p>
+                {% if errors %}
+                    <div class="form-errors" role="alert">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <fieldset>
+                        <legend><span class="section-icon" aria-hidden="true">⌂</span> Barangay Information</legend>
+                        <div class="form-grid barangay-grid">
+                            <label>Barangay Name <b>*</b><select name="barangay" required><option value="">Select Barangay</option>{% for barangay in barangays %}<option value="{{ barangay.pk }}" {% if form_data.barangay == barangay.pk|stringformat:'s' %}selected{% endif %}>{{ barangay.name }}</option>{% endfor %}</select></label>
+                            <label>Municipality <b>*</b><select name="municipality" required><option value="Toledo City" {% if form_data.municipality|default:'Toledo City' == 'Toledo City' %}selected{% endif %}>Toledo City</option></select></label>
+                            <label>Province <b>*</b><select name="province" required><option value="Cebu" {% if form_data.province|default:'Cebu' == 'Cebu' %}selected{% endif %}>Cebu</option></select></label>
+                            <label class="span-2">Complete Address <b>*</b><input name="complete_address" placeholder="Enter complete address of the barangay" value="{{ form_data.complete_address|default:'' }}" required></label>
+                            <label>Zip Code <b>*</b><input name="zip_code" inputmode="numeric" placeholder="Enter zip code" value="{{ form_data.zip_code|default:'' }}" required></label>
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend><span class="section-icon person-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="7" r="4"></circle><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"></path></svg></span> Account Information</legend>
+                        <div class="form-grid account-grid">
+                            <label>Username <b>*</b><input name="username" autocomplete="username" value="{{ form_data.username|default:'' }}" required></label>
+                            <label>Contact Number <b>*</b><input name="contact_number" type="tel" value="{{ form_data.contact_number|default:'' }}" required></label>
+                            <label>Email Address <b>*</b><input name="email" type="email" autocomplete="email" value="{{ form_data.email|default:'' }}" required></label>
+                            <label class="password-field">Password <b>*</b><input name="password" type="password" autocomplete="new-password" required></label>
+                            <label class="password-field">Confirm Password <b>*</b><input name="confirm_password" type="password" autocomplete="new-password" required></label>
+                        </div>
+                    </fieldset>
+
+                    <p class="terms-summary">I have read and agree to the <a href="#terms-policy" class="terms-link">Terms and Conditions</a>. <b>*</b></p>
+                    <dialog class="terms-modal" id="terms-policy" aria-labelledby="terms-heading">
+                        <div class="terms-modal-content">
+                            <h2 id="terms-heading">Terms and Conditions</h2>
+                            <div class="terms-copy">
+                                <p>Welcome to QuickQueue. Before registering for a Barangay Admin account, please read and agree to the following Terms and Conditions.</p>
+                                <p>By creating and submitting a Barangay Admin registration request, you acknowledge and agree that:</p>
+                                <ol>
+                                    <li>All information provided during registration is true and accurate.</li>
+                                    <li>Only one (1) official Barangay Admin account is permitted for each barangay.</li>
+                                    <li>Submission of this registration form does not guarantee account creation or activation. Every registration request is subject to review, verification, and approval by the Super Admin.</li>
+                                    <li>The Super Admin reserves the right to approve, reject, or request additional verification if necessary.</li>
+                                    <li>If any false, misleading, or fraudulent information is discovered, your registration may be denied, or your account may be suspended or permanently revoked.</li>
+                                    <li>Approved Barangay Admins are responsible for maintaining the confidentiality and security of their username and password and are accountable for all activities performed under their account.</li>
+                                    <li>Barangay Admin accounts must be used solely for official barangay operations and system administration purposes. Unauthorized, illegal, or abusive use of the system is strictly prohibited.</li>
+                                    <li>QuickQueue reserves the right to suspend or terminate accounts that violate these Terms and Conditions or compromise the integrity, security, or proper operation of the system.</li>
+                                    <li>These Terms and Conditions may be updated from time to time. Continued use of the system constitutes acceptance of any revised terms.</li>
+                                </ol>
+                            </div>
+                            <label class="terms"><input name="terms" type="checkbox" required><span>I have read and agree to the <a href="#terms-policy" class="terms-link">Terms and Conditions</a>. <b>*</b></span></label>
+                        </div>
+                    </dialog>
+                    <button type="submit">Submit Registration</button>
+                </form>
+            {% endif %}
+        </section>
+    </main>
+    <script>
+        const termsModal = document.getElementById('terms-policy');
+        if (termsModal) {
+            document.querySelectorAll('.terms-link').forEach((link) => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (!termsModal.open) termsModal.showModal();
+                });
+            });
+            termsModal.addEventListener('click', (event) => {
+                if (event.target === termsModal) termsModal.close();
+            });
+            document.querySelector('form').addEventListener('submit', (event) => {
+                if (!document.querySelector('[name="terms"]').checked) {
+                    event.preventDefault();
+                    termsModal.showModal();
+                }
+            });
+        }
+    </script>
+</body>
+</html>

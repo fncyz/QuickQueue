@@ -1,0 +1,405 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Barangay Staff | QuickQueue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_sidebar.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_residents.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_staff.css' %}">
+</head>
+<body>
+    <div class="shell">
+        {% include 'barangay_admin/includes/sidebar.html' %}
+
+        <main class="dashboard staff-page">
+            <header class="dashboard-header">
+                <div>
+                    <h1>Barangay Staff</h1>
+                    <p>Manage all barangay staff accounts. You can add new staff, update information, activate or deactivate staff accounts.</p>
+                </div>
+                <div class="header-tools">
+                    <button type="button" class="btn-add-staff" data-open-modal="add-staff">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        Add New Staff
+                    </button>
+                    <a href="{% url 'barangay_notifications' %}" class="alert-bell" aria-label="Notifications">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        {% if unread_notifications %}<span>{{ unread_notifications }}</span>{% endif %}
+                    </a>
+                    <div class="date-chip">
+                        <span class="barangay-label">
+                            <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            Barangay {{ barangay.name }}
+                        </span>
+                        <time datetime="{{ today|date:'Y-m-d' }}">
+                            <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3.5v3M16 3.5v3M3.5 10h17"/></svg>
+                            {{ today|date:'F j, Y (l)' }}
+                        </time>
+                    </div>
+                </div>
+            </header>
+
+            <section class="stat-cards staff-stats">
+                <article class="stat-card">
+                    <i class="icon-badge icon-blue" aria-hidden="true">
+                        <svg class="stat-icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M3.5 19c.7-3.2 2.8-5 5.5-5s4.8 1.8 5.5 5"/><path d="M14.2 14.4c1.9.2 3.5 1.5 4.3 4.6"/></svg>
+                    </i>
+                    <div class="copy">
+                        <small>Total Staff</small>
+                        <b>{{ stats.total }}</b>
+                    </div>
+                </article>
+                <article class="stat-card">
+                    <i class="icon-badge icon-green" aria-hidden="true">
+                        <svg class="stat-icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.8 19c.7-3.3 2.8-5.1 5.2-5.1s4.5 1.8 5.2 5.1"/><path d="m15.5 8 2 2 3.5-3.5"/></svg>
+                    </i>
+                    <div class="copy">
+                        <small>Active Staff</small>
+                        <b>{{ stats.active }}</b>
+                    </div>
+                </article>
+                <article class="stat-card">
+                    <i class="icon-badge icon-orange" aria-hidden="true">
+                        <svg class="stat-icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.8 19c.7-3.3 2.8-5.1 5.2-5.1s4.5 1.8 5.2 5.1"/><path d="m15.5 7.5 5 5M20.5 7.5l-5 5"/></svg>
+                    </i>
+                    <div class="copy">
+                        <small>Inactive Staff</small>
+                        <b>{{ stats.inactive }}</b>
+                    </div>
+                </article>
+            </section>
+
+            <section class="panel staff-panel">
+                <form class="resident-filters" method="get">
+                    <label class="search-field">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                        <input type="search" name="q" value="{{ filters.q }}" placeholder="Search by name or username...">
+                    </label>
+                    <label>
+                        Status
+                        <select name="status">
+                            <option value="">All Status</option>
+                            <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+                            <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </label>
+                    <label>
+                        Role
+                        <select name="role">
+                            <option value="">All Roles</option>
+                            {% for value, label in role_choices %}
+                            <option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">Apply</button>
+                    <a class="btn-clear" href="{% url 'barangay_staff' %}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.2-5.5"/><path d="M20 4v5h-5"/></svg>
+                        Clear Filters
+                    </a>
+                </form>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Staff Name</th>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Contact Number</th>
+                                <th>Status</th>
+                                <th>Date Added</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for member in staff_page %}
+                            <tr id="staff-{{ member.pk }}">
+                                <td>
+                                    <span class="staff-cell tone-{% cycle 'a' 'b' 'c' %}">
+                                        <i>{{ member.initials }}</i>
+                                        <span>
+                                            <b>{{ member.full_name }}</b>
+                                            {% if member.email %}<small>{{ member.email }}</small>{% endif %}
+                                        </span>
+                                    </span>
+                                </td>
+                                <td>{{ member.username }}</td>
+                                <td><span class="role-pill">{{ member.get_role_display }}</span></td>
+                                <td>{{ member.contact_number|default:"—" }}</td>
+                                <td>
+                                    {% if member.is_active %}
+                                    <span class="status-pill active">Active</span>
+                                    {% else %}
+                                    <span class="status-pill inactive">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="date-stack">
+                                        <b>{{ member.created_at|date:'M j, Y' }}</b>
+                                        <small>{{ member.created_at|time:'g:i A' }}</small>
+                                    </span>
+                                </td>
+                                <td class="actions">
+                                    <button
+                                        type="button"
+                                        class="btn-view"
+                                        data-open-modal="view-staff-{{ member.pk }}"
+                                    >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        View
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn-edit"
+                                        data-open-modal="edit-staff-{{ member.pk }}"
+                                    >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                                        Edit
+                                    </button>
+                                    <button type="button" class="btn-more" aria-label="More actions">⋮</button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" class="empty-row">No staff members match your filters.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <footer class="table-pager">
+                    <span>
+                        Showing {{ staff_page.start_index|default:0 }} to {{ staff_page.end_index|default:0 }} of {{ staff_total }} staff members
+                    </span>
+                    <div class="pager-links">
+                        {% if staff_page.has_previous %}
+                        <a href="?q={{ filters.q }}&status={{ filters.status }}&role={{ filters.role }}&per_page={{ per_page }}&page={{ staff_page.previous_page_number }}">‹</a>
+                        {% endif %}
+                        {% for num in staff_page.paginator.page_range %}
+                            {% if num == staff_page.number %}
+                            <span class="current">{{ num }}</span>
+                            {% elif num >= staff_page.number|add:'-2' and num <= staff_page.number|add:'2' %}
+                            <a href="?q={{ filters.q }}&status={{ filters.status }}&role={{ filters.role }}&per_page={{ per_page }}&page={{ num }}">{{ num }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if staff_page.has_next %}
+                        <a href="?q={{ filters.q }}&status={{ filters.status }}&role={{ filters.role }}&per_page={{ per_page }}&page={{ staff_page.next_page_number }}">›</a>
+                        {% endif %}
+                    </div>
+                    <form method="get" class="rows-form">
+                        <input type="hidden" name="q" value="{{ filters.q }}">
+                        <input type="hidden" name="status" value="{{ filters.status }}">
+                        <input type="hidden" name="role" value="{{ filters.role }}">
+                        <label>
+                            Rows per page:
+                            <select name="per_page" onchange="this.form.submit()">
+                                <option value="5" {% if per_page == 5 %}selected{% endif %}>5</option>
+                                <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
+                                <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                            </select>
+                        </label>
+                    </form>
+                </footer>
+            </section>
+
+            <footer class="dashboard-footer">© {% now 'Y' %} QuickQueue. All rights reserved.</footer>
+        </main>
+    </div>
+
+    <div class="staff-modal staff-drawer" id="add-staff" hidden>
+        <div class="staff-modal-backdrop" data-close-modal></div>
+        <aside class="staff-drawer-panel" role="dialog" aria-labelledby="add-staff-title">
+            <header class="staff-drawer-header">
+                <h2 id="add-staff-title">Add New Staff</h2>
+                <button type="button" class="modal-close" data-close-modal aria-label="Close">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </header>
+
+            <form class="staff-drawer-form" method="post" action="{% url 'barangay_staff_add' %}">
+                {% csrf_token %}
+                <input type="hidden" name="role" value="staff">
+                <input type="hidden" name="is_active" value="on">
+
+                <section class="form-section">
+                    <h3>Personal Information</h3>
+                    <div class="form-row two">
+                        <label>
+                            First Name <span class="req">*</span>
+                            <input type="text" name="first_name" placeholder="Enter first name" required>
+                        </label>
+                        <label>
+                            Middle Initial <span class="opt">(Optional)</span>
+                            <input type="text" name="middle_name" maxlength="5" placeholder="M.I.">
+                        </label>
+                    </div>
+                    <label>
+                        Last Name <span class="req">*</span>
+                        <input type="text" name="last_name" placeholder="Enter last name" required>
+                    </label>
+                    <label>
+                        Contact Number <span class="req">*</span>
+                        <input type="text" name="contact_number" placeholder="09XX XXX XXXX" required>
+                    </label>
+                </section>
+
+                <section class="form-section">
+                    <h3>Account Information</h3>
+                    <label>
+                        Username <span class="req">*</span>
+                        <span class="input-with-icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1-3.4 3.4-5.2 7-5.2s6 1.8 7 5.2"/></svg>
+                            <input type="text" name="username" placeholder="Enter username" required autocomplete="username">
+                        </span>
+                    </label>
+                    <div class="form-row two">
+                        <label>
+                            Password <span class="req">*</span>
+                            <span class="input-with-icon has-toggle">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                                <input type="password" name="password" id="add-password" placeholder="Enter password" required minlength="6" autocomplete="new-password">
+                                <button type="button" class="toggle-password" data-toggle-password="add-password" aria-label="Show password">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </span>
+                        </label>
+                        <label>
+                            Confirm Password <span class="req">*</span>
+                            <span class="input-with-icon has-toggle">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                                <input type="password" name="confirm_password" id="add-confirm-password" placeholder="Confirm password" required minlength="6" autocomplete="new-password">
+                                <button type="button" class="toggle-password" data-toggle-password="add-confirm-password" aria-label="Show password">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </span>
+                        </label>
+                    </div>
+                    <p class="field-hint">Password must be at least 6 characters long.</p>
+                </section>
+
+                <div class="info-note">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8.2v.01M11.2 11h1.6v5H11.2z"/></svg>
+                    <p><b>Note:</b> Please provide the username and password to the staff securely. The staff member can change their password anytime through Settings after logging in.</p>
+                </div>
+
+                <footer class="staff-drawer-footer">
+                    <button type="button" class="btn-cancel" data-close-modal>Cancel</button>
+                    <button type="submit" class="btn-create-staff">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3"/><path d="M3.8 19c.7-3.2 2.7-5 6.2-5s5.5 1.8 6.2 5"/><path d="M18 8v6M15 11h6"/></svg>
+                        Create Staff Account
+                    </button>
+                </footer>
+            </form>
+        </aside>
+    </div>
+
+
+    {% for member in staff_page %}
+    <div class="staff-modal" id="view-staff-{{ member.pk }}" hidden>
+        <div class="staff-modal-backdrop" data-close-modal></div>
+        <div class="staff-modal-card" role="dialog" aria-labelledby="view-staff-title-{{ member.pk }}">
+            <header>
+                <h2 id="view-staff-title-{{ member.pk }}">Staff Details</h2>
+                <button type="button" class="modal-close" data-close-modal aria-label="Close">×</button>
+            </header>
+            <div class="view-grid">
+                <div><small>Name</small><b>{{ member.full_name }}</b></div>
+                <div><small>Username</small><b>{{ member.username }}</b></div>
+                <div><small>Email</small><b>{{ member.email|default:"—" }}</b></div>
+                <div><small>Contact</small><b>{{ member.contact_number|default:"—" }}</b></div>
+                <div><small>Role</small><b>{{ member.get_role_display }}</b></div>
+                <div><small>Status</small><b>{% if member.is_active %}Active{% else %}Inactive{% endif %}</b></div>
+                <div><small>Date Added</small><b>{{ member.created_at|date:'M j, Y g:i A' }}</b></div>
+            </div>
+            <footer>
+                <button type="button" class="btn-cancel" data-close-modal>Close</button>
+                <button type="button" class="btn-save" data-open-modal="edit-staff-{{ member.pk }}" data-close-modal>Edit</button>
+            </footer>
+        </div>
+    </div>
+
+    <div class="staff-modal" id="edit-staff-{{ member.pk }}" hidden>
+        <div class="staff-modal-backdrop" data-close-modal></div>
+        <div class="staff-modal-card" role="dialog" aria-labelledby="edit-staff-title-{{ member.pk }}">
+            <header>
+                <h2 id="edit-staff-title-{{ member.pk }}">Edit Staff</h2>
+                <button type="button" class="modal-close" data-close-modal aria-label="Close">×</button>
+            </header>
+            <form method="post" action="{% url 'barangay_staff_edit' member.pk %}">
+                {% csrf_token %}
+                <div class="modal-grid">
+                    <label>First Name<input type="text" name="first_name" value="{{ member.first_name }}" required></label>
+                    <label>Last Name<input type="text" name="last_name" value="{{ member.last_name }}" required></label>
+                    <label>Middle Name<input type="text" name="middle_name" value="{{ member.middle_name }}"></label>
+                    <label>Username<input type="text" value="{{ member.username }}" disabled></label>
+                    <label>Email<input type="email" name="email" value="{{ member.email }}"></label>
+                    <label>Contact Number<input type="text" name="contact_number" value="{{ member.contact_number }}"></label>
+                    <label>
+                        Role
+                        <select name="role">
+                            {% for value, label in role_choices %}
+                            <option value="{{ value }}" {% if member.role == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>New Password <small>(optional)</small><input type="password" name="password" placeholder="Leave blank to keep current"></label>
+                    <label class="checkbox-row"><input type="checkbox" name="is_active" {% if member.is_active %}checked{% endif %}> Active account</label>
+                </div>
+                <footer>
+                    <button type="button" class="btn-cancel" data-close-modal>Cancel</button>
+                    <button type="submit" class="btn-save">Save Changes</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+
+    <script>
+        (function () {
+            function openModal(id) {
+                document.querySelectorAll(".staff-modal:not([hidden])").forEach(function (modal) {
+                    modal.hidden = true;
+                });
+                var el = document.getElementById(id);
+                if (el) el.hidden = false;
+            }
+            function closeModal(el) {
+                var modal = el.closest(".staff-modal");
+                if (modal) modal.hidden = true;
+            }
+            document.addEventListener("click", function (event) {
+                var toggle = event.target.closest("[data-toggle-password]");
+                if (toggle) {
+                    var input = document.getElementById(toggle.getAttribute("data-toggle-password"));
+                    if (input) {
+                        input.type = input.type === "password" ? "text" : "password";
+                    }
+                    return;
+                }
+                var openBtn = event.target.closest("[data-open-modal]");
+                if (openBtn) {
+                    openModal(openBtn.getAttribute("data-open-modal"));
+                    return;
+                }
+                if (event.target.matches("[data-close-modal], [data-close-modal] *")) {
+                    closeModal(event.target);
+                }
+            });
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape") {
+                    document.querySelectorAll(".staff-modal:not([hidden])").forEach(function (modal) {
+                        modal.hidden = true;
+                    });
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

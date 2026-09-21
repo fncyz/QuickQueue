@@ -1,0 +1,44 @@
+/* Shared staff-portal interaction feedback */
+.staff-sidebar nav a,.staff-logout,.bell,.attention>a,.live-foot a,
+.mini-panel header a,.notify,.notify-btn,.review-btn,.history-btn,
+.actions button,.actions a,.controls button,.controls>a,
+.doc-filters button,.doc-filters>a,.archive-filters button,.archive-filters>a,
+.logbook-filters button,.logbook-filters>a,.settings-card footer button,
+.settings-card footer a,.photo-row label,.tabs a,.day,.queue-no{
+  transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease,
+             border-color .16s ease,color .16s ease,filter .16s ease
+}
+.staff-sidebar nav a:hover,.staff-logout:hover{
+  transform:translateX(4px);background:rgba(255,255,255,.1)
+}
+.staff-sidebar nav a.active:hover{background:#2878e8}
+.bell:hover{transform:translateY(-2px);background:#edf3fc;box-shadow:0 5px 14px #15376518}
+.attention>a:hover,.day:hover{
+  transform:translateY(-2px);border-color:#a9c7f7;box-shadow:0 8px 20px #17365f12
+}
+.mini-panel header a:hover,.live-foot a:hover{transform:translateX(3px)}
+.notify:hover,.notify-btn:hover,.review-btn:hover,.actions .primary:hover,
+.controls .call:hover,.doc-filters button:hover,.archive-filters button:hover,
+.logbook-filters button:hover,.settings-card footer button:hover{
+  transform:translateY(-2px);filter:brightness(1.06);box-shadow:0 7px 15px #1268e82b
+}
+.actions button:not(.primary):hover,.actions a:hover,.controls button:not(.call):hover,
+.controls>a:hover,.history-btn:hover,.photo-row label:hover,
+.settings-card footer a:hover{
+  transform:translateY(-2px);background:#f2f7ff;border-color:#76a8f8;
+  box-shadow:0 5px 12px #17365f12
+}
+.doc-filters>a:hover,.archive-filters>a:hover,.logbook-filters>a:hover{
+  transform:translateX(3px);color:#004fca
+}
+.tabs a:hover{background:#f6f9ff;color:#0864ec}
+tbody tr{transition:background-color .14s ease}
+tbody tr:hover{background:#f8fbff}
+.queue-no:hover{transform:scale(1.04)}
+button:active,a:active{transform:translateY(0)!important;box-shadow:none!important}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
+  outline:3px solid #74a9ff66;outline-offset:2px
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+}
