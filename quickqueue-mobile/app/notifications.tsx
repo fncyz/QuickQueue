@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { useAppTheme } from '@/contexts/app-theme';
 
 type NotificationItem = { id: number; type: string; title: string; message: string; is_read: boolean; appointment_id: number; created_at: string };
 type Filter = 'All' | 'Unread' | 'Appointments' | 'Queue' | 'Transactions';
@@ -17,14 +20,15 @@ const filterMatches = (item: NotificationItem, filter: Filter) => filter === 'Al
   || (filter === 'Appointments' && ['AC', 'AR', 'CA'].includes(item.type));
 
 const notificationTheme = (type: string) => ({
-  AC: { icon: 'checkmark-circle' as const, color: '#08A866', background: '#DDF7EA' },
-  AR: { icon: 'calendar-outline' as const, color: '#0873FF', background: '#E0EEFF' },
-  QU: { icon: 'people' as const, color: '#FF870B', background: '#FFF0D9' },
-  CA: { icon: 'close' as const, color: '#FF315B', background: '#FFE1E8' },
-  CO: { icon: 'card-outline' as const, color: '#14A57B', background: '#DDF6EE' },
-}[type] || { icon: 'notifications-outline' as const, color: '#7247E8', background: '#EEE5FF' });
+  AC: { icon: 'checkmark-circle' as const, color: '#159447', background: '#DDF7EA', darkBackground: '#173B2A' },
+  AR: { icon: 'calendar-outline' as const, color: '#E98216', background: '#FFF0D9', darkBackground: '#49331B' },
+  QU: { icon: 'people' as const, color: '#0873FF', background: '#E0EEFF', darkBackground: '#18365C' },
+  CA: { icon: 'close' as const, color: '#E21E31', background: '#FFE1E8', darkBackground: '#4A2028' },
+  CO: { icon: 'checkmark-done-circle' as const, color: '#159447', background: '#DDF7EA', darkBackground: '#173B2A' },
+}[type] || { icon: 'information-circle-outline' as const, color: '#0873FF', background: '#E0EEFF', darkBackground: '#18365C' });
 
 export default function NotificationsScreen() {
+  const { colors } = useAppTheme();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('All');
@@ -46,7 +50,10 @@ export default function NotificationsScreen() {
     }
   }, [request]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    load();
+  }, [load]));
 
   const markRead = async (item: NotificationItem) => {
     if (!item.is_read) {
@@ -73,9 +80,9 @@ export default function NotificationsScreen() {
   const todayItems = filtered.filter((item) => new Date(item.created_at).toDateString() === today);
   const earlierItems = filtered.filter((item) => new Date(item.created_at).toDateString() !== today);
   const filters: Filter[] = ['All', 'Unread', 'Appointments', 'Queue', 'Transactions'];
-  return <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-    <View style={s.header}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={27} color="#FFFFFF" /></Pressable><Text style={s.title}>Notification</Text><View style={s.headerSpace} /></View>
-    {loading ? <View style={s.loading}><ActivityIndicator color="#0646A8" /></View> : <ScrollView style={s.page} contentContainerStyle={s.content}>
+  return <SafeAreaView style={[s.safe, { backgroundColor: colors.primary }]} edges={['top', 'bottom']}>
+    <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={27} color="#FFFFFF" /></Pressable><Text style={s.title}>Notifications</Text><View style={s.headerSpace} /></View>
+    {loading ? <View style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.accent} /></View> : <ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters}>{filters.map((value) => { const count = items.filter((item) => filterMatches(item, value)).length; return <Pressable key={value} onPress={() => setFilter(value)} style={[s.filter, filter === value && s.filterActive]}><Text style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text><View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View></Pressable>; })}</ScrollView>
       {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={markAllRead} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={todayItems.length ? undefined : markAllRead} />}</>}
     </ScrollView>}
@@ -83,7 +90,8 @@ export default function NotificationsScreen() {
 }
 
 function NotificationGroup({ title, items, onPress, unread, onMarkAll }: { title: string; items: NotificationItem[]; onPress: (item: NotificationItem) => void; unread?: number; onMarkAll?: () => void }) {
-  return <View style={s.group}><View style={s.groupHeader}><Text style={s.groupTitle}>{title}</Text>{typeof unread === 'number' && unread > 0 && <View style={s.unreadPill}><Text style={s.unreadPillText}>{unread} unread</Text></View>}{onMarkAll && unread ? <Pressable onPress={onMarkAll} style={s.markAllButton}><Text style={s.markAll}>Mark all as read</Text></Pressable> : null}</View>{items.map((item) => { const theme = notificationTheme(item.type); return <Pressable key={item.id} onPress={() => onPress(item)} style={[s.card, !item.is_read && s.unread]}><View style={[s.icon, { backgroundColor: theme.background }]}><Ionicons name={theme.icon} size={21} color={theme.color} /></View><View style={s.copy}><View style={s.row}><Text style={s.cardTitle}>{item.title}</Text><Text style={s.date}>{formatNotificationTime(item.created_at)}</Text></View><Text style={s.message}>{item.message}</Text></View>{!item.is_read && <View style={s.dot} />}<Ionicons name="chevron-forward" size={16} color="#4F75B4" /></Pressable>; })}</View>;
+  const { colors, isDark } = useAppTheme();
+  return <View style={s.group}><View style={s.groupHeader}><Text style={[s.groupTitle, { color: colors.text }]}>{title}</Text>{typeof unread === 'number' && unread > 0 && <View style={s.unreadPill}><Text style={s.unreadPillText}>{unread} unread</Text></View>}{onMarkAll && unread ? <Pressable onPress={onMarkAll} style={s.markAllButton}><Text style={s.markAll}>Mark all as read</Text></Pressable> : null}</View>{items.map((item) => { const theme = notificationTheme(item.type); return <Pressable key={item.id} onPress={() => onPress(item)} style={[s.card, { backgroundColor: item.is_read ? colors.surface : colors.surfaceAlt, borderColor: theme.color }, !item.is_read && !isDark && s.unread]}><View style={[s.icon, { backgroundColor: isDark ? theme.darkBackground : theme.background }]}><Ionicons name={theme.icon} size={21} color={theme.color} /></View><View style={s.copy}><View style={s.row}><Text style={[s.cardTitle, { color: colors.text }]}>{item.title}</Text><Text style={[s.date, { color: colors.muted }]}>{formatNotificationTime(item.created_at)}</Text></View><Text style={[s.message, { color: colors.muted }]}>{item.message}</Text></View>{!item.is_read && <View style={[s.dot, { backgroundColor: theme.color }]} />}<Ionicons name="chevron-forward" size={16} color={theme.color} /></Pressable>; })}</View>;
 }
 
 function formatNotificationTime(value: string) {

@@ -1,10 +1,12 @@
 import axios from "axios";
 
+import { API_BASE_URL } from "@/src/config/api";
 
 export const api = axios.create({
-  baseURL: "https://quick-queue-virid.vercel.app/api/",
+  baseURL: `${API_BASE_URL}/`,
   headers: {
     "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
   },
 });
 

@@ -1,4 +1,5 @@
-import { View, Text, Switch, StyleSheet } from "react-native";
+import { View, Switch, StyleSheet } from "react-native";
+import { Text } from '@/components/Typography';
 
 interface Props {
   value: boolean;

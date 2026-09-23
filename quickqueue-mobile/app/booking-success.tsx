@@ -1,13 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppTheme } from '@/contexts/app-theme';
 
 export default function BookingSuccessScreen() {
-  const params = useLocalSearchParams<{ appointmentId: string; queueNumber: string; service: string; appointmentDate: string; timeSlot: string }>();
+  const { colors } = useAppTheme();
+  const params = useLocalSearchParams<{ appointmentId: string; queueNumber: string; service: string; appointmentDate: string; timeSlot: string; status?: string; statusCode?: string }>();
+  const currentStatus = params.statusCode === 'P' ? 'Under Review' : (params.status || 'Under Review');
+  const approved = ['C', 'O', 'D'].includes(params.statusCode || '');
 
-  return <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-    <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+  return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
       <View style={s.successArea}>
         <View style={s.sparkOne} /><View style={s.sparkTwo} /><View style={s.sparkThree} />
         <View style={s.successHalo}><View style={s.successSeal}><Ionicons name="checkmark" size={45} color="#FFFFFF" /></View></View>
@@ -23,13 +28,13 @@ export default function BookingSuccessScreen() {
 
       <View style={s.details}><Detail icon="briefcase-outline" label="Service" value={params.service} /><Detail icon="calendar-outline" label="Appointment Date" value={params.appointmentDate} /><Detail icon="time-outline" label="Time Slot" value={params.timeSlot} /></View>
 
-      <View style={s.progressHeader}><Text style={s.progressTitle}>Appointment Progress</Text><View style={s.current}><Text style={s.currentLabel}>Current Status</Text><Text style={s.currentValue}>Under Review</Text></View></View>
+      <View style={s.progressHeader}><Text style={s.progressTitle}>Appointment Progress</Text><View style={s.current}><Text style={s.currentLabel}>Current Status</Text><Text style={s.currentValue}>{currentStatus}</Text></View></View>
       <View style={s.progressCard}>
         <ProgressItem icon="checkmark" title="Submitted" detail="Your appointment has been received successfully." active color="#3FD58C" />
         <View style={s.progressLine} />
         <ProgressItem icon="time-outline" title="Under Review" detail="Your appointment is currently being reviewed by barangay staff." active color="#3887F6" badge="In Progress" />
-        <View style={[s.progressLine, s.progressLinePending]} />
-        <ProgressItem icon="checkmark" title="Approved" detail="You will be notified once your appointment is approved." color="#B9C8DE" badge="Pending" />
+        <View style={[s.progressLine, !approved && s.progressLinePending]} />
+        <ProgressItem icon="checkmark" title="Approved" detail={approved ? 'Your appointment has been approved.' : 'You will be notified once your appointment is approved.'} active={approved} color={approved ? '#3FD58C' : '#B9C8DE'} badge={approved ? 'Approved' : 'Pending'} />
       </View>
 
       <Pressable onPress={() => router.replace('/queue')} style={s.primary}><Text style={s.primaryText}>Track Status</Text><Ionicons name="chevron-forward" size={19} color="#FFFFFF" /></Pressable>

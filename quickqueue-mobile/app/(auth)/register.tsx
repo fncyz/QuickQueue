@@ -7,10 +7,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
+import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
@@ -143,7 +142,7 @@ const handleRegister = async () => {
     return;
   }
 
-  if (!username || !firstName || !lastName || !sex || !email || !contactNumber) {
+  if (!username || !firstName || !lastName || !sex || !contactNumber) {
     Alert.alert("Required Information", "Please complete all required fields.");
     return;
   }
@@ -163,7 +162,7 @@ const handleRegister = async () => {
       suffix,
       birthdate: formatDate(birthdate),
       sex,
-      email,
+      email: email.trim() || null,
       contact_number: contactNumber,
       barangay,
       terms_accepted: acceptedTerms,
@@ -222,7 +221,7 @@ const handleRegister = async () => {
               <Field label="Username" required><IconInput icon="person-outline" placeholder="Enter username" value={username} onChangeText={setUsername} autoCapitalize="none" /></Field>
               <Field label="Contact Number" required><IconInput icon="call-outline" placeholder="Enter contact number" value={contactNumber} onChangeText={handleContactNumberChange} keyboardType="phone-pad" maxLength={15} /></Field>
             </View>
-            <Field label="Email Address" required><IconInput icon="mail-outline" placeholder="Enter email address" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" /></Field>
+            <Field label="Email Address" optional><IconInput icon="mail-outline" placeholder="Enter email address (optional)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" /></Field>
             <SectionTitle icon="location-outline">ADDRESS INFORMATION</SectionTitle>
             <View style={styles.row}>
               <Field label="Province" required>

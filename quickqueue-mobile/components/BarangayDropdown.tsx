@@ -4,14 +4,16 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
+import { Text } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
 
 const barangays = [
-  { id: 3, name: "Bato" },
-  { id: 6, name: "Poblacion" },
+  { id: 5, name: "Daanlungsod" },
+  { id: 2, name: "Luray 2" },
+  { id: 1, name: "Poblacion" },
+  { id: 4, name: "Sangi" },
 ];
 
 interface Props {

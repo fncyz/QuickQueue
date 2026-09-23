@@ -2,9 +2,9 @@ import { useState } from "react";
 import {
   Platform,
   Pressable,
-  Text,
   StyleSheet,
 } from "react-native";
+import { Text } from '@/components/Typography';
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 

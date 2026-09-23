@@ -1,9 +1,9 @@
 import {
   TouchableOpacity,
-  Text,
   StyleSheet,
   TouchableOpacityProps,
 } from "react-native";
+import { Text } from '@/components/Typography';
 
 interface Props extends TouchableOpacityProps {
   title: string;

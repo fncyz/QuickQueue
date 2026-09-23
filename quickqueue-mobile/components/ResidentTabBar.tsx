@@ -1,26 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppTheme } from '@/contexts/app-theme';
 
 const items = {
   index: { label: 'Home', icon: 'home' as const, center: false },
   queue: { label: 'Queue', icon: 'people' as const, center: false },
-  booking: { label: 'Book', icon: 'calendar-outline' as const, center: true },
+  booking: { label: '', icon: 'add' as const, center: true },
   transactions: { label: 'Transactions', icon: 'document-text' as const, center: false },
   profile: { label: 'Profile', icon: 'person-outline' as const, center: false },
 };
 
 /** Persistent resident navigation, deliberately kept separate from screen content. */
 export function ResidentTabBar({ state, navigation }: BottomTabBarProps) {
-  return <SafeAreaView edges={['bottom']} style={styles.safeArea}><View style={styles.bar}>
+  const { colors } = useAppTheme();
+  return <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: colors.background }]}><View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
     {state.routes.map((route, index) => {
       const item = items[route.name as keyof typeof items];
       if (!item) return null;
 
       const focused = state.index === index;
       return <Pressable key={route.key} onPress={() => !focused && navigation.navigate(route.name)} style={[styles.item, item.center && styles.centerItem]} accessibilityRole="button" accessibilityState={focused ? { selected: true } : {}}>
-        <View style={[styles.iconWrap, item.center && styles.centerIcon]}><Ionicons name={item.icon} size={item.center ? 29 : 24} color={item.center ? '#FFFFFF' : focused ? '#073CB5' : '#56637A'} /></View><Text numberOfLines={1} style={[styles.label, focused && styles.labelActive, item.center && styles.centerLabel]}>{item.label}</Text>
+        <View style={[styles.iconWrap, item.center && styles.centerIcon]}><Ionicons name={item.icon} size={item.center ? 36 : 24} color={item.center ? '#FFFFFF' : focused ? colors.accent : colors.muted} /></View>{!item.center && <Text numberOfLines={1} style={[styles.label, { color: focused ? colors.accent : colors.muted }, focused && styles.labelActive]}>{item.label}</Text>}
       </Pressable>;
     })}
   </View></SafeAreaView>;

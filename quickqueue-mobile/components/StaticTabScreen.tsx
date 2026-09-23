@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export function StaticTabScreen({ title, message, icon }: { title: string; message: string; icon: keyof typeof Ionicons.glyphMap }) {

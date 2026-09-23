@@ -1,4 +1,5 @@
-import { TextInput, StyleSheet, TextInputProps } from "react-native";
+import { StyleSheet, TextInputProps } from "react-native";
+import { TextInput } from '@/components/Typography';
 
 type FormInputProps = TextInputProps;
 

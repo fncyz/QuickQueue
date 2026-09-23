@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Text } from '@/components/Typography';
 
 type HeaderNotificationBellProps = {
   onPress: () => void;

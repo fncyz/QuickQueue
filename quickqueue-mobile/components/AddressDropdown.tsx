@@ -4,9 +4,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
+import { Text } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
 
 interface Option {
