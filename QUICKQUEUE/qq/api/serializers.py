@@ -101,7 +101,7 @@ class RegisterSerializer(serializers.Serializer):
         choices=Resident.Sex.choices,
     )
 
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
 
     contact_number = serializers.CharField(
         max_length=15,
@@ -131,6 +131,8 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def validate_email(self, value):
+        if not value:
+            return None
         if Resident.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("Email address is already registered.")
         return value

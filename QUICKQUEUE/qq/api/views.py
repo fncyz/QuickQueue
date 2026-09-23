@@ -338,6 +338,8 @@ def queue_status_api(request):
             "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
             "barangay": appointment.barangay.name,
             "queue_number": appointment.queue_number,
+            "status": appointment.get_status_display(),
+            "status_code": appointment.status,
             "now_serving": now_serving.queue_number if now_serving else "—",
             "people_ahead": people_ahead,
             "estimated_wait": people_ahead * appointment.service.estimated_duration,

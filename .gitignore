@@ -6,6 +6,7 @@ venv/
 
 # Django
 db.sqlite3
+staticfiles/
 
 # React Native / Expo
 node_modules/
