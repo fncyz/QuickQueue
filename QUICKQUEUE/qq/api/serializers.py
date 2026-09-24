@@ -105,6 +105,22 @@ class RegisterSerializer(serializers.Serializer):
 
     terms_accepted = serializers.BooleanField()
 
+    @staticmethod
+    def _format_name(value):
+        return " ".join(part.title() for part in value.strip().split())
+
+    def validate_first_name(self, value):
+        return self._format_name(value)
+
+    def validate_middle_name(self, value):
+        return self._format_name(value) if value else ""
+
+    def validate_last_name(self, value):
+        return self._format_name(value)
+
+    def validate_suffix(self, value):
+        return value.strip().upper() if value else ""
+
     def validate(self, attrs):
         if not attrs["terms_accepted"]:
             raise serializers.ValidationError(

@@ -194,10 +194,10 @@ const handleRegister = async () => {
 
             <SectionTitle icon="person-outline">PERSONAL INFORMATION</SectionTitle>
             <View style={styles.row}>
-              <Field label="First Name" required><IconInput icon="person-outline" placeholder="Enter first name" value={firstName} onChangeText={setFirstName} /></Field>
-              <Field label="Middle Name" optional><IconInput icon="person-outline" placeholder="Enter middle name" value={middleName} onChangeText={setMiddleName} /></Field>
+              <Field label="First Name" required><IconInput icon="person-outline" placeholder="Enter first name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" /></Field>
+              <Field label="Middle Name" optional><IconInput icon="person-outline" placeholder="Enter middle name" value={middleName} onChangeText={setMiddleName} autoCapitalize="words" /></Field>
             </View>
-            <Field label="Last Name" required><IconInput icon="person-outline" placeholder="Enter last name" value={lastName} onChangeText={setLastName} /></Field>
+            <Field label="Last Name" required><IconInput icon="person-outline" placeholder="Enter last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" /></Field>
             <View style={styles.row}>
               <Field label="Suffix" optional><IconInput icon="pricetag-outline" placeholder="Enter suffix" value={suffix} onChangeText={setSuffix} /></Field>
               <Field label="Birthdate" required>
