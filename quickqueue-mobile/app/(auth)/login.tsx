@@ -15,7 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { loginResident } from "@/services/api";
+import * as LocalAuthentication from "expo-local-authentication";
+import { loginResident, refreshResidentSession } from "@/services/api";
+import { getBiometricLogin, updateBiometricRefreshToken, type BiometricKind } from "@/services/secure-auth";
 
 const setupRoute = (stage: string) => {
   if (stage === "password") return "/set-password" as const;
@@ -69,6 +71,7 @@ export default function LoginScreen() {
       await AsyncStorage.setItem("quickqueue.accessToken", result.access);
       await AsyncStorage.setItem("quickqueue.refreshToken", result.refresh);
       await AsyncStorage.setItem("quickqueue.securitySetupStage", result.security_setup_stage);
+      await updateBiometricRefreshToken(result.refresh);
     } catch {
       setIsSubmitting(false);
       setLoginError("Login succeeded, but the app could not save your session. Restart the app and try again.");
@@ -77,6 +80,64 @@ export default function LoginScreen() {
 
     setIsSubmitting(false);
     router.replace(setupRoute(result.security_setup_stage));
+  };
+
+  const handlePinLogin = () => {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername) {
+      setLoginError("Enter your username before using your PIN.");
+      return;
+    }
+    setLoginError("");
+    router.push({ pathname: "/pin-login", params: { username: normalizedUsername } });
+  };
+
+  const handleBiometricLogin = async (kind: BiometricKind) => {
+    if (isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      setLoginError("");
+      const requestedType = kind === "fingerprint"
+        ? LocalAuthentication.AuthenticationType.FINGERPRINT
+        : LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION;
+      const [hardware, enrolled, supportedTypes, savedLogin] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+        LocalAuthentication.supportedAuthenticationTypesAsync(),
+        getBiometricLogin(kind),
+      ]);
+      if (!hardware || !enrolled || !supportedTypes.includes(requestedType)) {
+        setLoginError(`${kind === "fingerprint" ? "Fingerprint" : "Face recognition"} is not available on this device.`);
+        return;
+      }
+      if (!savedLogin.enabled || !savedLogin.refreshToken) {
+        setLoginError(`Sign in with your password first and enable ${kind === "fingerprint" ? "fingerprint" : "face recognition"} during security setup.`);
+        return;
+      }
+      const authentication = await LocalAuthentication.authenticateAsync({
+        promptMessage: kind === "fingerprint" ? "Sign in with fingerprint" : "Sign in with face recognition",
+        cancelLabel: "Cancel",
+        disableDeviceFallback: true,
+      });
+      if (!authentication.success) return;
+      const session = await refreshResidentSession(savedLogin.refreshToken);
+      const refreshToken = session.refresh || savedLogin.refreshToken;
+      await AsyncStorage.multiSet([
+        ["quickqueue.accessToken", session.access],
+        ["quickqueue.refreshToken", refreshToken],
+        ["quickqueue.securitySetupStage", "complete"],
+      ]);
+      await updateBiometricRefreshToken(refreshToken);
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        setLoginError("Your saved sign-in expired. Sign in with your password to enable it again.");
+      } else {
+        setLoginError("Biometric sign in could not be completed. Please try again.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -150,7 +211,7 @@ export default function LoginScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={isPasswordVisible ? "Hide password" : "Show password"}
                 >
-                  <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} size={24} color="#0045AA" />
+                  <Ionicons name={isPasswordVisible ? "eye-outline" : "eye-off-outline"} size={24} color="#0045AA" />
                 </Pressable>
               </View>
 
@@ -165,13 +226,13 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.alternativeRow}>
-                <Pressable style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with a security key">
+                <Pressable onPress={handlePinLogin} disabled={isSubmitting} style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with secure PIN">
                   <Ionicons name="key" size={27} color="#003D9C" />
                 </Pressable>
-                <Pressable style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with fingerprint">
+                <Pressable onPress={() => handleBiometricLogin("fingerprint")} disabled={isSubmitting} style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with fingerprint">
                   <Ionicons name="finger-print" size={31} color="#003D9C" />
                 </Pressable>
-                <Pressable style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with face recognition">
+                <Pressable onPress={() => handleBiometricLogin("face")} disabled={isSubmitting} style={styles.alternativeButton} accessibilityRole="button" accessibilityLabel="Sign in with face recognition">
                   <View style={styles.faceScanner}>
                     <View style={[styles.scanCorner, styles.scanTopLeft]} />
                     <View style={[styles.scanCorner, styles.scanTopRight]} />

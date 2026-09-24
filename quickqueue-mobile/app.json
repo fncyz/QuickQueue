@@ -51,7 +51,8 @@
         {
           "faceIDPermission": "Allow QuickQueue to use Face ID for secure account access."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

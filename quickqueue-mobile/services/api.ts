@@ -35,6 +35,16 @@ export const loginResident = async (username: string, password: string) => {
   return response.data;
 };
 
+export const loginResidentWithPin = async (username: string, pin: string) => {
+  const response = await api.post<LoginResponse>("login/pin/", { username, pin });
+  return response.data;
+};
+
+export const refreshResidentSession = async (refresh: string) => {
+  const response = await api.post<{ access: string; refresh?: string }>("token/refresh/", { refresh });
+  return response.data;
+};
+
 export const changePassword = async (accessToken: string, currentPassword: string, newPassword: string, confirmPassword: string) => {
   const response = await api.post("change-password/", {
     current_password: currentPassword,

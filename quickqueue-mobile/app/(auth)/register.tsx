@@ -111,6 +111,7 @@ export default function RegisterScreen() {
   const [contactNumber, setContactNumber] = useState("");
   const [barangay, setBarangay] = useState<number | null>(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [province, setProvince] = useState<number | null>(null);
   const [municipality, setMunicipality] = useState<number | null>(null);
@@ -251,10 +252,12 @@ const handleRegister = async () => {
             />
             </Field>
             <View style={styles.actionArea}>
-              <Pressable style={styles.termsBox} onPress={() => setAcceptedTerms((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: acceptedTerms }}>
-                <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>{acceptedTerms && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
-                <Text style={styles.termsText}>I have read and agree to the <Text style={styles.termsLink}>Terms</Text> and <Text style={styles.termsLink}>Privacy Policy.</Text><Text style={styles.required}> *</Text></Text>
-              </Pressable>
+              <View style={styles.termsBox}>
+                <Pressable onPress={() => setAcceptedTerms((value) => !value)} accessibilityRole="checkbox" accessibilityLabel="Accept the Terms and Privacy Policy" accessibilityState={{ checked: acceptedTerms }} hitSlop={8}>
+                  <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>{acceptedTerms && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
+                </Pressable>
+                <Text style={styles.termsText}>I have read and agree to the <Text onPress={() => setShowTerms(true)} style={styles.termsLink}>Terms and Privacy Policy.</Text><Text style={styles.required}> *</Text></Text>
+              </View>
 
               <Pressable style={[styles.createButton, isSubmitting && styles.createButtonDisabled]} onPress={handleRegister} disabled={isSubmitting} accessibilityRole="button" accessibilityState={{ disabled: isSubmitting }}><Text style={styles.createButtonText}>{isSubmitting ? "Creating Account..." : "Create Account"}</Text></Pressable>
               <View style={styles.signInRow}><Text style={styles.signInText}>Already have an account? </Text><Pressable onPress={() => router.replace("/login")}><Text style={styles.signInLink}>Sign In</Text></Pressable></View>
@@ -284,6 +287,20 @@ const handleRegister = async () => {
           </View>
         </Pressable>
       </Modal>
+      <Modal transparent animationType="fade" visible={showTerms} onRequestClose={() => setShowTerms(false)}>
+        <View style={styles.termsModalBackdrop}>
+          <View style={styles.termsModal}>
+            <View style={styles.termsModalHeader}><Text style={styles.termsModalTitle}>Terms and Privacy Policy</Text><Pressable onPress={() => setShowTerms(false)} accessibilityLabel="Close terms"><Ionicons name="close" size={23} color="#17366D" /></Pressable></View>
+            <ScrollView style={styles.termsModalScroll} contentContainerStyle={styles.termsModalContent} showsVerticalScrollIndicator={false}>
+              <Text style={styles.termsParagraph}>By creating a QuickQueue account, I certify that the information I provide is true, complete, and accurate to the best of my knowledge. I understand that this account is intended solely for booking barangay appointments and accessing queue-related services.</Text>
+              <Text style={styles.termsParagraph}>I consent to the collection, use, and storage of my personal information, including my name, contact number, email address (if provided), date of birth, and address, for the purposes of account registration, appointment scheduling, queue management, and communication related to barangay services.</Text>
+              <Text style={styles.termsParagraph}>I understand that my personal information will be treated confidentially and protected in accordance with applicable data privacy laws. My information will not be shared with unauthorized individuals or used for purposes unrelated to the QuickQueue system.</Text>
+              <Text style={styles.termsParagraph}>By checking this box, I acknowledge that I have read, understood, and agree to the Terms and Privacy Policy of QuickQueue.</Text>
+            </ScrollView>
+            <Pressable onPress={() => { setAcceptedTerms(true); setShowTerms(false); }} style={styles.agreeButton}><Text style={styles.agreeButtonText}>I Understand and Agree</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -299,8 +316,9 @@ const styles = StyleSheet.create({
   dateInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, dateText: { color: "#273246", fontSize: 11 }, placeholder: { color: "#98A2B7", fontSize: 10 },
   selectInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, selectText: { flex: 1 },
   actionArea: { marginTop: "auto" },
-  termsBox: { alignItems: "center", backgroundColor: "#F0F7FF", borderRadius: 10, flexDirection: "row", marginTop: 1, minHeight: 44, paddingHorizontal: 18, paddingVertical: 8 }, checkbox: { alignItems: "center", borderColor: "#30445F", borderRadius: 4, borderWidth: 1.5, height: 17, justifyContent: "center", marginRight: 10, width: 17 }, checkboxChecked: { backgroundColor: "#1671FF", borderColor: "#1671FF" }, termsText: { color: "#647087", flex: 1, fontSize: 9 }, termsLink: { color: "#1671FF" },
+  termsBox: { alignItems: "center", backgroundColor: "#F0F7FF", borderRadius: 10, flexDirection: "row", marginTop: 1, minHeight: 44, paddingHorizontal: 18, paddingVertical: 8 }, checkbox: { alignItems: "center", borderColor: "#30445F", borderRadius: 4, borderWidth: 1.5, height: 17, justifyContent: "center", marginRight: 10, width: 17 }, checkboxChecked: { backgroundColor: "#1671FF", borderColor: "#1671FF" }, termsText: { color: "#647087", flex: 1, fontSize: 9 }, termsLink: { color: "#1671FF", fontWeight: "700", textDecorationLine: "underline" },
   createButton: { alignItems: "center", backgroundColor: "#17468F", borderRadius: 10, height: 43, justifyContent: "center", marginTop: 12 }, createButtonDisabled: { opacity: 0.65 }, createButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   signInRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginVertical: 13 }, signInText: { color: "#69738A", fontSize: 10 }, signInLink: { color: "#1671FF", fontSize: 10, fontWeight: "600" },
   modalBackdrop: { alignItems: "center", backgroundColor: "rgba(0, 0, 0, 0.35)", flex: 1, justifyContent: "center", padding: 28 }, sexMenu: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", width: "100%" }, sexMenuTitle: { color: "#163C7D", fontSize: 16, fontWeight: "700", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 }, sexOption: { alignItems: "center", borderTopColor: "#E5E7EB", borderTopWidth: 1, flexDirection: "row", height: 50, justifyContent: "space-between", paddingHorizontal: 18 }, sexOptionText: { color: "#1D2738", fontSize: 15 },
+  termsModalBackdrop: { alignItems: "center", backgroundColor: "rgba(2, 18, 48, 0.58)", flex: 1, justifyContent: "center", padding: 22 }, termsModal: { backgroundColor: "#FFFFFF", borderRadius: 18, maxHeight: "78%", overflow: "hidden", width: "100%" }, termsModalHeader: { alignItems: "center", borderBottomColor: "#E8EEF6", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 15 }, termsModalTitle: { color: "#0E3978", flex: 1, fontSize: 17, fontWeight: "800" }, termsModalScroll: { flexGrow: 0 }, termsModalContent: { padding: 18, paddingBottom: 6 }, termsParagraph: { color: "#46546B", fontSize: 12, lineHeight: 19, marginBottom: 14 }, agreeButton: { alignItems: "center", backgroundColor: "#075BCF", borderRadius: 10, margin: 18, marginTop: 10, paddingVertical: 13 }, agreeButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
 });

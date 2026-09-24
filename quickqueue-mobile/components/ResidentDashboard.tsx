@@ -116,9 +116,13 @@ function UpcomingAppointmentCard({ appointment, isDark }: { appointment: ActiveA
 function EmptyAppointmentCard({ isDark }: { isDark: boolean }) {
   const { colors } = useAppTheme();
   return <View style={[s.appointment, s.emptyAppointment, isDark && s.darkCard]}>
-    <View style={[s.emptyCalendar, isDark && s.darkIcon]}><Ionicons name="calendar" size={39} color={colors.accent} /></View>
-    <View style={s.emptyCopy}><Text style={[s.emptyTitle, { color: colors.text }]}>No Appointment Yet</Text><Text style={[s.emptyText, { color: colors.muted }]}>You don&apos;t have any appointment scheduled.</Text><Pressable onPress={() => router.push('/booking')} style={s.book}><Ionicons name="calendar" size={16} color="#FFF" /><Text style={s.bookText}>Book an Appointment</Text></Pressable></View>
-    <View style={s.emptyIllustration}><Ionicons name="clipboard-outline" size={72} color={isDark ? '#2A4266' : '#D8E6FD'} /><View style={s.clockBadge}><Ionicons name="time-outline" size={28} color={isDark ? '#5E7CA8' : '#AFC9F3'} /></View></View>
+    <View style={[s.emptyCalendar, isDark && s.darkIcon]}><Ionicons name="calendar" size={34} color={colors.accent} /></View>
+    <View style={s.emptyCopy}>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[s.emptyTitle, { color: colors.text }]}>No Appointment Yet</Text>
+      <Text style={[s.emptyText, { color: colors.muted }]}>You don&apos;t have any appointment scheduled.</Text>
+      <Pressable onPress={() => router.push('/booking')} style={s.book}><Ionicons name="calendar-outline" size={16} color="#FFF" /><Text numberOfLines={1} adjustsFontSizeToFit style={s.bookText}>Book an Appointment</Text></Pressable>
+    </View>
+    <View style={s.emptyIllustration}><Ionicons name="clipboard-outline" size={62} color={isDark ? '#2A4266' : '#D8E6FD'} /><View style={s.clockBadge}><Ionicons name="time-outline" size={26} color={isDark ? '#5E7CA8' : '#AFC9F3'} /></View></View>
   </View>;
 }
 
@@ -163,17 +167,17 @@ const readableStyles = {
   detailText: { flex: 1, fontSize: 11, lineHeight: 15 },
   appointmentNotice: { alignItems: 'center', backgroundColor: '#EEF4FF', borderRadius: 10, flexDirection: 'row', gap: 7, marginTop: 10, minHeight: 42, paddingHorizontal: 11 },
   appointmentNoticeText: { flex: 1, fontSize: 9, lineHeight: 14 },
-  emptyAppointment: { minHeight: 156, padding: 17 },
-  emptyCalendar: { alignItems: 'center', backgroundColor: '#EEF4FF', borderRadius: 42, height: 84, justifyContent: 'center', marginRight: 16, width: 84 },
+  emptyAppointment: { minHeight: 146, padding: 14 },
+  emptyCalendar: { alignItems: 'center', backgroundColor: '#EEF4FF', borderRadius: 36, height: 72, justifyContent: 'center', marginRight: 12, width: 72 },
   emptyCopy: { flex: 1 },
-  emptyTitle: { fontSize: 17, fontWeight: '800' },
-  emptyText: { fontSize: 12, lineHeight: 18, marginTop: 5 },
-  emptyIllustration: { alignItems: 'center', justifyContent: 'center', marginLeft: 8, width: 72 },
-  clockBadge: { bottom: 13, position: 'absolute', right: 0 },
+  emptyTitle: { flexShrink: 1, fontSize: 15, fontWeight: '800' },
+  emptyText: { fontSize: 11, lineHeight: 16, marginTop: 3 },
+  emptyIllustration: { alignItems: 'center', justifyContent: 'center', marginLeft: 6, width: 60 },
+  clockBadge: { bottom: 8, position: 'absolute', right: -1 },
 } as const;
 
 const s = StyleSheet.create({
-  safe: { backgroundColor: '#FFFFFF', flex: 1 }, page: { backgroundColor: '#FFFFFF', flex: 1 }, content: { paddingBottom: 24 }, logos: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 13 }, avatar: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 22, height: 44, justifyContent: 'center', position: 'absolute', right: 20, top: 30, width: 44 }, notificationBadge: { alignItems: 'center', backgroundColor: '#EF3340', borderColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, height: 16, justifyContent: 'center', minWidth: 16, paddingHorizontal: 2, position: 'absolute', right: -2, top: -2 }, notificationBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' }, appointment: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C9D9F8', borderRadius: 22, borderWidth: 2, flexDirection: 'row', marginHorizontal: 18, marginTop: -22, padding: 18 }, circle: { alignItems: 'center', backgroundColor: '#F0F5FF', borderRadius: 34, height: 68, justifyContent: 'center', marginRight: 16, width: 68 }, book: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#0346A8', borderRadius: 5, flexDirection: 'row', gap: 7, marginTop: 10, paddingHorizontal: 11, paddingVertical: 8 }, section: { backgroundColor: '#FFFFFF', borderColor: '#EDF0F7', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }, titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, hours: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, closed: { color: '#E33636' }, ai: { alignItems: 'center', backgroundColor: '#F3EBFF', borderRadius: 11, flexDirection: 'row', gap: 10, marginHorizontal: 18, marginTop: 12, padding: 12 }, bubble: { alignItems: 'center', backgroundColor: '#2E75D4', borderRadius: 24, height: 46, justifyContent: 'center', width: 46 }, notice: { alignItems: 'center', backgroundColor: '#E8F2FF', borderRadius: 8, flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 10, padding: 11 },
+  safe: { backgroundColor: '#FFFFFF', flex: 1 }, page: { backgroundColor: '#FFFFFF', flex: 1 }, content: { paddingBottom: 24 }, logos: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 13 }, avatar: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 22, height: 44, justifyContent: 'center', position: 'absolute', right: 20, top: 30, width: 44 }, notificationBadge: { alignItems: 'center', backgroundColor: '#EF3340', borderColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, height: 16, justifyContent: 'center', minWidth: 16, paddingHorizontal: 2, position: 'absolute', right: -2, top: -2 }, notificationBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' }, appointment: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C9D9F8', borderRadius: 22, borderWidth: 2, flexDirection: 'row', marginHorizontal: 18, marginTop: -22, padding: 18 }, circle: { alignItems: 'center', backgroundColor: '#F0F5FF', borderRadius: 34, height: 68, justifyContent: 'center', marginRight: 16, width: 68 }, book: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#0346A8', borderRadius: 5, flexDirection: 'row', gap: 7, justifyContent: 'center', marginTop: 9, paddingHorizontal: 8, paddingVertical: 8 }, section: { backgroundColor: '#FFFFFF', borderColor: '#EDF0F7', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }, titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, hours: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, closed: { color: '#E33636' }, ai: { alignItems: 'center', backgroundColor: '#F3EBFF', borderRadius: 11, flexDirection: 'row', gap: 10, marginHorizontal: 18, marginTop: 12, padding: 12 }, bubble: { alignItems: 'center', backgroundColor: '#2E75D4', borderRadius: 24, height: 46, justifyContent: 'center', width: 46 }, notice: { alignItems: 'center', backgroundColor: '#E8F2FF', borderRadius: 8, flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 10, padding: 11 },
   headerProfile: { alignItems: 'center', backgroundColor: '#FFF', borderRadius: 19, height: 38, justifyContent: 'center', overflow: 'hidden', position: 'absolute', right: 72, top: 33, width: 38 }, headerProfileImage: { height: '100%', width: '100%' }, trackLabel: { fontSize: 9, fontWeight: '800', marginBottom: 3 }, search: { alignItems: 'center', backgroundColor: '#F3F6FD', borderRadius: 9, flexDirection: 'row', gap: 8, marginBottom: 5, minHeight: 40, paddingHorizontal: 11 }, searchInput: { flex: 1, fontSize: 11 },
   darkCard: { backgroundColor: '#131E30', borderColor: '#2A3A52' }, darkService: { borderColor: '#2A3A52' }, darkIcon: { backgroundColor: '#203553' },
   ...readableStyles,

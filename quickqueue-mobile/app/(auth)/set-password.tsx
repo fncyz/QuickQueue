@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import SecuritySetupProgress from "@/components/SecuritySetupProgress";
 import SecuritySetupBackdrop from "@/components/SecuritySetupBackdrop";
+import SecurityGradientButton from "@/components/SecurityGradientButton";
 import { Text, TextInput } from "@/components/Typography";
 import { setInitialPassword } from "@/services/api";
 
@@ -49,18 +50,18 @@ export default function SetPasswordScreen() {
     <PasswordField label="Confirm Password" placeholder="Re-enter your password" value={confirmation} onChangeText={setConfirmation} visible={showConfirmation} onToggle={() => setShowConfirmation((value) => !value)} />
     {confirmation.length > 0 && password !== confirmation && <Text style={s.error}>Passwords do not match.</Text>}
     <View style={s.rules}><Text style={s.rulesTitle}>Your password must include:</Text>{checks.map((item) => <View key={item.label} style={s.ruleRow}><Ionicons name={item.valid ? "checkmark-circle" : "ellipse-outline"} size={15} color={item.valid ? "#1DAA61" : "#94A0B4"} /><Text style={[s.rule, item.valid && s.ruleValid]}>{item.label}</Text></View>)}</View>
-    <Pressable onPress={submit} disabled={!valid || saving} style={[s.button, (!valid || saving) && s.disabled]} accessibilityState={{ disabled: !valid || saving }}><Text style={s.buttonText}>{saving ? "Creating Password..." : "Create Password"}</Text></Pressable>
+    <SecurityGradientButton onPress={submit} disabled={!valid || saving} label={saving ? "Creating Password..." : "Create Password"} style={s.button} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView>;
 }
 
 function PasswordField({ label, placeholder, value, onChangeText, visible, onToggle }: { label: string; placeholder: string; value: string; onChangeText: (value: string) => void; visible: boolean; onToggle: () => void }) {
-  return <View style={s.field}><Text style={s.label}>{label}</Text><View style={s.inputShell}><Ionicons name="lock-closed-outline" size={20} color="#0759D9" /><TextInput style={s.input} value={value} onChangeText={onChangeText} secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} placeholder={placeholder} placeholderTextColor="#8A94A8" /><Pressable onPress={onToggle} style={s.eye} accessibilityLabel={visible ? "Hide password" : "Show password"}><Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={22} color="#0759D9" /></Pressable></View></View>;
+  return <View style={s.field}><Text style={s.label}>{label}</Text><View style={s.inputShell}><Ionicons name="lock-closed-outline" size={20} color="#0759D9" /><TextInput style={s.input} value={value} onChangeText={onChangeText} secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} placeholder={placeholder} placeholderTextColor="#8A94A8" /><Pressable onPress={onToggle} style={s.eye} accessibilityLabel={visible ? "Hide password" : "Show password"}><Ionicons name={visible ? "eye-outline" : "eye-off-outline"} size={22} color="#0759D9" /></Pressable></View></View>;
 }
 
 const s = StyleSheet.create({
   safe: { backgroundColor: "#F8FBFF", flex: 1 }, keyboard: { flex: 1 }, content: { flexGrow: 1, paddingHorizontal: 22, paddingBottom: 25, paddingTop: 45 },
-  icon: { alignItems: "center", alignSelf: "center", backgroundColor: "#EEF5FF", borderRadius: 32, height: 64, justifyContent: "center", marginTop: 2, position: "relative", width: 64 }, lockOverlay: { position: "absolute", top: 27 }, title: { color: "#082A72", fontSize: 22, fontWeight: "800", marginTop: 17, textAlign: "center" }, description: { color: "#7083A2", fontSize: 10, lineHeight: 15, marginBottom: 10, marginTop: 4, textAlign: "center" },
-  field: { marginTop: 10 }, label: { color: "#233F73", fontSize: 9, fontWeight: "600", marginBottom: 5 }, inputShell: { alignItems: "center", backgroundColor: "rgba(255,255,255,0.82)", borderColor: "#AFC9EF", borderRadius: 8, borderWidth: 1, flexDirection: "row", height: 45, paddingLeft: 13 }, input: { color: "#18233C", flex: 1, fontSize: 10, height: "100%", paddingHorizontal: 11 }, eye: { alignItems: "center", height: "100%", justifyContent: "center", paddingHorizontal: 13 },
-  error: { color: "#D62F45", fontSize: 8, marginTop: 5 }, rules: { backgroundColor: "transparent", marginTop: 10, paddingHorizontal: 4 }, rulesTitle: { color: "#46658F", fontSize: 8, fontWeight: "700", marginBottom: 4 }, ruleRow: { alignItems: "center", flexDirection: "row", gap: 6, marginVertical: 1 }, rule: { color: "#7183A0", fontSize: 7 }, ruleValid: { color: "#16864E" },
-  button: { alignItems: "center", backgroundColor: "#0874F9", borderRadius: 25, elevation: 8, marginTop: 22, paddingVertical: 14, shadowColor: "#0874F9", shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.27, shadowRadius: 10 }, disabled: { opacity: 0.48 }, buttonText: { color: "#FFF", fontSize: 11, fontWeight: "700" },
+  icon: { alignItems: "center", alignSelf: "center", backgroundColor: "#EEF5FF", borderRadius: 32, height: 64, justifyContent: "center", marginTop: 2, position: "relative", width: 64 }, lockOverlay: { position: "absolute", top: 27 }, title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 17, textAlign: "center" }, description: { color: "#7083A2", fontSize: 12, lineHeight: 18, marginBottom: 10, marginTop: 4, textAlign: "center" },
+  field: { marginTop: 10 }, label: { color: "#233F73", fontSize: 12, fontWeight: "600", marginBottom: 5 }, inputShell: { alignItems: "center", backgroundColor: "rgba(255,255,255,0.82)", borderColor: "#AFC9EF", borderRadius: 8, borderWidth: 1, flexDirection: "row", height: 49, paddingLeft: 13 }, input: { color: "#18233C", flex: 1, fontSize: 13, height: "100%", paddingHorizontal: 11 }, eye: { alignItems: "center", height: "100%", justifyContent: "center", paddingHorizontal: 13 },
+  error: { color: "#D62F45", fontSize: 10, marginTop: 5 }, rules: { backgroundColor: "transparent", marginTop: 10, paddingHorizontal: 4 }, rulesTitle: { color: "#46658F", fontSize: 11, fontWeight: "700", marginBottom: 4 }, ruleRow: { alignItems: "center", flexDirection: "row", gap: 6, marginVertical: 1 }, rule: { color: "#7183A0", fontSize: 10 }, ruleValid: { color: "#16864E" },
+  button: { marginTop: 22 },
 });

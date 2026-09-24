@@ -8,8 +8,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import SecuritySetupProgress from "@/components/SecuritySetupProgress";
 import SecuritySetupBackdrop from "@/components/SecuritySetupBackdrop";
+import SecurityGradientButton from "@/components/SecurityGradientButton";
 import { Text } from "@/components/Typography";
 import { advanceSecuritySetup } from "@/services/api";
+import { enableBiometricLogin } from "@/services/secure-auth";
 
 type Kind = "fingerprint" | "face";
 export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
@@ -42,9 +44,27 @@ export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
     try {
       setSaving(true);
       const result = await LocalAuthentication.authenticateAsync({ promptMessage: isFingerprint ? "Confirm your fingerprint" : "Confirm face recognition", cancelLabel: "Cancel", disableDeviceFallback: true });
-      if (result.success) await advance();
+      if (result.success) {
+        const refreshToken = await AsyncStorage.getItem("quickqueue.refreshToken");
+        if (!refreshToken) return router.replace("/login");
+        await enableBiometricLogin(kind, refreshToken);
+        await advance();
+      }
     } catch { Alert.alert("Biometric setup failed", "Please try again or choose Not Now."); }
     finally { setSaving(false); }
+  };
+
+  const skip = async () => {
+    if (saving) return;
+    try {
+      setSaving(true);
+      await advance();
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      Alert.alert("Setup could not continue", message || "Please check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (supported !== true) return <SafeAreaView style={s.safe}><View style={s.loading}><ActivityIndicator color="#0759D9" /><Text style={s.loadingText}>Checking device security…</Text></View></SafeAreaView>;
@@ -54,9 +74,9 @@ export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
     <Text style={s.title}>{isFingerprint ? "Enable Fingerprint" : "Face Recognition"}</Text>
     <Text style={s.description}>{isFingerprint ? "Use your fingerprint to securely access your account and make it easier to sign in." : "Look at your device and let us verify your face to complete your setup."}</Text>
     <View style={[s.graphic, !isFingerprint && s.faceGraphic]}>{isFingerprint ? <Ionicons name="finger-print" size={94} color="#1680FF" /> : <><Ionicons name="scan-outline" size={94} color="#1680FF" /><Ionicons name="person" size={57} color="#1680FF" style={s.facePerson} /></>}</View>
-    <Pressable disabled={saving} onPress={configure} style={s.button}><Text style={s.buttonText}>{saving ? "Verifying…" : isFingerprint ? "Set Up Fingerprint" : "Set Up Face Recognition"}</Text></Pressable>
-    <Pressable disabled={saving} onPress={advance} style={s.skip}><Text style={s.skipText}>Not Now</Text></Pressable>
+    <SecurityGradientButton disabled={saving} onPress={configure} label={saving ? "Verifying…" : isFingerprint ? "Set Up Fingerprint" : "Set Up Face Recognition"} style={s.button} />
+    <Pressable disabled={saving} onPress={skip} style={s.skip}><Text style={s.skipText}>Not Now</Text></Pressable>
   </View></SafeAreaView>;
 }
 
-const s = StyleSheet.create({ safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { flex: 1, paddingHorizontal: 22, paddingTop: 45 }, loading: { alignItems: "center", flex: 1, justifyContent: "center" }, loadingText: { color: "#68748A", fontSize: 11, marginTop: 10 }, stepIcon: { alignItems: "center", alignSelf: "center", backgroundColor: "#0645A8", borderRadius: 30, height: 60, justifyContent: "center", marginTop: 3, width: 60 }, title: { color: "#082A72", fontSize: 22, fontWeight: "800", marginTop: 18, textAlign: "center" }, description: { alignSelf: "center", color: "#7083A2", fontSize: 10, lineHeight: 15, marginTop: 6, maxWidth: 235, textAlign: "center" }, graphic: { alignItems: "center", alignSelf: "center", borderColor: "#DCEBFC", borderRadius: 73, borderWidth: 5, height: 146, justifyContent: "center", marginTop: 27, width: 146 }, faceGraphic: { backgroundColor: "rgba(230,244,255,0.7)", borderWidth: 0, height: 135, position: "relative", width: 135 }, facePerson: { position: "absolute" }, button: { alignItems: "center", backgroundColor: "#0874F9", borderRadius: 25, elevation: 8, marginTop: 28, paddingVertical: 14, shadowColor: "#0874F9", shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.27, shadowRadius: 10 }, buttonText: { color: "#FFF", fontSize: 11, fontWeight: "700" }, skip: { alignItems: "center", paddingVertical: 14 }, skipText: { color: "#60718C", fontSize: 10, fontWeight: "600" } });
+const s = StyleSheet.create({ safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { flex: 1, paddingHorizontal: 22, paddingTop: 45 }, loading: { alignItems: "center", flex: 1, justifyContent: "center" }, loadingText: { color: "#68748A", fontSize: 12, marginTop: 10 }, stepIcon: { alignItems: "center", alignSelf: "center", backgroundColor: "#0645A8", borderRadius: 30, height: 60, justifyContent: "center", marginTop: 3, width: 60 }, title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 18, textAlign: "center" }, description: { alignSelf: "center", color: "#7083A2", fontSize: 12, lineHeight: 18, marginTop: 6, maxWidth: 265, textAlign: "center" }, graphic: { alignItems: "center", alignSelf: "center", borderColor: "#DCEBFC", borderRadius: 73, borderWidth: 5, height: 146, justifyContent: "center", marginTop: 27, width: 146 }, faceGraphic: { backgroundColor: "rgba(230,244,255,0.7)", borderWidth: 0, height: 135, position: "relative", width: 135 }, facePerson: { position: "absolute" }, button: { marginTop: 28 }, skip: { alignItems: "center", paddingVertical: 14 }, skipText: { color: "#60718C", fontSize: 12, fontWeight: "600" } });
