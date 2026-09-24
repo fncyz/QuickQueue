@@ -8,6 +8,13 @@ from .barangay import Barangay
 
 class Resident(models.Model):
 
+    class SecuritySetupStage(models.TextChoices):
+        PASSWORD = "password", "Create Password"
+        PIN = "pin", "Set Secure PIN"
+        FINGERPRINT = "fingerprint", "Fingerprint"
+        FACE = "face", "Face Recognition"
+        COMPLETE = "complete", "Complete"
+
     class Sex(models.TextChoices):
         MALE = "M", "Male"
         FEMALE = "F", "Female"
@@ -81,6 +88,13 @@ class Resident(models.Model):
     terms_accepted_at = models.DateTimeField(
         null=True,
         blank=True
+    )
+
+    pin_hash = models.CharField(max_length=128, blank=True)
+    security_setup_stage = models.CharField(
+        max_length=20,
+        choices=SecuritySetupStage.choices,
+        default=SecuritySetupStage.PASSWORD,
     )
 
     def __str__(self):

@@ -45,7 +45,13 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow QuickQueue to use Face ID for secure account access."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

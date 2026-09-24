@@ -20,7 +20,11 @@ def signin(request):
                 if user.staff_profile.role == BarangayStaff.Role.ADMIN:
                     return redirect("barangay_dashboard")
                 return redirect("staff_dashboard")
-            return redirect("resident_home")
+            return render(
+                request,
+                "qq/signin.html",
+                {"signin_error": "Resident access is available in the QuickQueue mobile app."},
+            )
         return render(
             request,
             "qq/signin.html",

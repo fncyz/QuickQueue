@@ -1,5 +1,0 @@
-.ticket-panel .status-symbol{height:24px;display:grid;place-items:center;color:#174e9a}
-.ticket-panel .status-symbol svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.queue-note>svg{width:17px;height:17px;flex:0 0 17px;fill:none;stroke:#1c63c2;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.alert-card>button{display:flex;align-items:center;justify-content:center;gap:8px}
-.alert-card>button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}

@@ -1,13 +1,8 @@
 from django.urls import path
 
-from qq.views import index, signin, signup, barangay_admin_registration
-from qq.views.resident_home import resident_home
-from qq.views.resident_home import resident_logout
-from qq.views.resident_booking import resident_booking
-from qq.views.resident_profile import resident_profile
-from qq.views.resident_transactions import resident_delete_appointment, resident_transactions
-from qq.views.resident_queue import resident_cancel_appointment, resident_check_in, resident_queue_status
-from qq.views.resident_about import resident_about
+from django.views.generic import RedirectView
+
+from qq.views import signin, barangay_admin_registration
 from qq.views.barangay_dashboard import barangay_dashboard
 from qq.views.barangay_staff_portal import (
     staff_appointments, staff_review_appointment, staff_dashboard, staff_document_action,
@@ -48,9 +43,8 @@ from qq.views.barangay_notifications import barangay_notifications
 from qq.views.barangay_document_templates import barangay_document_templates
 
 urlpatterns = [
-    path("", index, name="index"),
+    path("", RedirectView.as_view(pattern_name="signin", permanent=False), name="index"),
     path("sign-in/", signin, name="signin"),
-    path("create-account/", signup, name="signup"),
     path("barangay-admin-registration/", barangay_admin_registration, name="barangay_admin_registration"),
     path("barangay/dashboard/", barangay_dashboard, name="barangay_dashboard"),
     path("barangay/staff/dashboard/", staff_dashboard, name="staff_dashboard"),
@@ -105,26 +99,4 @@ urlpatterns = [
         barangay_update_service_times,
         name="barangay_update_service_times",
     ),
-    path("resident/home/", resident_home, name="resident_home"),
-    path("resident/book-now/", resident_booking, name="resident_booking"),
-    path("resident/queue-status/", resident_queue_status, name="resident_queue_status"),
-    path(
-        "resident/appointments/<int:pk>/check-in/",
-        resident_check_in,
-        name="resident_check_in",
-    ),
-    path(
-        "resident/appointments/<int:pk>/cancel/",
-        resident_cancel_appointment,
-        name="resident_cancel_appointment",
-    ),
-    path("resident/profile/", resident_profile, name="resident_profile"),
-    path("resident/transactions/", resident_transactions, name="resident_transactions"),
-    path(
-        "resident/appointments/<int:pk>/delete/",
-        resident_delete_appointment,
-        name="resident_delete_appointment",
-    ),
-    path("resident/about/", resident_about, name="resident_about"),
-    path("logout/", resident_logout, name="resident_logout"),
 ]

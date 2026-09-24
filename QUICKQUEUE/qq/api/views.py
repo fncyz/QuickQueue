@@ -18,10 +18,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from datetime import date
+import re
 
 from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment
@@ -113,6 +115,7 @@ def login_api(request):
             "access": str(refresh.access_token),
             "refresh": str(refresh),
             "resident": ResidentSerializer(resident).data,
+            "security_setup_stage": resident.security_setup_stage,
         }
     )
 
@@ -143,14 +146,17 @@ def register_api(request):
     serializer = RegisterSerializer(data=request.data)
 
     if serializer.is_valid():
-        resident, temporary_password = serializer.save()
+        resident = serializer.save()
+        refresh = RefreshToken.for_user(resident.user)
 
         return Response(
             {
                 "success": True,
                 "message": "Account created successfully.",
                 "username": resident.user.username,
-                "temporary_password": temporary_password,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "security_setup_stage": resident.security_setup_stage,
                 "resident": ResidentSerializer(resident).data,
             },
             status=status.HTTP_201_CREATED,
@@ -198,18 +204,59 @@ def change_password_api(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def set_initial_password_api(request):
-    """Replace a generated registration password on the resident's first login."""
+    """Set the resident's first password during the required setup flow."""
+    resident = request.user.resident_profile
+    if resident.security_setup_stage != Resident.SecuritySetupStage.PASSWORD:
+        return Response({"success": False, "message": "Password setup is not the current security step."}, status=status.HTTP_409_CONFLICT)
     new_password = request.data.get("new_password", "")
     confirm_password = request.data.get("confirm_password", "")
     if new_password != confirm_password:
         return Response({"success": False, "message": "The new passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+    if not (
+        len(new_password) >= 8
+        and re.search(r"[A-Z]", new_password)
+        and re.search(r"[a-z]", new_password)
+        and re.search(r"\d", new_password)
+        and re.search(r"[^A-Za-z0-9]", new_password)
+    ):
+        return Response({"success": False, "message": "Use at least 8 characters with uppercase, lowercase, a number, and a special character."}, status=status.HTTP_400_BAD_REQUEST)
     try:
         validate_password(new_password, request.user)
     except ValidationError as error:
         return Response({"success": False, "message": " ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
     request.user.set_password(new_password)
     request.user.save(update_fields=["password"])
-    return Response({"success": True, "message": "Your password has been set successfully."})
+    resident.security_setup_stage = Resident.SecuritySetupStage.PIN
+    resident.save(update_fields=["security_setup_stage", "updated_at"])
+    return Response({"success": True, "message": "Your password has been set successfully.", "next_step": resident.security_setup_stage})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def set_security_pin_api(request):
+    resident = request.user.resident_profile
+    if resident.security_setup_stage != Resident.SecuritySetupStage.PIN:
+        return Response({"success": False, "message": "PIN setup is not the current security step."}, status=status.HTTP_409_CONFLICT)
+    pin = str(request.data.get("pin", ""))
+    if not pin.isdigit() or len(pin) != 4:
+        return Response({"success": False, "message": "Enter exactly four digits."}, status=status.HTTP_400_BAD_REQUEST)
+    resident.pin_hash = make_password(pin)
+    resident.security_setup_stage = Resident.SecuritySetupStage.FINGERPRINT
+    resident.save(update_fields=["pin_hash", "security_setup_stage", "updated_at"])
+    return Response({"success": True, "next_step": resident.security_setup_stage})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def advance_security_setup_api(request):
+    resident = request.user.resident_profile
+    step = request.data.get("step")
+    expected = resident.security_setup_stage
+    if step != expected or step not in (Resident.SecuritySetupStage.FINGERPRINT, Resident.SecuritySetupStage.FACE):
+        return Response({"success": False, "message": "Complete the current security step first."}, status=status.HTTP_409_CONFLICT)
+    resident.security_setup_stage = Resident.SecuritySetupStage.FACE if step == Resident.SecuritySetupStage.FINGERPRINT else Resident.SecuritySetupStage.COMPLETE
+    resident.save(update_fields=["security_setup_stage", "updated_at"])
+    return Response({"success": True, "next_step": resident.security_setup_stage})
 
 
 @api_view(["GET", "POST"])

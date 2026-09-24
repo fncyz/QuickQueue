@@ -18,19 +18,7 @@
             </div>
 
             <h1 id="signin-heading">WELCOME!</h1>
-            <p class="signin-intro">Sign in to your QuickQueue account</p>
-
-            {% if created_credentials %}
-                <section class="credentials-notice" aria-label="New account credentials">
-                    <strong>Account Created Successfully!</strong>
-                    <span>Your username has been filled automatically.<br>Please enter the password below to sign in.</span>
-                    <b>Password: {{ created_credentials.password }}</b>
-                </section>
-                <section class="screenshot-notice" aria-label="Save your account details">
-                    <span class="warning-icon" aria-hidden="true">!</span>
-                    <p><strong>Please Screenshot Your Account Details</strong><br>For your security, we will not be able to show your personal login details again. Please keep a safe record and do not share it with others.</p>
-                </section>
-            {% endif %}
+            <p class="signin-intro">Barangay admin and staff portal</p>
 
             {% if signin_error %}<p class="signin-error">{{ signin_error }}</p>{% endif %}
 
@@ -39,7 +27,7 @@
                 <label for="username">Username</label>
                 <div class="input-wrap">
                     <svg class="field-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
-                    <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" value="{{ created_credentials.username|default:'' }}" required>
+                    <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" required>
                 </div>
 
                 <label for="password">Password</label>
@@ -55,7 +43,6 @@
                 <button type="submit">Sign In</button>
             </form>
 
-            <p class="signup-prompt">Don’t have an account? <a href="{% url 'signup' %}">Sign Up</a></p>
         </section>
     </main>
     <script>

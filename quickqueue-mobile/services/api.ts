@@ -25,7 +25,10 @@ export type LoginResponse = {
   access: string;
   refresh: string;
   resident: { first_name: string; last_name: string; barangay?: string };
+  security_setup_stage: SecuritySetupStage;
 };
+
+export type SecuritySetupStage = "password" | "pin" | "fingerprint" | "face" | "complete";
 
 export const loginResident = async (username: string, password: string) => {
   const response = await api.post<LoginResponse>("login/", { username, password });
@@ -46,5 +49,15 @@ export const setInitialPassword = async (accessToken: string, newPassword: strin
     new_password: newPassword,
     confirm_password: confirmPassword,
   }, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return response.data;
+};
+
+export const setSecurityPin = async (accessToken: string, pin: string) => {
+  const response = await api.post("set-security-pin/", { pin }, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return response.data;
+};
+
+export const advanceSecuritySetup = async (accessToken: string, step: "fingerprint" | "face") => {
+  const response = await api.post("advance-security-setup/", { step }, { headers: { Authorization: `Bearer ${accessToken}` } });
   return response.data;
 };

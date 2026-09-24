@@ -57,8 +57,6 @@ class ResidentSerializer(serializers.ModelSerializer):
         ]
 
 
-import secrets
-import string
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
@@ -73,12 +71,6 @@ from qq.models import (
 
 class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
-    password = serializers.CharField(
-        min_length=6,
-        write_only=True,
-        required=False,
-        allow_blank=False,
-    )
 
     first_name = serializers.CharField(max_length=100)
     last_name = serializers.CharField(max_length=100)
@@ -147,19 +139,10 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         validated_data.pop("terms_accepted")
 
-        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
-
-        # Browser registration still receives a generated password, while the
-        # mobile client can submit a password selected by the resident.
-        temporary_password = validated_data.pop("password", "") or "".join(
-            secrets.choice(alphabet) for _ in range(10)
-        )
-
         with transaction.atomic():
-            user = User.objects.create_user(
-                username=validated_data.pop("username"),
-                password=temporary_password,
-            )
+            user = User(username=validated_data.pop("username"))
+            user.set_unusable_password()
+            user.save()
 
             resident = Resident.objects.create(
                 user=user,
@@ -167,7 +150,7 @@ class RegisterSerializer(serializers.Serializer):
                 **validated_data,
             )
 
-        return resident, temporary_password
+        return resident
 
     from qq.models import Barangay
 

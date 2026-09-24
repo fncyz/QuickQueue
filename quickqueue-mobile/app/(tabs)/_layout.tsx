@@ -5,21 +5,22 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ResidentTabBar } from '@/components/ResidentTabBar';
+import { securitySetupRoute } from '@/services/security-flow';
 
 export default function TabLayout() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
-  const [requiresPassword, setRequiresPassword] = useState(false);
+  const [setupStage, setSetupStage] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.requiresInitialPassword')])
-      .then(([token, required]) => { setHasSession(Boolean(token)); setRequiresPassword(required === 'true'); })
+    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage')])
+      .then(([token, stage]) => { setHasSession(Boolean(token)); setSetupStage(stage); })
       .finally(() => setCheckingSession(false));
   }, []);
 
   if (checkingSession) return <SafeAreaView style={{ flex: 1 }}><View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}><ActivityIndicator color="#0346A8" /></View></SafeAreaView>;
   if (!hasSession) return <Redirect href="/login" />;
-  if (requiresPassword) return <Redirect href="/set-password" />;
+  if (setupStage && setupStage !== 'complete') return <Redirect href={securitySetupRoute(setupStage)} />;
 
   return <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <ResidentTabBar {...props} />}>
     <Tabs.Screen name="index" options={{ title: 'Home' }} />

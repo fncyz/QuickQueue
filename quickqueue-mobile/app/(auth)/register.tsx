@@ -19,6 +19,7 @@ import BarangayDropdown from "@/components/BarangayDropdown";
 import AddressDropdown from "@/components/AddressDropdown";
 
 import { registerResident } from "@/services/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const registrationErrorMessage = (error: any) => {
   if (!error?.response) {
@@ -168,14 +169,13 @@ const handleRegister = async () => {
       terms_accepted: acceptedTerms,
     });
 
-    router.replace({
-      pathname: "/login",
-      params: {
-        created: "true",
-        username: result.username,
-        temporaryPassword: result.temporary_password,
-      },
-    });
+    await AsyncStorage.multiSet([
+      ["quickqueue.accessToken", result.access],
+      ["quickqueue.refreshToken", result.refresh],
+      ["quickqueue.securitySetupStage", "password"],
+      ["quickqueue.pendingUsername", result.username],
+    ]);
+    router.replace("/set-password");
   } catch (error: any) {
     Alert.alert("Registration Failed", registrationErrorMessage(error));
   } finally {

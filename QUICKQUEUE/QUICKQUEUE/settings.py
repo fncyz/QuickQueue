@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -85,10 +86,18 @@ WSGI_APPLICATION = 'QUICKQUEUE.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 
+database_url = os.environ.get("POSTGRES_URL") or os.environ.get("DATABASE_URL")
+if not database_url:
+    raise ImproperlyConfigured(
+        "POSTGRES_URL or DATABASE_URL is required. Connect the Supabase integration to this Vercel project."
+    )
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
+    "default": dj_database_url.parse(
+        database_url,
         conn_max_age=0,
+        conn_health_checks=True,
+        disable_server_side_cursors=True,
         ssl_require=True,
     )
 }

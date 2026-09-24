@@ -18,12 +18,12 @@ const fontForWeight = (weight: TextStyle['fontWeight']) => {
 
 export const Text = forwardRef<React.ElementRef<typeof NativeText>, TextProps>(({ style, ...props }, ref) => {
   const flattened = StyleSheet.flatten(style);
-  return <NativeText ref={ref} allowFontScaling={false} maxFontSizeMultiplier={1} {...props} style={[style, { fontFamily: fontForWeight(flattened?.fontWeight) }]} />;
+  return <NativeText ref={ref} allowFontScaling={false} maxFontSizeMultiplier={1} {...props} style={[style, { fontFamily: fontForWeight(flattened?.fontWeight), fontWeight: undefined }]} />;
 });
 Text.displayName = 'Text';
 
 export const TextInput = forwardRef<React.ElementRef<typeof NativeTextInput>, TextInputProps>(({ style, ...props }, ref) => {
   const flattened = StyleSheet.flatten(style);
-  return <NativeTextInput ref={ref} allowFontScaling={false} maxFontSizeMultiplier={1} {...props} style={[style, { fontFamily: fontForWeight(flattened?.fontWeight) }]} />;
+  return <NativeTextInput ref={ref} allowFontScaling={false} maxFontSizeMultiplier={1} {...props} style={[style, { fontFamily: fontForWeight(flattened?.fontWeight), fontWeight: undefined }]} />;
 });
 TextInput.displayName = 'TextInput';
