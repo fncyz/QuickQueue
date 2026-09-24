@@ -67,6 +67,25 @@ export const setSecurityPin = async (accessToken: string, pin: string) => {
   return response.data;
 };
 
+export const verifySecurityPin = async (accessToken: string, pin: string) => {
+  const response = await api.post("verify-security-pin/", { pin }, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return response.data;
+};
+
+export const verifyAccountPassword = async (accessToken: string, password: string) => {
+  const response = await api.post("verify-account-password/", { password }, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return response.data;
+};
+
+export const changeSecurityPin = async (accessToken: string, password: string, newPin: string, confirmPin: string) => {
+  const response = await api.post("change-security-pin/", {
+    password,
+    new_pin: newPin,
+    confirm_pin: confirmPin,
+  }, { headers: { Authorization: `Bearer ${accessToken}` } });
+  return response.data;
+};
+
 export const advanceSecuritySetup = async (accessToken: string, step: "fingerprint" | "face") => {
   const response = await api.post("advance-security-setup/", { step }, { headers: { Authorization: `Bearer ${accessToken}` } });
   return response.data;

@@ -27,3 +27,18 @@ export const getBiometricLogin = async (kind: BiometricKind) => {
   ]);
   return { enabled: enabled === "true", refreshToken };
 };
+
+export const disableBiometricLogin = async (kind: BiometricKind) => {
+  await SecureStore.deleteItemAsync(enabledKey(kind));
+  const otherKind: BiometricKind = kind === "fingerprint" ? "face" : "fingerprint";
+  const otherEnabled = await SecureStore.getItemAsync(enabledKey(otherKind));
+  if (otherEnabled !== "true") await SecureStore.deleteItemAsync(refreshKey);
+};
+
+export const getBiometricStatuses = async () => {
+  const [fingerprint, face] = await Promise.all([
+    SecureStore.getItemAsync(enabledKey("fingerprint")),
+    SecureStore.getItemAsync(enabledKey("face")),
+  ]);
+  return { fingerprint: fingerprint === "true", face: face === "true" };
+};

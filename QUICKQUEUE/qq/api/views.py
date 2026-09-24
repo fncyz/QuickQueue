@@ -269,6 +269,46 @@ def set_security_pin_api(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def verify_security_pin_api(request):
+    """Verify the resident's PIN before allowing a sensitive local-device action."""
+    resident = request.user.resident_profile
+    pin = str(request.data.get("pin", ""))
+    if not pin.isdigit() or len(pin) != 4:
+        return Response({"success": False, "message": "Enter exactly four digits."}, status=status.HTTP_400_BAD_REQUEST)
+    if not resident.pin_hash or not check_password(pin, resident.pin_hash):
+        return Response({"success": False, "message": "The PIN you entered is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"success": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def verify_account_password_api(request):
+    if not request.user.check_password(request.data.get("password", "")):
+        return Response({"success": False, "message": "Your account password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"success": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_security_pin_api(request):
+    """Replace a resident PIN only after account-password verification."""
+    resident = request.user.resident_profile
+    password = request.data.get("password", "")
+    new_pin = str(request.data.get("new_pin", ""))
+    confirm_pin = str(request.data.get("confirm_pin", ""))
+    if not request.user.check_password(password):
+        return Response({"success": False, "message": "Your account password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+    if not new_pin.isdigit() or len(new_pin) != 4:
+        return Response({"success": False, "message": "The new PIN must contain exactly four numeric digits."}, status=status.HTTP_400_BAD_REQUEST)
+    if new_pin != confirm_pin:
+        return Response({"success": False, "message": "The new PINs do not match."}, status=status.HTTP_400_BAD_REQUEST)
+    resident.pin_hash = make_password(new_pin)
+    resident.save(update_fields=["pin_hash", "updated_at"])
+    return Response({"success": True, "message": "Your 4-digit PIN has been changed successfully."})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def advance_security_setup_api(request):
     resident = request.user.resident_profile
     step = request.data.get("step")

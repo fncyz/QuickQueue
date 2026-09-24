@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/contexts/app-theme';
+import { SuccessAnimation } from '@/components/SuccessAnimation';
 
 export default function BookingSuccessScreen() {
   const { colors } = useAppTheme();
@@ -15,9 +16,9 @@ export default function BookingSuccessScreen() {
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
       <View style={s.successArea}>
         <View style={s.sparkOne} /><View style={s.sparkTwo} /><View style={s.sparkThree} />
-        <View style={s.successHalo}><View style={s.successSeal}><Ionicons name="checkmark" size={45} color="#FFFFFF" /></View></View>
+        <SuccessAnimation />
         <Text style={s.heading}>Appointment Submitted!</Text>
-        <Text style={s.subheading}>Your appointment has been submitted successfully.</Text>
+        <Text style={s.subheading}>Your booking was saved successfully.</Text>
       </View>
 
       <View style={s.referenceCard}>

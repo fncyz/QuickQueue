@@ -57,10 +57,13 @@ export default function NotificationsScreen() {
 
   const markRead = async (item: NotificationItem) => {
     if (!item.is_read) {
+      setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry));
       try {
         await request('post', { notification_id: item.id });
-        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry));
-      } catch { return; }
+      } catch {
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: false } : entry));
+        return;
+      }
     }
     router.push('/queue');
   };
@@ -83,7 +86,7 @@ export default function NotificationsScreen() {
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.primary }]} edges={['top', 'bottom']}>
     <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={27} color="#FFFFFF" /></Pressable><Text style={s.title}>Notifications</Text><View style={s.headerSpace} /></View>
     {loading ? <View style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.accent} /></View> : <ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters}>{filters.map((value) => { const count = items.filter((item) => filterMatches(item, value)).length; return <Pressable key={value} onPress={() => setFilter(value)} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters}>{filters.map((value) => { const count = items.filter((item) => !item.is_read && filterMatches(item, value)).length; return <Pressable key={value} onPress={() => setFilter(value)} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</ScrollView>
       {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={markAllRead} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={todayItems.length ? undefined : markAllRead} />}</>}
     </ScrollView>}
   </SafeAreaView>;

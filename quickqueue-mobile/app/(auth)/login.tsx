@@ -161,7 +161,7 @@ export default function LoginScreen() {
           >
             <View style={styles.branding}>
               <View style={styles.logoFrame}>
-                <Image source={quickQueueLogo} style={styles.logo} accessibilityLabel="QuickQueue logo" />
+                <Image source={quickQueueLogo} resizeMode="contain" style={styles.logo} accessibilityLabel="QuickQueue logo" />
               </View>
               <Text style={styles.welcome}>WELCOME</Text>
               <Text style={styles.subtitle}>Sign in to your QuickQueue account</Text>
@@ -268,7 +268,6 @@ const styles = StyleSheet.create({
   branding: { alignItems: "center", paddingTop: 34 },
   logoFrame: {
     alignItems: "center",
-    backgroundColor: "#063F96",
     borderRadius: 55,
     height: 110,
     justifyContent: "center",
@@ -276,7 +275,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: 110,
   },
-  logo: { height: 130, resizeMode: "stretch", width: 160 },
+  logo: { borderRadius: 60, height: 120, width: 120 },
   welcome: { color: "#002C7C", fontSize: 31, fontWeight: "800", letterSpacing: -0.8, lineHeight: 38 },
   subtitle: { color: "#62697B", fontSize: 14, marginTop: 4, textAlign: "center" },
   form: { marginTop: 58 },
