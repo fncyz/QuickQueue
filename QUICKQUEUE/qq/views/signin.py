@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import redirect, render
 
 from qq.models import BarangayStaff
@@ -32,3 +32,9 @@ def signin(request):
         )
 
     return render(request, "qq/signin.html")
+
+
+def staff_logout(request):
+    """End a staff or barangay administrator session."""
+    logout(request)
+    return redirect("signin")

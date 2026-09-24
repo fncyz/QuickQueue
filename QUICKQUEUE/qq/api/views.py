@@ -18,7 +18,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -106,7 +106,6 @@ def login_api(request):
         )
 
     resident = Resident.objects.get(user=user)
-
     refresh = RefreshToken.for_user(user)
 
     return Response(
@@ -118,6 +117,28 @@ def login_api(request):
             "security_setup_stage": resident.security_setup_stage,
         }
     )
+
+
+@api_view(["POST"])
+def pin_login_api(request):
+    username = str(request.data.get("username", "")).strip()
+    pin = str(request.data.get("pin", ""))
+    if not username or not pin.isdigit() or len(pin) != 4:
+        return Response({"success": False, "message": "Enter your username and 4-digit PIN."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        resident = Resident.objects.select_related("user").get(user__username__iexact=username)
+    except Resident.DoesNotExist:
+        return Response({"success": False, "message": "Invalid username or PIN."}, status=status.HTTP_401_UNAUTHORIZED)
+    if not resident.user.is_active or resident.security_setup_stage != Resident.SecuritySetupStage.COMPLETE or not resident.pin_hash or not check_password(pin, resident.pin_hash):
+        return Response({"success": False, "message": "Invalid username or PIN."}, status=status.HTTP_401_UNAUTHORIZED)
+    refresh = RefreshToken.for_user(resident.user)
+    return Response({
+        "success": True,
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+        "resident": ResidentSerializer(resident).data,
+        "security_setup_stage": resident.security_setup_stage,
+    })
 
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
