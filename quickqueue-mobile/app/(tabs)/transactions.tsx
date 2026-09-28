@@ -9,9 +9,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { HeaderNotificationBell } from '@/components/HeaderNotificationBell';
+import { SavedInformationBanner } from '@/components/SavedInformationBanner';
 import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { residentLayout } from '@/constants/resident-layout';
 import { useAppTheme } from '@/contexts/app-theme';
+import { useConnectivity } from '@/contexts/connectivity';
+import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 
 type Transaction = { id: number; appointment_id: string; service: string; status: string; status_code: string; date_booked: string; appointment_date: string; date_claimed: string | null; time_slot: string; barangay: string; queue_number: string };
 type Filter = 'All' | 'Pending' | 'Completed' | 'Cancelled' | 'Expired';
@@ -19,6 +22,7 @@ const filters: Filter[] = ['All', 'Pending', 'Completed', 'Cancelled', 'Expired'
 
 export default function TransactionsScreen() {
   const { colors } = useAppTheme();
+  const { isOnline } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState<Filter>('All');
@@ -26,19 +30,25 @@ export default function TransactionsScreen() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [cached, setCached] = useState(false);
 
   const loadTransactions = useCallback(async () => {
     setLoading(true);
+    const saved = await readOfflineCache<Transaction[]>('transactions');
+    if (saved) { setTransactions(saved.value); setCached(true); setLoading(false); }
+    if (!isOnline) { setLoading(false); return; }
     try {
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
       setToken(accessToken);
       const response = await api.get('transactions/', { headers: { Authorization: `Bearer ${accessToken}` } });
       setTransactions(response.data.transactions);
+      setCached(false);
+      await writeOfflineCache('transactions', response.data.transactions);
     } catch (error: any) {
-      Alert.alert('Unable to load transactions', error?.response?.data?.message || 'Please check your connection.');
+      if (!saved) Alert.alert('Unable to load transactions', error?.response?.data?.message || 'Please check your connection.');
     } finally { setLoading(false); }
-  }, []);
+  }, [isOnline]);
 
   useFocusEffect(useCallback(() => { loadTransactions(); }, [loadTransactions]));
 
@@ -49,6 +59,7 @@ export default function TransactionsScreen() {
   }), [filter, search, transactions]);
 
   const manage = async (item: Transaction, action: 'cancel' | 'delete') => {
+    if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect to manage this transaction.');
     try {
       setActingId(item.id);
       const response = await api.post('transactions/', { appointment_id: item.id, action }, { headers: { Authorization: `Bearer ${token}` } });
@@ -72,11 +83,12 @@ export default function TransactionsScreen() {
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
     <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><Text style={s.heading}>Transactions</Text><Text style={s.subheading}>Review your appointment records and service requests.</Text></Animated.View>
+    <SavedInformationBanner />
     <View style={[s.history, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={s.historyHead}><View style={[s.historyIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="documents-outline" size={19} color={colors.accent} /></View><View><Text style={[s.historyTitle, { color: colors.text }]}>Appointment History</Text><Text style={[s.historyCopy, { color: colors.muted }]}>Your record of all your appointments and transactions.</Text></View></View>
+      <View style={s.historyHead}><View style={[s.historyIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="documents-outline" size={19} color={colors.accent} /></View><View><Text style={[s.historyTitle, { color: colors.text }]}>Appointment History</Text><Text style={[s.historyCopy, { color: colors.muted }]}>{!isOnline || cached ? 'Saved history · statuses may not be up to date.' : 'Your record of all your appointments and transactions.'}</Text></View></View>
       <View style={[s.search, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}><Ionicons name="search" size={16} color={colors.muted} /><TextInput value={search} onChangeText={setSearch} placeholder="Search service or reference number" placeholderTextColor={colors.muted} style={[s.searchInput, { color: colors.text }]} /></View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters}>{filters.map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[s.filter, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }, filter === item && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, { color: colors.text }, filter === item && s.filterTextActive]}>{item}</Text></Pressable>)}</ScrollView>
-      {loading ? <ActivityIndicator style={s.loader} color="#0646A8" /> : visibleTransactions.length === 0 ? <View style={s.empty}><Ionicons name="document-text-outline" size={38} color="#9FB5DA" /><Text style={s.emptyTitle}>No {filter === 'All' ? '' : filter.toLowerCase()} transactions</Text></View> : visibleTransactions.map((item) => <TransactionCard key={item.id} item={item} disabled={actingId === item.id} onView={() => view(item)} onAction={(action) => confirmAction(item, action)} />)}
+      {loading ? <ActivityIndicator style={s.loader} color="#0646A8" /> : visibleTransactions.length === 0 ? <View style={s.empty}><Ionicons name="document-text-outline" size={38} color="#9FB5DA" /><Text style={s.emptyTitle}>No {filter === 'All' ? '' : filter.toLowerCase()} transactions</Text></View> : visibleTransactions.map((item) => <TransactionCard key={item.id} item={item} disabled={actingId === item.id || !isOnline} onView={() => view(item)} onAction={(action) => confirmAction(item, action)} />)}
       <View style={[s.reminder, { backgroundColor: colors.surfaceAlt }]}><Ionicons name="information-circle-outline" size={20} color={colors.accent} /><View style={s.reminderCopy}><Text style={[s.reminderTitle, { color: colors.text }]}>Transaction Reminder</Text><Text style={[s.reminderText, { color: colors.muted }]}>Keep a copy of your completed transactions for future reference. Documents with a claiming period should be claimed within the specified schedule.</Text></View><Ionicons name="business-outline" size={55} color={colors.border} /></View>
     </View>
   </Animated.ScrollView></SafeAreaView>;
@@ -89,7 +101,7 @@ function TransactionCard({ item, disabled, onView, onAction }: { item: Transacti
   const [chipBg, chipText] = statusColors(item.status_code);
   const cancellable = ['P', 'C'].includes(item.status_code);
   const deletable = ['D', 'X', 'M'].includes(item.status_code);
-  return <View style={[s.transaction, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}><View style={s.transactionHead}><View style={[s.documentIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="document-text-outline" size={21} color={colors.accent} /></View><Text style={[s.service, { color: colors.text }]}>{item.service}</Text><View style={[s.status, { backgroundColor: chipBg }]}><Ionicons name={item.status_code === 'D' ? 'checkmark-circle-outline' : item.status_code === 'P' ? 'time-outline' : 'close-circle-outline'} size={10} color={chipText} /><Text style={[s.statusText, { color: chipText }]}>{displayStatus(item)}</Text></View></View><View style={[s.transactionBody, { borderTopColor: colors.border }]}><DateDetail label="Date Booked" value={item.date_booked} /><DateDetail label="Appointment Date" value={item.appointment_date} /><DateDetail label="Date Claimed" value={item.date_claimed || '—'} /><View style={s.actions}><Pressable onPress={onView} style={[s.action, s.view]}><Ionicons name="eye-outline" size={11} color={colors.accent} /><Text style={[s.viewText, { color: colors.accent }]}>View</Text></Pressable>{cancellable && <Pressable disabled={disabled} onPress={() => onAction('cancel')} style={[s.action, s.danger]}><Ionicons name="close-circle-outline" size={11} color="#ED1C24" /><Text style={s.dangerText}>Cancel</Text></Pressable>}{deletable && <Pressable disabled={disabled} onPress={() => onAction('delete')} style={[s.action, s.danger]}><Ionicons name="trash-outline" size={11} color="#ED1C24" /><Text style={s.dangerText}>Delete</Text></Pressable>}</View></View></View>;
+  return <View style={[s.transaction, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }, disabled && s.disabledCard]}><View style={s.transactionHead}><View style={[s.documentIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="document-text-outline" size={21} color={colors.accent} /></View><Text style={[s.service, { color: colors.text }]}>{item.service}</Text><View style={[s.status, { backgroundColor: chipBg }]}><Ionicons name={item.status_code === 'D' ? 'checkmark-circle-outline' : item.status_code === 'P' ? 'time-outline' : 'close-circle-outline'} size={10} color={chipText} /><Text style={[s.statusText, { color: chipText }]}>{displayStatus(item)}</Text></View></View><View style={[s.transactionBody, { borderTopColor: colors.border }]}><DateDetail label="Date Booked" value={item.date_booked} /><DateDetail label="Appointment Date" value={item.appointment_date} /><DateDetail label="Date Claimed" value={item.date_claimed || '—'} /><View style={s.actions}><Pressable onPress={onView} style={[s.action, s.view]}><Ionicons name="eye-outline" size={11} color={colors.accent} /><Text style={[s.viewText, { color: colors.accent }]}>View</Text></Pressable>{cancellable && <Pressable disabled={disabled} onPress={() => onAction('cancel')} style={[s.action, s.danger, disabled && s.disabledAction]}><Ionicons name="close-circle-outline" size={11} color="#ED1C24" /><Text style={s.dangerText}>Cancel</Text></Pressable>}{deletable && <Pressable disabled={disabled} onPress={() => onAction('delete')} style={[s.action, s.danger, disabled && s.disabledAction]}><Ionicons name="trash-outline" size={11} color="#ED1C24" /><Text style={s.dangerText}>Delete</Text></Pressable>}</View></View></View>;
 }
 function DateDetail({ label, value }: { label: string; value: string }) { const { colors } = useAppTheme(); return <View style={[s.dateDetail, { borderRightColor: colors.border }]}><View style={s.dateLabel}><Ionicons name="calendar-outline" size={10} color={colors.accent} /><Text style={[s.dateLabelText, { color: colors.muted }]}>{label}</Text></View><Text style={[s.dateValue, { color: colors.text }]}>{value}</Text></View>; }
 
@@ -104,6 +116,8 @@ const s = StyleSheet.create({
   search: { alignItems: 'center', borderColor: '#DCE4F1', borderRadius: 9, borderWidth: 1, flexDirection: 'row', gap: 8, marginBottom: 10, marginTop: 7, minHeight: 40, paddingHorizontal: 11 },
   searchInput: { color: '#182B57', flex: 1, fontSize: 10 },
   filterScroller: { flexGrow: 0, height: 45, maxHeight: 45 },
+  disabledCard: { opacity: 0.82 },
+  disabledAction: { opacity: 0.35 },
   ...(readableStyles as Record<string, object>),
   ...({
     hero: { ...residentLayout.header, alignItems: 'center', justifyContent: 'center', paddingTop: 44 },

@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { useAppTheme } from '@/contexts/app-theme';
+import { ConnectionStatusBanner, useConnectivity } from '@/contexts/connectivity';
+import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 
 type NotificationItem = { id: number; type: string; title: string; message: string; is_read: boolean; appointment_id: number; created_at: string };
 type Filter = 'All' | 'Unread' | 'Appointments' | 'Queue' | 'Transactions';
@@ -29,6 +31,7 @@ const notificationTheme = (type: string) => ({
 
 export default function NotificationsScreen() {
   const { colors } = useAppTheme();
+  const { isOnline } = useConnectivity();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('All');
@@ -40,15 +43,18 @@ export default function NotificationsScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    const saved = await readOfflineCache<NotificationItem[]>('notifications');
+    if (saved) { setItems(saved.value); setLoading(false); }
+    if (!isOnline) { setLoading(false); return; }
     try {
       const response = await request('get');
-      if (response) setItems(response.data.notifications);
+      if (response) { setItems(response.data.notifications); await writeOfflineCache('notifications', response.data.notifications); }
     } catch (error: any) {
-      Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
+      if (!saved) Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
     } finally {
       setLoading(false);
     }
-  }, [request]);
+  }, [isOnline, request]);
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
@@ -56,6 +62,7 @@ export default function NotificationsScreen() {
   }, [load]));
 
   const markRead = async (item: NotificationItem) => {
+    if (!isOnline) return router.push('/queue');
     if (!item.is_read) {
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry));
       try {
@@ -69,6 +76,7 @@ export default function NotificationsScreen() {
   };
 
   const markAllRead = async () => {
+    if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect to update notifications.');
     try {
       await request('post');
       setItems((current) => current.map((item) => ({ ...item, is_read: true })));
@@ -84,10 +92,11 @@ export default function NotificationsScreen() {
   const earlierItems = filtered.filter((item) => new Date(item.created_at).toDateString() !== today);
   const filters: Filter[] = ['All', 'Unread', 'Appointments', 'Queue', 'Transactions'];
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.primary }]} edges={['top', 'bottom']}>
+    <View style={{ backgroundColor: colors.background }}><ConnectionStatusBanner /></View>
     <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={27} color="#FFFFFF" /></Pressable><Text style={s.title}>Notifications</Text><View style={s.headerSpace} /></View>
     {loading ? <View style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.accent} /></View> : <ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters}>{filters.map((value) => { const count = items.filter((item) => !item.is_read && filterMatches(item, value)).length; return <Pressable key={value} onPress={() => setFilter(value)} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</ScrollView>
-      {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={markAllRead} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={todayItems.length ? undefined : markAllRead} />}</>}
+      {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={isOnline ? markAllRead : undefined} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={isOnline && !todayItems.length ? markAllRead : undefined} />}</>}
     </ScrollView>}
   </SafeAreaView>;
 }

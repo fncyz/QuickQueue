@@ -9,6 +9,7 @@ import SecuritySetupBackdrop from "@/components/SecuritySetupBackdrop";
 import SecurityGradientButton from "@/components/SecurityGradientButton";
 import { Text } from "@/components/Typography";
 import { loginResidentWithPin } from "@/services/api";
+import { setCurrentAccountId } from "@/services/offline-cache";
 
 const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 const letters: Record<string, string> = { "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO", "7": "PQRS", "8": "TUV", "9": "WXYZ" };
@@ -36,6 +37,7 @@ export default function PinLoginScreen() {
         ["quickqueue.refreshToken", result.refresh],
         ["quickqueue.securitySetupStage", result.security_setup_stage],
       ]);
+      await setCurrentAccountId(username);
       router.replace("/(tabs)");
     } catch (requestError: any) {
       setPin("");

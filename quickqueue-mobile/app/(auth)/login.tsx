@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   ImageBackground,
@@ -11,13 +11,16 @@ import {
   View,
 } from "react-native";
 import { Text, TextInput } from '@/components/Typography';
+import { AuthBackButton } from '@/components/AuthBackButton';
+import SecurityGradientButton from '@/components/SecurityGradientButton';
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import { loginResident, refreshResidentSession } from "@/services/api";
-import { getBiometricLogin, updateBiometricRefreshToken, type BiometricKind } from "@/services/secure-auth";
+import { getBiometricLogin, getBiometricStatuses, updateBiometricRefreshToken, type BiometricKind } from "@/services/secure-auth";
+import { setCurrentAccountId } from "@/services/offline-cache";
 
 const setupRoute = (stage: string) => {
   if (stage === "password") return "/set-password" as const;
@@ -28,19 +31,29 @@ const setupRoute = (stage: string) => {
 };
 
 const loginBackground = require("../../assets/images/login.png");
+const savedLoginBackground = require("../../assets/images/secbg.jpg");
 const quickQueueLogo = require("../../assets/images/logo.png");
 const screenSize = Dimensions.get("screen");
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { username: createdUsername } = useLocalSearchParams<{
+  const { displayName, from, username: createdUsername } = useLocalSearchParams<{
+    displayName?: string;
+    from?: string;
     username?: string;
   }>();
+  const showWelcomeBackButton = from === 'welcome-back';
+  const isSavedProfile = from === 'saved-profile';
   const [username, setUsername] = useState(createdUsername ?? "");
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [biometrics, setBiometrics] = useState({ face: false, fingerprint: false });
+
+  useEffect(() => {
+    if (isSavedProfile) getBiometricStatuses().then(setBiometrics);
+  }, [isSavedProfile]);
 
   const handleLogin = async () => {
     const normalizedUsername = username.trim();
@@ -71,6 +84,7 @@ export default function LoginScreen() {
       await AsyncStorage.setItem("quickqueue.accessToken", result.access);
       await AsyncStorage.setItem("quickqueue.refreshToken", result.refresh);
       await AsyncStorage.setItem("quickqueue.securitySetupStage", result.security_setup_stage);
+      await setCurrentAccountId(normalizedUsername);
       await updateBiometricRefreshToken(result.refresh);
     } catch {
       setIsSubmitting(false);
@@ -140,6 +154,29 @@ export default function LoginScreen() {
     }
   };
 
+  if (isSavedProfile) return <ImageBackground source={savedLoginBackground} resizeMode="cover" style={savedStyles.screen}>
+    <SafeAreaView edges={['top', 'bottom']} style={savedStyles.safe}>
+      <AuthBackButton onPress={() => router.replace('/welcome-back')} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={savedStyles.keyboard}>
+        <ScrollView contentContainerStyle={savedStyles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={savedStyles.header}><Text style={savedStyles.hello}>Hello, Welcome!</Text><Text style={savedStyles.loginTitle}>Login to <Text style={savedStyles.quick}>Quick</Text><Text style={savedStyles.queue}>Queue</Text></Text></View>
+          <View style={savedStyles.form}>
+            {!!loginError && <Text style={savedStyles.error}>{loginError}</Text>}
+            <View style={savedStyles.savedField}><Text numberOfLines={1} style={savedStyles.savedName}>{displayName || createdUsername}</Text></View>
+            <View style={savedStyles.passwordField}><TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setPassword} onSubmitEditing={handleLogin} placeholder="Enter Password" placeholderTextColor="#66748B" returnKeyType="done" secureTextEntry={!isPasswordVisible} style={savedStyles.passwordInput} value={password} /><Pressable accessibilityLabel={isPasswordVisible ? 'Hide password' : 'Show password'} onPress={() => setPasswordVisible((value) => !value)} style={savedStyles.passwordEye}><Ionicons color="#17468F" name={isPasswordVisible ? 'eye-outline' : 'eye-off-outline'} size={20} /></Pressable></View>
+            <SecurityGradientButton disabled={isSubmitting} label={isSubmitting ? 'Signing In...' : 'Sign In'} onPress={handleLogin} style={savedStyles.loginButton} />
+            <View style={savedStyles.continueRow}><View style={savedStyles.continueLine} /><Text style={savedStyles.continueText}>Or continue with</Text><View style={savedStyles.continueLine} /></View>
+            <View style={savedStyles.methods}>
+              <Pressable accessibilityLabel="Sign in with secure PIN" onPress={handlePinLogin} style={savedStyles.method}><Ionicons color="#0646A8" name="key" size={31} /></Pressable>
+              <Pressable accessibilityLabel="Sign in with fingerprint" disabled={!biometrics.fingerprint || isSubmitting} onPress={() => handleBiometricLogin('fingerprint')} style={[savedStyles.method, !biometrics.fingerprint && savedStyles.methodDisabled]}><Ionicons color="#0646A8" name="finger-print" size={35} /></Pressable>
+              <Pressable accessibilityLabel="Sign in with face recognition" disabled={!biometrics.face || isSubmitting} onPress={() => handleBiometricLogin('face')} style={[savedStyles.method, !biometrics.face && savedStyles.methodDisabled]}><View style={styles.faceScanner}><View style={[styles.scanCorner, styles.scanTopLeft]} /><View style={[styles.scanCorner, styles.scanTopRight]} /><View style={[styles.scanCorner, styles.scanBottomLeft]} /><View style={[styles.scanCorner, styles.scanBottomRight]} /><View style={[styles.faceEye, styles.faceLeftEye]} /><View style={[styles.faceEye, styles.faceRightEye]} /><View style={styles.faceSmile} /></View></Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  </ImageBackground>;
+
   return (
     <View style={styles.container}>
       <ImageBackground
@@ -150,9 +187,10 @@ export default function LoginScreen() {
         <View />
       </ImageBackground>
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+        {showWelcomeBackButton && <AuthBackButton onPress={() => router.replace('/welcome-back')} />}
         <KeyboardAvoidingView
           style={styles.keyboardView}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
@@ -342,4 +380,14 @@ const styles = StyleSheet.create({
   signupRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginTop: 34 },
   signupText: { color: "#FFFFFF", fontSize: 12 },
   signupLink: { color: "#FFC21C", fontSize: 12, fontWeight: "700" },
+});
+
+const savedStyles = StyleSheet.create({
+  screen: { backgroundColor: '#FFFFFF', flex: 1 }, safe: { flex: 1 }, keyboard: { flex: 1 }, content: { flexGrow: 1, paddingBottom: 34 },
+  header: { paddingHorizontal: 34, paddingTop: 96 }, hello: { color: '#0B3D83', fontSize: 25, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 12, marginTop: 4 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
+  form: { marginTop: 50, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#B42318', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+  savedField: { backgroundColor: '#FFFFFF', borderColor: '#7395D0', borderRadius: 6, borderWidth: 3, height: 50, justifyContent: 'center', paddingHorizontal: 15 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
+  passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#7395D0', borderRadius: 6, borderWidth: 3, flexDirection: 'row', height: 50, marginTop: 18 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },
+  loginButton: { marginTop: 16 },
+  continueRow: { alignItems: 'center', flexDirection: 'row', gap: 11, marginTop: 26 }, continueLine: { backgroundColor: '#90B4E8', flex: 1, height: 1 }, continueText: { color: '#274A7F', fontSize: 10 }, methods: { flexDirection: 'row', gap: 24, justifyContent: 'center', marginTop: 17 }, method: { alignItems: 'center', backgroundColor: '#F2F7FF', borderRadius: 29, height: 58, justifyContent: 'center', width: 58 }, methodDisabled: { opacity: 0.35 },
 });

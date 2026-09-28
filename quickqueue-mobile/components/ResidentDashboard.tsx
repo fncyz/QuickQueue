@@ -8,11 +8,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { HeaderNotificationBell } from '@/components/HeaderNotificationBell';
+import { SavedInformationBanner } from '@/components/SavedInformationBanner';
 import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useAppTheme } from '@/contexts/app-theme';
 import { residentLayout } from '@/constants/resident-layout';
+import { useConnectivity } from '@/contexts/connectivity';
+import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/services/offline-cache';
 
-const quickQueueLogo = require('../assets/images/qq-logo.png');
+const quickQueueLogo = require('../assets/images/qqlogo.png');
 const toledoLogo = require('../assets/images/toledo.png');
 const cctcLogo = require('../assets/images/cctc.png');
 
@@ -27,6 +30,7 @@ type ActiveAppointment = {
   status_code: string;
   time_slot: string;
 };
+type DashboardCache = { activeAppointment: ActiveAppointment | null; residentName: string; services: Service[]; unreadNotifications: number; username: string };
 
 const serviceIcon = (name: string): keyof typeof Ionicons.glyphMap => {
   const value = name.toLowerCase();
@@ -39,6 +43,7 @@ const serviceIcon = (name: string): keyof typeof Ionicons.glyphMap => {
 
 export function ResidentDashboard() {
   const { colors, isDark } = useAppTheme();
+  const { isOnline } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
   const [residentName, setResidentName] = useState('Resident');
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -51,6 +56,13 @@ export function ResidentDashboard() {
   useFocusEffect(useCallback(() => {
     let isActive = true;
     const loadDashboard = async () => {
+      const saved = await readOfflineCache<DashboardCache>('dashboard');
+      if (saved && isActive) {
+        setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setActiveAppointment(saved.value.activeAppointment);
+        const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`);
+        if (cachedPhoto) setProfilePhoto(cachedPhoto);
+      }
+      if (!isOnline) return;
       try {
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return;
@@ -66,20 +78,24 @@ export function ResidentDashboard() {
         setUnreadNotifications(notificationResponse.data.unread_count);
         setServices(bookingResponse.data.services);
         setActiveAppointment(queueResponse.data.appointment);
-        setProfilePhoto(await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`));
+        const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`);
+        if (cachedPhoto) setProfilePhoto(cachedPhoto);
+        await setCurrentAccountId(profileResponse.data.username);
+        await writeOfflineCache<DashboardCache>('dashboard', { activeAppointment: queueResponse.data.appointment, residentName: profileResponse.data.first_name, services: bookingResponse.data.services, unreadNotifications: notificationResponse.data.unread_count, username: profileResponse.data.username });
       } catch {
         // Keep the dashboard usable if fresh server data is temporarily unavailable.
       }
     };
     loadDashboard();
     return () => { isActive = false; };
-  }, []));
+  }, [isOnline]));
 
   const filteredServices = useMemo(() => services.filter((item) => item.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())), [serviceSearch, services]);
   const visibleServices = showAllServices || serviceSearch ? filteredServices : filteredServices.slice(0, 3);
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
     <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
+    <SavedInformationBanner />
     {activeAppointment ? <UpcomingAppointmentCard appointment={activeAppointment} isDark={isDark} /> : <EmptyAppointmentCard isDark={isDark} />}
     <View style={[s.section, isDark && s.darkCard]}><View style={s.header}><Title icon="document-text" label="Available Services" /><Pressable onPress={() => setShowAllServices((value) => !value)}><Text style={[s.viewAll, { color: colors.accent }]}>{showAllServices ? 'Show Less' : 'View All  ›'}</Text></Pressable></View><View style={[s.search, isDark && s.darkIcon]}><Ionicons name="search" size={16} color={colors.muted} /><TextInput value={serviceSearch} onChangeText={setServiceSearch} placeholder="Search services" placeholderTextColor={colors.muted} style={[s.searchInput, { color: colors.text }]} /></View>{visibleServices.map((service) => <Pressable key={service.id} onPress={() => router.push({ pathname: '/booking', params: { serviceId: String(service.id) } })} style={[s.service, isDark && s.darkService]}><View style={[s.serviceIcon, isDark && s.darkIcon]}><Ionicons name={serviceIcon(service.name)} size={21} color={colors.accent} /></View><View style={{ flex: 1 }}><Text style={[s.serviceTitle, { color: colors.text }]}>{service.name}</Text><Text style={[s.serviceDetail, { color: colors.muted }]}>Book this service with your barangay.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>)}</View>
     <View style={[s.section, isDark && s.darkCard]}><Title icon="time" label="Office Hours" /><Hours label="Monday – Friday" value="8:00 AM – 5:00 PM" /><Hours label="Saturday" value="8:00 AM – 12:00 PM" /><Hours label="Sunday & Holidays" value="Closed" closed /></View>

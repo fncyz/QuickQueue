@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { AppThemeProvider, useAppTheme } from '@/contexts/app-theme';
+import { ConnectivityProvider } from '@/contexts/connectivity';
 
 function AppNavigator() {
   const { isDark } = useAppTheme();
@@ -46,5 +47,5 @@ function AppNavigator() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
   if (!fontsLoaded) return null;
-  return <AppThemeProvider><AppNavigator /></AppThemeProvider>;
+  return <AppThemeProvider><ConnectivityProvider><AppNavigator /></ConnectivityProvider></AppThemeProvider>;
 }

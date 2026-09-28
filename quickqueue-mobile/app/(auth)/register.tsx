@@ -12,11 +12,12 @@ import {
 import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { StyleProp, ViewStyle } from "react-native";
 import BarangayDropdown from "@/components/BarangayDropdown";
 import AddressDropdown from "@/components/AddressDropdown";
+import { AuthBackButton } from "@/components/AuthBackButton";
 
 import { registerResident } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -99,6 +100,8 @@ function IconInput({ icon, ...props }: React.ComponentProps<typeof TextInput> & 
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const showWelcomeBackButton = from === 'welcome-back';
   const [username, setUsername] = useState("");
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
@@ -186,7 +189,8 @@ const handleRegister = async () => {
 
   return (
     <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {showWelcomeBackButton && <AuthBackButton onPress={() => router.replace('/welcome-back')} />}
+      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.card}>
             <Text style={styles.title}>Create Account</Text>

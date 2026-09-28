@@ -5,9 +5,14 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ResidentTabBar } from '@/components/ResidentTabBar';
+import { FloatingAiAssistant } from '@/components/FloatingAiAssistant';
+import { useAppTheme } from '@/contexts/app-theme';
+import { ConnectionStatusBanner, useConnectivity } from '@/contexts/connectivity';
 import { securitySetupRoute } from '@/services/security-flow';
 
 export default function TabLayout() {
+  const { colors } = useAppTheme();
+  const { notice } = useConnectivity();
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [setupStage, setSetupStage] = useState<string | null>(null);
@@ -22,12 +27,16 @@ export default function TabLayout() {
   if (!hasSession) return <Redirect href="/login" />;
   if (setupStage && setupStage !== 'complete') return <Redirect href={securitySetupRoute(setupStage)} />;
 
-  return <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <ResidentTabBar {...props} />}>
-    <Tabs.Screen name="index" options={{ title: 'Home' }} />
-    <Tabs.Screen name="queue" options={{ title: 'Queue' }} />
-    <Tabs.Screen name="booking" options={{ title: 'Book' }} />
-    <Tabs.Screen name="transactions" options={{ title: 'Transactions' }} />
-    <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-    <Tabs.Screen name="explore" options={{ href: null }} />
-  </Tabs>;
+  return <View style={{ flex: 1 }}>
+    {notice && <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}><ConnectionStatusBanner /></SafeAreaView>}
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <ResidentTabBar {...props} />}>
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="queue" options={{ title: 'Queue' }} />
+      <Tabs.Screen name="booking" options={{ title: 'Book' }} />
+      <Tabs.Screen name="transactions" options={{ title: 'Transactions' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="explore" options={{ href: null }} />
+    </Tabs>
+    <FloatingAiAssistant />
+  </View>;
 }
