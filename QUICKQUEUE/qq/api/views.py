@@ -551,6 +551,11 @@ def _chat_database_context(resident):
         f"estimated processing duration={service.estimated_duration} minutes"
         for service in services
     ]
+    recent_notifications = resident.notifications.order_by("-created_at")[:3]
+    notification_lines = [
+        f"- {item.title}: {item.message} (read={'yes' if item.is_read else 'no'})"
+        for item in recent_notifications
+    ]
     appointment = resident.appointments.select_related(
         "service", "barangay", "time_slot"
     ).filter(
@@ -584,19 +589,28 @@ def _chat_database_context(resident):
     else:
         appointment_context = "Active appointment: none in the resident's QuickQueue record."
 
-    return "\n".join([
+    context = "\n".join([
         f"Resident barangay: {resident.barangay.name}",
         appointment_context,
         "Available QuickQueue services:",
         *(service_lines or ["- No active services are currently recorded."]),
+        "Recent QuickQueue notifications:",
+        *(notification_lines or ["- No recent notifications are recorded."]),
         "Office hours, exact fees, and unlisted availability are not present in this context.",
     ])
+    return context, appointment is not None
 
 
-def _chat_suggestions(message, reply):
+def _chat_suggestions(message, reply, has_appointment):
     text = f"{message} {reply}".lower()
+    if has_appointment:
+        if "called" in text or "now serving" in text:
+            return ["What should I do when my number is called?", "Where can I see my queue number?", "How do I track my appointment?"]
+        if "check in" in text:
+            return ["When can I check in?", "Where can I see my queue number?", "How do I track my appointment?"]
+        return ["How do I check in?", "Where can I see my queue number?", "How do I track my appointment?"]
     if "queue" in text or "wait" in text:
-        return ["What is my queue status?", "How do I check in?", "How do I book an appointment?"]
+        return ["How do I book an appointment?", "What services are available?", "What are the requirements?"]
     if "appointment" in text or "book" in text:
         return ["What are the requirements?", "What services are available?", "Where can I see my queue?"]
     if "requirement" in text or "clearance" in text:
@@ -625,8 +639,9 @@ def chat_api(request):
             history.append({"role": item["role"], "text": text})
 
     resident = request.user.resident_profile
+    database_context, has_appointment = _chat_database_context(resident)
     try:
-        reply = ask_gemini(message, _chat_database_context(resident), history)
+        reply = ask_gemini(message, database_context, history)
     except GeminiUnavailable:
         return Response(
             {"message": "The QuickQueue Assistant is temporarily unavailable. Please try again shortly."},
@@ -635,6 +650,6 @@ def chat_api(request):
 
     return Response({
         "reply": reply,
-        "suggestions": _chat_suggestions(message, reply),
+        "suggestions": _chat_suggestions(message, reply, has_appointment),
         "source": "QuickQueue records and AI guidance",
     })
