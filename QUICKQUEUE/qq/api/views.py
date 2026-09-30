@@ -612,13 +612,19 @@ def _built_in_chat_reply(message, resident, appointment):
     ))
     if appointment is None and appointment_topic and "book" not in text:
         return (
-            "You don’t have any appointments at the moment. To book one, open the Book tab, "
-            "select the service you need, choose an available date and time, review the details, and submit."
+            "You don’t have any appointments at the moment. To book one:\n\n"
+            "1. Open the Book tab.\n\n"
+            "2. Select the service you need.\n\n"
+            "3. Choose an available date and time.\n\n"
+            "4. Review the details and submit."
         )
     if "book" in text or "appointment" in text and appointment is None:
         return (
-            "To book an appointment: 1. Open the Book tab. 2. Select a barangay service. "
-            "3. Choose an available date and time. 4. Complete and review the details, then submit. "
+            "To book an appointment:\n\n"
+            "1. Open the Book tab.\n\n"
+            "2. Select a barangay service.\n\n"
+            "3. Choose an available date and time.\n\n"
+            "4. Complete and review the details, then submit.\n\n"
             "After booking, view it in Queue or Transactions."
         )
     if "check in" in text or "check-in" in text:
@@ -662,6 +668,11 @@ def _built_in_chat_reply(message, resident, appointment):
             return f"The active services available in QuickQueue are: {names}. Open the Book tab to select one and view its details."
         return "QuickQueue does not currently list any active services. Please contact barangay staff for assistance."
     return "I can help with booking, check-in, queue status, appointment tracking, notifications, and using the QuickQueue app."
+
+
+def _format_chat_instructions(reply):
+    """Turn inline numbered instructions into a readable vertical list."""
+    return re.sub(r"\s+(?=\d+[.)]\s)", "\n\n", reply).strip()
 
 
 def _chat_suggestions(message, reply, has_appointment):
@@ -709,6 +720,7 @@ def chat_api(request):
     except GeminiUnavailable:
         used_ai = False
         reply = _built_in_chat_reply(message, resident, appointment)
+    reply = _format_chat_instructions(reply)
 
     return Response({
         "reply": reply,
