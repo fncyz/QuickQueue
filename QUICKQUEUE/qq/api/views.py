@@ -598,7 +598,51 @@ def _chat_database_context(resident):
         *(notification_lines or ["- No recent notifications are recorded."]),
         "Office hours, exact fees, and unlisted availability are not present in this context.",
     ])
-    return context, appointment is not None
+    return context, appointment
+
+
+def _built_in_chat_reply(message, appointment):
+    """Provide safe QuickQueue guidance when the external AI provider is unavailable."""
+    text = message.lower()
+    appointment_topic = any(word in text for word in (
+        "appointment", "queue", "check in", "check-in", "track", "status", "number", "wait", "cancel"
+    ))
+    if appointment is None and appointment_topic and "book" not in text:
+        return (
+            "You don’t have any appointments at the moment. To book one, open the Book tab, "
+            "select the service you need, choose an available date and time, review the details, and submit."
+        )
+    if "book" in text or "appointment" in text and appointment is None:
+        return (
+            "To book an appointment: 1. Open the Book tab. 2. Select a barangay service. "
+            "3. Choose an available date and time. 4. Complete and review the details, then submit. "
+            "After booking, view it in Queue or Transactions."
+        )
+    if "check in" in text or "check-in" in text:
+        if appointment.appointment_date != date.today():
+            return (
+                f"According to your QuickQueue record, check-in is available on "
+                f"{appointment.appointment_date.strftime('%B %d, %Y')}. On that date, open Queue, "
+                "find Appointment Actions, and tap Check In."
+            )
+        return "Open the Queue tab, find Appointment Actions, and tap Check In. Wait for QuickQueue to confirm that staff were notified."
+    if "cancel" in text:
+        if appointment.status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
+            return "You can cancel this appointment from the Queue or Transactions tab. Open the appointment, tap Cancel Appointment, and confirm."
+        return f"According to your QuickQueue record, this appointment is {appointment.get_status_display()} and can no longer be cancelled in the app. Contact barangay staff if you need help."
+    if any(word in text for word in ("queue", "number", "wait", "status", "track")):
+        ticket = QueueTicket.objects.filter(appointment=appointment).first()
+        queue_status = ticket.get_status_display() if ticket else "not recorded"
+        return (
+            f"According to your QuickQueue record, your queue number is {appointment.queue_number}, "
+            f"your appointment is {appointment.get_status_display()}, and your queue status is {queue_status}. "
+            "Open the Queue tab for live tracking or Transactions for appointment details."
+        )
+    if "notification" in text:
+        return "Open Notifications to read the latest update. Use Queue when the notification requires a queue action, or Transactions to review the appointment details."
+    if "requirement" in text or "service" in text or "clearance" in text:
+        return "Open the Book tab and select a service to review its recorded requirements. If a requirement is not listed in QuickQueue, confirm it with barangay staff."
+    return "I can help with booking, check-in, queue status, appointment tracking, notifications, and using the QuickQueue app."
 
 
 def _chat_suggestions(message, reply, has_appointment):
@@ -639,17 +683,16 @@ def chat_api(request):
             history.append({"role": item["role"], "text": text})
 
     resident = request.user.resident_profile
-    database_context, has_appointment = _chat_database_context(resident)
+    database_context, appointment = _chat_database_context(resident)
+    used_ai = True
     try:
         reply = ask_gemini(message, database_context, history)
     except GeminiUnavailable:
-        return Response(
-            {"message": "The QuickQueue Assistant is temporarily unavailable. Please try again shortly."},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
+        used_ai = False
+        reply = _built_in_chat_reply(message, appointment)
 
     return Response({
         "reply": reply,
-        "suggestions": _chat_suggestions(message, reply, has_appointment),
-        "source": "QuickQueue records and AI guidance",
+        "suggestions": _chat_suggestions(message, reply, appointment is not None),
+        "source": "QuickQueue records and AI guidance" if used_ai else "QuickQueue records and built-in guidance",
     })
