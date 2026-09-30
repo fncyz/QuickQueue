@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -89,16 +89,22 @@ function SectionTitle({ icon, children }: { icon: keyof typeof Ionicons.glyphMap
   );
 }
 
-function IconInput({ icon, ...props }: React.ComponentProps<typeof TextInput> & { icon: keyof typeof Ionicons.glyphMap }) {
+const IconInput = forwardRef<React.ElementRef<typeof TextInput>, React.ComponentProps<typeof TextInput> & { icon: keyof typeof Ionicons.glyphMap }>(function IconInput({ icon, ...props }, ref) {
   return (
     <View style={styles.inputShell}>
       <Ionicons name={icon} size={16} color="#72809C" />
-      <TextInput style={styles.inputText} placeholderTextColor="#98A2B7" {...props} />
+      <TextInput ref={ref} style={styles.inputText} placeholderTextColor="#98A2B7" {...props} />
     </View>
   );
-}
+});
 
 export default function RegisterScreen() {
+  const middleNameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const lastNameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const suffixRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const usernameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const contactRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const emailRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const showWelcomeBackButton = from === 'welcome-back';
@@ -191,19 +197,19 @@ const handleRegister = async () => {
     <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
       {showWelcomeBackButton && <AuthBackButton onPress={() => router.replace('/welcome-back')} />}
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.card}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join us to get started</Text>
 
             <SectionTitle icon="person-outline">PERSONAL INFORMATION</SectionTitle>
             <View style={styles.row}>
-              <Field label="First Name" required><IconInput icon="person-outline" placeholder="Enter first name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" /></Field>
-              <Field label="Middle Name" optional><IconInput icon="person-outline" placeholder="Enter middle name" value={middleName} onChangeText={setMiddleName} autoCapitalize="words" /></Field>
+              <Field label="First Name" required><IconInput icon="person-outline" placeholder="Enter first name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => middleNameRef.current?.focus()} /></Field>
+              <Field label="Middle Name" optional><IconInput ref={middleNameRef} icon="person-outline" placeholder="Enter middle name" value={middleName} onChangeText={setMiddleName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => lastNameRef.current?.focus()} /></Field>
             </View>
-            <Field label="Last Name" required><IconInput icon="person-outline" placeholder="Enter last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" /></Field>
+            <Field label="Last Name" required><IconInput ref={lastNameRef} icon="person-outline" placeholder="Enter last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => suffixRef.current?.focus()} /></Field>
             <View style={styles.row}>
-              <Field label="Suffix" optional><IconInput icon="pricetag-outline" placeholder="Enter suffix" value={suffix} onChangeText={setSuffix} /></Field>
+              <Field label="Suffix" optional><IconInput ref={suffixRef} icon="pricetag-outline" placeholder="Enter suffix" value={suffix} onChangeText={setSuffix} returnKeyType="next" onSubmitEditing={() => usernameRef.current?.focus()} /></Field>
               <Field label="Birthdate" required>
                 <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
                   <Ionicons name="calendar-outline" size={16} color="#72809C" />
@@ -223,10 +229,10 @@ const handleRegister = async () => {
 
             <SectionTitle icon="mail-outline">ACCOUNT INFORMATION</SectionTitle>
             <View style={styles.row}>
-              <Field label="Username" required><IconInput icon="person-outline" placeholder="Enter username" value={username} onChangeText={setUsername} autoCapitalize="none" /></Field>
-              <Field label="Contact Number" required><IconInput icon="call-outline" placeholder="Enter contact number" value={contactNumber} onChangeText={handleContactNumberChange} keyboardType="phone-pad" maxLength={15} /></Field>
+              <Field label="Username" required><IconInput ref={usernameRef} icon="person-outline" placeholder="Enter username" value={username} onChangeText={setUsername} autoCapitalize="none" returnKeyType="next" onSubmitEditing={() => contactRef.current?.focus()} /></Field>
+              <Field label="Contact Number" required><IconInput ref={contactRef} icon="call-outline" placeholder="Enter contact number" value={contactNumber} onChangeText={handleContactNumberChange} keyboardType="phone-pad" maxLength={15} returnKeyType="next" onSubmitEditing={() => emailRef.current?.focus()} /></Field>
             </View>
-            <Field label="Email Address" optional><IconInput icon="mail-outline" placeholder="Enter email address (optional)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" /></Field>
+            <Field label="Email Address" optional><IconInput ref={emailRef} icon="mail-outline" placeholder="Enter email address (optional)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" returnKeyType="done" /></Field>
             <SectionTitle icon="location-outline">ADDRESS INFORMATION</SectionTitle>
             <View style={styles.row}>
               <Field label="Province" required>

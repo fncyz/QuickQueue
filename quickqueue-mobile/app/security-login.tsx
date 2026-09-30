@@ -104,7 +104,7 @@ export default function SecurityLoginScreen() {
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
     <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable accessibilityLabel="Back to profile" onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={25} color="#FFF" /></Pressable><Text style={s.heading}>Security & Login</Text></View>
-    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <Section title="Biometric Login" copy="Choose which device biometrics can be used to sign in." colors={colors}>
         <BiometricRow label="Fingerprint" icon="finger-print" enabled={statuses.fingerprint} onPress={() => beginBiometric('fingerprint')} colors={colors} />
         <BiometricRow label="Face Recognition" icon="scan-outline" enabled={statuses.face} onPress={() => beginBiometric('face')} colors={colors} />

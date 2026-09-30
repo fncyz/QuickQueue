@@ -11,6 +11,7 @@ import 'react-native-reanimated';
 
 import { AppThemeProvider, useAppTheme } from '@/contexts/app-theme';
 import { ConnectivityProvider } from '@/contexts/connectivity';
+import { AssistantPreferenceProvider } from '@/contexts/assistant-preference';
 
 function AppNavigator() {
   const { isDark } = useAppTheme();
@@ -47,5 +48,5 @@ function AppNavigator() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
   if (!fontsLoaded) return null;
-  return <AppThemeProvider><ConnectivityProvider><AppNavigator /></ConnectivityProvider></AppThemeProvider>;
+  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AppNavigator /></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
 }

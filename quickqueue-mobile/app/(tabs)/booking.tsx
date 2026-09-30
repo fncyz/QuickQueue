@@ -4,7 +4,7 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ const formatDate = (value: Date | null) => value
   : '';
 
 export default function BookingScreen() {
+  const purposeRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const { colors } = useAppTheme();
   const { isOnline } = useConnectivity();
   const params = useLocalSearchParams<{ serviceId?: string }>();
@@ -175,7 +176,7 @@ export default function BookingScreen() {
   if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.accent} /></SafeAreaView>;
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}>
-    <Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
+    <Animated.ScrollView automaticallyAdjustKeyboardInsets style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
       <Animated.View style={[s.hero, coverHeader.headerStyle]}>
         <Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable>
         <HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} />
@@ -205,10 +206,10 @@ export default function BookingScreen() {
         <View style={s.stepSection}><Text style={s.stepSectionNumber}>2</Text><Text style={s.stepSectionTitle}>Service</Text></View>
         <View style={s.fieldStack}>
           <View style={s.fullWidthField}><SelectField label="Service Type" selectedValue={service} onValueChange={(value) => setService(value)} placeholder="Select a service" items={services.map((item) => ({ id: item.id, label: item.name || '' }))} /></View>
-          <View style={s.column}><Text style={[s.label, { color: colors.text }]}>Sitio/Purok</Text><TextInput style={[s.input, s.singleLineInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]} value={sitio} onChangeText={setSitio} placeholder="Enter your sitio or purok" placeholderTextColor={colors.muted} maxLength={100} /></View>
+          <View style={s.column}><Text style={[s.label, { color: colors.text }]}>Sitio/Purok</Text><TextInput style={[s.input, s.singleLineInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]} value={sitio} onChangeText={setSitio} placeholder="Enter your sitio or purok" placeholderTextColor={colors.muted} maxLength={100} returnKeyType="next" onSubmitEditing={() => purposeRef.current?.focus()} /></View>
         </View>
         <Text style={[s.label, { color: colors.text }]}>Purpose</Text>
-        <TextInput style={[s.input, s.purpose, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]} value={purpose} onChangeText={setPurpose} placeholder="Briefly describe the purpose of your request." placeholderTextColor={colors.muted} multiline />
+        <TextInput ref={purposeRef} style={[s.input, s.purpose, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]} value={purpose} onChangeText={setPurpose} placeholder="Briefly describe the purpose of your request." placeholderTextColor={colors.muted} multiline returnKeyType="done" submitBehavior="blurAndSubmit" />
         <View style={s.stepSection}><Text style={s.stepSectionNumber}>3</Text><Text style={s.stepSectionTitle}>Date &amp; Time</Text></View>
         <View style={s.fieldStack}>
           <View style={s.column}><Text style={[s.label, { color: colors.text }]}>Date</Text><Pressable style={[s.inputShell, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]} onPress={() => setShowDatePicker(true)}><Text style={[date ? s.valueText : s.placeholder, { color: date ? colors.text : colors.muted }]}>{formatDate(date) || 'mm/dd/yyyy'}</Text><Ionicons name="calendar-outline" size={15} color={colors.muted} /></Pressable></View>

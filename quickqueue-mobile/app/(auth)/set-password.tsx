@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -21,6 +21,7 @@ const passwordChecks = (value: string) => [
 export default function SetPasswordScreen() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const confirmationRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -41,22 +42,22 @@ export default function SetPasswordScreen() {
     } finally { setSaving(false); }
   };
 
-  return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><SecuritySetupBackdrop /><KeyboardAvoidingView style={s.keyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+  return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><SecuritySetupBackdrop /><KeyboardAvoidingView style={s.keyboard} behavior={Platform.OS === "ios" ? "padding" : "height"}><ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
     <SecuritySetupProgress current={1} />
     <View style={s.icon}><Ionicons name="shield" size={34} color="#0645A8" /><Ionicons name="lock-closed" size={11} color="#FFF" style={s.lockOverlay} /></View>
     <Text style={s.title}>Create Password</Text>
     <Text style={s.description}>Create a strong password to protect your QuickQueue account.</Text>
-    <PasswordField label="Create Password" placeholder="Enter your password" value={password} onChangeText={setPassword} visible={showPassword} onToggle={() => setShowPassword((value) => !value)} />
-    <PasswordField label="Confirm Password" placeholder="Re-enter your password" value={confirmation} onChangeText={setConfirmation} visible={showConfirmation} onToggle={() => setShowConfirmation((value) => !value)} />
+    <PasswordField label="Create Password" placeholder="Enter your password" value={password} onChangeText={setPassword} visible={showPassword} onToggle={() => setShowPassword((value) => !value)} returnKeyType="next" onSubmitEditing={() => confirmationRef.current?.focus()} />
+    <PasswordField ref={confirmationRef} label="Confirm Password" placeholder="Re-enter your password" value={confirmation} onChangeText={setConfirmation} visible={showConfirmation} onToggle={() => setShowConfirmation((value) => !value)} returnKeyType="done" onSubmitEditing={submit} />
     {confirmation.length > 0 && password !== confirmation && <Text style={s.error}>Passwords do not match.</Text>}
     <View style={s.rules}><Text style={s.rulesTitle}>Your password must include:</Text>{checks.map((item) => <View key={item.label} style={s.ruleRow}><Ionicons name={item.valid ? "checkmark-circle" : "ellipse-outline"} size={15} color={item.valid ? "#1DAA61" : "#94A0B4"} /><Text style={[s.rule, item.valid && s.ruleValid]}>{item.label}</Text></View>)}</View>
     <SecurityGradientButton onPress={submit} disabled={!valid || saving} label={saving ? "Creating Password..." : "Create Password"} style={s.button} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView>;
 }
 
-function PasswordField({ label, placeholder, value, onChangeText, visible, onToggle }: { label: string; placeholder: string; value: string; onChangeText: (value: string) => void; visible: boolean; onToggle: () => void }) {
-  return <View style={s.field}><Text style={s.label}>{label}</Text><View style={s.inputShell}><Ionicons name="lock-closed-outline" size={20} color="#0759D9" /><TextInput style={s.input} value={value} onChangeText={onChangeText} secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} placeholder={placeholder} placeholderTextColor="#8A94A8" /><Pressable onPress={onToggle} style={s.eye} accessibilityLabel={visible ? "Hide password" : "Show password"}><Ionicons name={visible ? "eye-outline" : "eye-off-outline"} size={22} color="#0759D9" /></Pressable></View></View>;
-}
+const PasswordField = forwardRef<React.ElementRef<typeof TextInput>, { label: string; placeholder: string; value: string; onChangeText: (value: string) => void; visible: boolean; onToggle: () => void; returnKeyType: 'next' | 'done'; onSubmitEditing: () => void }>(function PasswordField({ label, placeholder, value, onChangeText, visible, onToggle, returnKeyType, onSubmitEditing }, ref) {
+  return <View style={s.field}><Text style={s.label}>{label}</Text><View style={s.inputShell}><Ionicons name="lock-closed-outline" size={20} color="#0759D9" /><TextInput ref={ref} style={s.input} value={value} onChangeText={onChangeText} secureTextEntry={!visible} autoCapitalize="none" autoCorrect={false} placeholder={placeholder} placeholderTextColor="#8A94A8" returnKeyType={returnKeyType} onSubmitEditing={onSubmitEditing} /><Pressable onPress={onToggle} style={s.eye} accessibilityLabel={visible ? "Hide password" : "Show password"}><Ionicons name={visible ? "eye-outline" : "eye-off-outline"} size={22} color="#0759D9" /></Pressable></View></View>;
+});
 
 const s = StyleSheet.create({
   safe: { backgroundColor: "#F8FBFF", flex: 1 }, keyboard: { flex: 1 }, content: { flexGrow: 1, paddingHorizontal: 22, paddingBottom: 25, paddingTop: 45 },

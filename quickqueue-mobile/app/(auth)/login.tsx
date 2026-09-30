@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   ImageBackground,
   KeyboardAvoidingView,
-  Dimensions,
   Platform,
   Pressable,
   ScrollView,
@@ -33,7 +32,6 @@ const setupRoute = (stage: string) => {
 const loginBackground = require("../../assets/images/login.png");
 const savedLoginBackground = require("../../assets/images/secbg.jpg");
 const quickQueueLogo = require("../../assets/images/logo.png");
-const screenSize = Dimensions.get("screen");
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -46,6 +44,7 @@ export default function LoginScreen() {
   const isSavedProfile = from === 'saved-profile';
   const [username, setUsername] = useState(createdUsername ?? "");
   const [password, setPassword] = useState("");
+  const passwordRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const [isPasswordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -160,7 +159,7 @@ export default function LoginScreen() {
     <SafeAreaView edges={['top', 'bottom']} style={savedStyles.safe}>
       <AuthBackButton onPress={() => router.replace('/welcome-back')} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={savedStyles.keyboard}>
-        <ScrollView contentContainerStyle={savedStyles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={savedStyles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={savedStyles.header}><Text style={savedStyles.hello}>Hello, Welcome!</Text><Text style={savedStyles.loginTitle}>Login to <Text style={savedStyles.quick}>Quick</Text><Text style={savedStyles.queue}>Queue</Text></Text></View>
           <View style={savedStyles.form}>
             {!!loginError && <Text style={savedStyles.error}>{loginError}</Text>}
@@ -195,19 +194,22 @@ export default function LoginScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <ScrollView
+            automaticallyAdjustKeyboardInsets
             contentContainerStyle={styles.scrollContent}
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.branding}>
-              <View style={styles.logoFrame}>
-                <Image source={quickQueueLogo} resizeMode="contain" style={styles.logo} accessibilityLabel="QuickQueue logo" />
+            <View style={styles.contentColumn}>
+              <View style={styles.branding}>
+                <View style={styles.logoFrame}>
+                  <Image source={quickQueueLogo} resizeMode="contain" style={styles.logo} accessibilityLabel="QuickQueue logo" />
+                </View>
+                <Text style={styles.welcome}>WELCOME</Text>
+                <Text style={styles.subtitle}>Sign in to your QuickQueue account</Text>
               </View>
-              <Text style={styles.welcome}>WELCOME</Text>
-              <Text style={styles.subtitle}>Sign in to your QuickQueue account</Text>
-            </View>
 
-            <View style={styles.form}>
+              <View style={styles.form}>
 
               {!!loginError && <Text style={styles.loginError}>{loginError}</Text>}
 
@@ -225,6 +227,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                 />
               </View>
 
@@ -234,6 +237,7 @@ export default function LoginScreen() {
                   <Ionicons name="lock-closed-outline" size={22} color="#0045AA" />
                 </View>
                 <TextInput
+                  ref={passwordRef}
                   placeholder="Enter your password"
                   placeholderTextColor="#7C8499"
                   value={password}
@@ -292,6 +296,7 @@ export default function LoginScreen() {
                 </Pressable>
               </View>
             </View>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -301,11 +306,12 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#003D9C", overflow: "hidden" },
-  fixedBackground: { height: screenSize.height, left: 0, position: "absolute", top: 0, width: screenSize.width },
+  fixedBackground: { ...StyleSheet.absoluteFillObject },
   safeArea: { flex: 1 },
   keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 36, paddingBottom: 24 },
-  branding: { alignItems: "center", paddingTop: 34 },
+  scrollContent: { alignItems: "center", flexGrow: 1, paddingBottom: 24, paddingHorizontal: 24 },
+  contentColumn: { maxWidth: 500, width: "100%" },
+  branding: { alignItems: "center", height: 258, paddingTop: 34 },
   logoFrame: {
     alignItems: "center",
     borderRadius: 55,
@@ -318,7 +324,7 @@ const styles = StyleSheet.create({
   logo: { borderRadius: 60, height: 120, width: 120 },
   welcome: { color: "#002C7C", fontSize: 31, fontWeight: "800", letterSpacing: -0.8, lineHeight: 38 },
   subtitle: { color: "#62697B", fontSize: 14, marginTop: 4, textAlign: "center" },
-  form: { marginTop: 58 },
+  form: { marginTop: 18, paddingHorizontal: 12 },
   label: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", marginBottom: 7 },
   inputShell: {
     alignItems: "center",
@@ -385,11 +391,11 @@ const styles = StyleSheet.create({
 });
 
 const savedStyles = StyleSheet.create({
-  screen: { backgroundColor: '#FFFFFF', flex: 1 }, safe: { flex: 1 }, keyboard: { flex: 1 }, content: { flexGrow: 1, paddingBottom: 34 },
-  header: { paddingHorizontal: 34, paddingTop: 96 }, hello: { color: '#0B3D83', fontSize: 25, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 12, marginTop: 4 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
-  form: { marginTop: 50, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#B42318', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
-  savedField: { backgroundColor: '#FFFFFF', borderColor: '#7395D0', borderRadius: 6, borderWidth: 3, height: 50, justifyContent: 'center', paddingHorizontal: 15 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
-  passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#7395D0', borderRadius: 6, borderWidth: 3, flexDirection: 'row', height: 50, marginTop: 18 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },
-  loginButton: { marginTop: 16 },
+  screen: { backgroundColor: '#FFFFFF', flex: 1 }, safe: { flex: 1 }, keyboard: { flex: 1 }, content: { alignSelf: 'center', flexGrow: 1, maxWidth: 500, paddingBottom: 34, width: '100%' },
+  header: { height: 190, paddingHorizontal: 34, paddingTop: 96 }, hello: { color: '#0B3D83', fontSize: 25, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 12, marginTop: 4 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
+  form: { marginTop: 18, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#B42318', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+  savedField: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 0, elevation: 3, height: 50, justifyContent: 'center', paddingHorizontal: 15, shadowColor: '#31598A', shadowOffset: { height: 3, width: 0 }, shadowOpacity: 0.14, shadowRadius: 7 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
+  passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 0, elevation: 3, flexDirection: 'row', height: 50, marginTop: 18, shadowColor: '#31598A', shadowOffset: { height: 3, width: 0 }, shadowOpacity: 0.14, shadowRadius: 7 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },
+  loginButton: { marginTop: 26 },
   continueRow: { alignItems: 'center', flexDirection: 'row', gap: 11, marginTop: 26 }, continueLine: { backgroundColor: '#90B4E8', flex: 1, height: 1 }, continueText: { color: '#274A7F', fontSize: 10 }, methods: { flexDirection: 'row', gap: 24, justifyContent: 'center', marginTop: 17 }, method: { alignItems: 'center', backgroundColor: '#F2F7FF', borderRadius: 29, height: 58, justifyContent: 'center', width: 58 }, methodDisabled: { opacity: 0.35 },
 });

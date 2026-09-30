@@ -24,6 +24,13 @@ Text.displayName = 'Text';
 
 export const TextInput = forwardRef<React.ElementRef<typeof NativeTextInput>, TextInputProps>(({ style, ...props }, ref) => {
   const flattened = StyleSheet.flatten(style);
-  return <NativeTextInput ref={ref} allowFontScaling={false} maxFontSizeMultiplier={1} {...props} style={[style, { fontFamily: fontForWeight(flattened?.fontWeight), fontWeight: undefined }]} />;
+  return <NativeTextInput
+    ref={ref}
+    allowFontScaling={false}
+    maxFontSizeMultiplier={1}
+    returnKeyType={props.returnKeyType ?? (props.multiline ? 'default' : 'done')}
+    {...props}
+    style={[style, { fontFamily: fontForWeight(flattened?.fontWeight), fontWeight: undefined }]}
+  />;
 });
 TextInput.displayName = 'TextInput';

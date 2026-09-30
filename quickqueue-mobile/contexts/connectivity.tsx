@@ -1,7 +1,8 @@
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Typography';
 
@@ -42,22 +43,31 @@ export const useConnectivity = () => useContext(ConnectivityContext);
 
 export function ConnectionStatusBanner() {
   const { dismissNotice, notice } = useConnectivity();
+  const insets = useSafeAreaInsets();
+  const entrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!notice) return;
+    entrance.setValue(0);
+    Animated.spring(entrance, { damping: 18, mass: 0.8, stiffness: 210, toValue: 1, useNativeDriver: true }).start();
+  }, [entrance, notice]);
+
   if (!notice) return null;
   const onlineAgain = notice === 'backOnline';
   const palette = onlineAgain
     ? { background: '#083E32', border: '#259B65', icon: '#18B875', iconSoft: '#164E41' }
     : { background: '#6F1D1B', border: '#FF8174', icon: '#E33E32', iconSoft: '#842C28' };
-  return <View accessibilityLiveRegion="polite" style={s.container}>
-    <View style={[s.banner, { backgroundColor: palette.background, borderColor: palette.border }]}>
+  return <Animated.View accessibilityLiveRegion="polite" pointerEvents="box-none" style={[s.container, { paddingTop: insets.top + 8, opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] }) }] }] }>
+    <View style={[s.banner, { backgroundColor: palette.background, borderColor: palette.border }]}> 
       <View style={[s.icon, { backgroundColor: palette.icon }]}><Ionicons name={onlineAgain ? 'wifi' : 'cloud-offline'} size={27} color="#FFFFFF" /></View>
-      <View style={s.copy}><Text style={s.title}>{onlineAgain ? 'Back Online' : 'You’re Offline'}</Text><Text style={s.message}>{onlineAgain ? 'Refreshing your latest information.' : 'Some saved information ay not be up to date.'}</Text></View>
+      <View style={s.copy}><Text style={s.title}>{onlineAgain ? 'Back Online' : 'You’re Offline'}</Text><Text style={s.message}>{onlineAgain ? 'Refreshing your latest information.' : 'Some saved information may not be up to date.'}</Text></View>
       <Pressable accessibilityLabel="Dismiss connection status" onPress={dismissNotice} style={[s.close, { backgroundColor: palette.iconSoft }]}><Ionicons name="close" size={24} color="#FFFFFF" /></Pressable>
     </View>
-  </View>;
+  </Animated.View>;
 }
 
 const s = StyleSheet.create({
-  container: { paddingBottom: 8, paddingTop: 10 },
+  container: { left: 0, paddingBottom: 8, position: 'absolute', right: 0, top: 0, zIndex: 1000 },
   banner: { alignItems: 'center', borderRadius: 18, borderWidth: 1.5, elevation: 4, flexDirection: 'row', gap: 12, marginHorizontal: 18, minHeight: 82, paddingHorizontal: 13, paddingVertical: 11, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 7 },
   icon: { alignItems: 'center', borderRadius: 30, height: 58, justifyContent: 'center', width: 58 },
   copy: { flex: 1 },
