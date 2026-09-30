@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { residentLayout } from '@/constants/resident-layout';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 
 type Appointment = { id: number; appointment_id: string; name: string; service: string; service_fee: string; date: string; time_slot: string; barangay: string; queue_number: string; now_serving: string; people_ahead: number; estimated_wait: number };
@@ -68,10 +69,10 @@ export default function QueueScreen() {
     { text: 'Cancel Appointment', style: 'destructive', onPress: () => performAction('cancel') },
   ]);
 
-  if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.accent} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></SafeAreaView>;
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
-    <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><View style={s.live}><View style={s.dot} /><Text style={s.liveText}>Live Status</Text></View><Text style={s.heading}>Current Queue Status</Text><Text style={s.subheading}>Track your queue in real time and stay ready for your turn.</Text></Animated.View>
+    <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><View style={s.live}><View style={s.dot} /><Text style={s.liveText}>Live Status</Text></View><Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={s.heading}>Current Queue Status</Text><Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={s.subheading}>Track your queue in real time and stay ready for your turn.</Text></Animated.View>
     <SavedInformationBanner followedByOverlap={false} message="Saved appointment · queue status may not be up to date." />
     {!appointment ? <View style={[s.empty, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><Ionicons name="people-outline" size={48} color={colors.accent} /><Text style={[s.emptyTitle, { color: colors.text }]}>No active appointment</Text><Text style={[s.emptyCopy, { color: colors.muted }]}>Book an appointment to view your live queue position here.</Text><Pressable onPress={() => router.push('/booking')} style={s.book}><Text style={s.bookText}>Book Now</Text></Pressable></View> : <>
       <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><SectionTitle icon="people-circle" title="Your Queue Status" subtitle="Real-time updates on your queue." right="You’re all set!" /><View style={[s.ticketPanel, { backgroundColor: colors.surfaceAlt }]}><Metric label="NOW SERVING" value={appointment.now_serving} icon="megaphone-outline" detail="Please proceed to the service counter." /><Metric label="YOUR NUMBER" value={appointment.queue_number} icon="person-outline" detail={appointment.people_ahead ? `${appointment.people_ahead} people ahead of you` : 'You are next in line'} center /><Metric label="ESTIMATED WAITING TIME" value={`${appointment.estimated_wait} minutes`} icon="time-outline" detail="Please wait for your turn." /></View><View style={[s.note, { backgroundColor: colors.iconBackground }]}><Ionicons name="notifications-outline" size={14} color={colors.accent} /><Text style={[s.noteText, { color: colors.muted }]}><Text style={[s.noteStrong, { color: colors.accent }]}>Note: </Text>Waiting time may change based on the number of people being served.</Text></View></View>
@@ -88,7 +89,7 @@ function SectionTitle({ icon, title, subtitle, right }: { icon: keyof typeof Ion
 function Metric({ label, value, icon, detail, center }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; detail: string; center?: boolean }) { const { colors } = useAppTheme(); return <View style={[s.metric, center && s.metricCenter, center && { borderLeftColor: colors.border, borderRightColor: colors.border }]}><Text style={[s.metricLabel, { color: colors.muted }]}>{label}</Text><Text style={[s.metricValue, { color: colors.accent }]}>{value}</Text><Ionicons name={icon} size={19} color={colors.text} /><Text style={[s.metricDetail, { color: colors.muted }]}>{detail}</Text></View>; }
 
 const readableStyles = {
-  liveText: { color: '#14B863', fontSize: 13 }, heading: { color: '#FFF', fontSize: 23, fontWeight: '800', marginTop: 9 }, subheading: { color: '#FFF', fontSize: 12, marginTop: 5 },
+  liveText: { color: '#14B863', fontSize: 13 }, heading: { color: '#FFF', fontSize: 21, fontWeight: '800', marginTop: 9, maxWidth: '76%', textAlign: 'center' }, subheading: { color: '#FFF', fontSize: 11, marginTop: 5, maxWidth: '88%', textAlign: 'center' },
   sectionIcon: { alignItems: 'center', backgroundColor: '#0646A8', borderRadius: 15, height: 30, justifyContent: 'center', marginRight: 8, width: 30 }, sectionTitle: { color: '#152654', fontSize: 14, fontWeight: '800' }, sectionSubtitle: { color: '#758096', fontSize: 10, marginTop: 2 }, ready: { color: '#0759D9', fontSize: 10, fontWeight: '700' },
   metric: { alignItems: 'center', flex: 1, minHeight: 125, paddingHorizontal: 6, paddingVertical: 13 }, metricLabel: { color: '#34415B', fontSize: 9, fontWeight: '700', textAlign: 'center' }, metricValue: { color: '#0646A8', fontSize: 21, fontWeight: '800', marginVertical: 7, textAlign: 'center' }, metricDetail: { color: '#34415B', fontSize: 9, fontWeight: '600', lineHeight: 12, marginTop: 6, textAlign: 'center' },
   noteText: { color: '#657089', flex: 1, fontSize: 10, lineHeight: 14 }, checkTitle: { color: '#1D9D4C', fontSize: 12, fontWeight: '800' }, cancelTitle: { color: '#E91E2B', fontSize: 12, fontWeight: '800' }, actionText: { color: '#667187', fontSize: 10, lineHeight: 13, marginTop: 3 },

@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Image, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, Animated, Image, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,18 +16,22 @@ import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useConnectivity } from '@/contexts/connectivity';
 import { clearCurrentResidentData, readOfflineCache, saveRecentResidentProfile, writeOfflineCache } from '@/services/offline-cache';
 import { useAssistantPreference } from '@/contexts/assistant-preference';
+import { useAuthSession } from '@/contexts/auth-session';
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 
 type Profile = { username: string; first_name: string; middle_name: string; last_name: string; suffix: string; created_at: string };
 
 export default function ProfileScreen() {
   const { colors, isDark, setDarkMode } = useAppTheme();
   const { enabled: assistantEnabled, setEnabled: setAssistantEnabled } = useAssistantPreference();
+  const { lock } = useAuthSession();
   const { isOnline } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cached, setCached] = useState(false);
+  const lastFreshLoad = useRef(0);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -35,13 +39,14 @@ export default function ProfileScreen() {
       const saved = await readOfflineCache<Profile>('profile');
       if (saved && active) { const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`); setProfile(saved.value); if (cachedPhoto) setPhoto(cachedPhoto); setCached(true); setLoading(false); }
       if (!isOnline) { if (active) setLoading(false); return; }
+      if (Date.now() - lastFreshLoad.current < 30000) { if (active) setLoading(false); return; }
       try {
         const token = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!token) return router.replace('/login');
         const response = await api.get<Profile>('profile/', { headers: { Authorization: `Bearer ${token}` } });
         const savedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${response.data.username}`);
         await writeOfflineCache('profile', response.data);
-        if (active) { setProfile(response.data); if (savedPhoto) setPhoto(savedPhoto); setCached(false); }
+        if (active) { setProfile(response.data); if (savedPhoto) setPhoto(savedPhoto); setCached(false); lastFreshLoad.current = Date.now(); }
       } catch (error: any) { if (!saved) Alert.alert('Unable to load profile', error?.response?.data?.message || 'Please check your connection.'); }
       finally { if (active) setLoading(false); }
     };
@@ -54,9 +59,11 @@ export default function ProfileScreen() {
     await saveRecentResidentProfile({ displayName: fullName, username: profile.username });
     await clearCurrentResidentData();
     await AsyncStorage.multiRemove(['quickqueue.accessToken', 'quickqueue.refreshToken', 'quickqueue.securitySetupStage']);
-    router.replace('/welcome-back');
+    await AsyncStorage.setItem('quickqueue.explicitLogout', 'true');
+    lock();
+    router.replace('/login');
   } }]);
-  if (loading || !profile) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.accent} /></SafeAreaView>;
+  if (loading || !profile) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></SafeAreaView>;
 
   const middleInitial = profile.middle_name ? ` ${profile.middle_name.charAt(0).toUpperCase()}.` : '';
   const fullName = `${profile.first_name}${middleInitial} ${profile.last_name}${profile.suffix ? ` ${profile.suffix}` : ''}`;

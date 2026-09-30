@@ -1,12 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ImageBackground, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, ImageBackground, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Typography';
 import { readRecentResidentProfile, type RecentResidentProfile } from '@/services/offline-cache';
+import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
 
 const background = require('../../assets/images/login.png');
 const logo = require('../../assets/images/logo.png');
@@ -16,16 +16,15 @@ export default function WelcomeBackScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), readRecentResidentProfile()])
-      .then(([token, savedProfile]) => {
-        if (token) return router.replace('/(tabs)');
+    readRecentResidentProfile()
+      .then((savedProfile) => {
         if (!savedProfile) return router.replace('/login');
         setProfile(savedProfile);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading || !profile) return <SafeAreaView style={s.loading}><ActivityIndicator color="#FFC21C" /></SafeAreaView>;
+  if (loading || !profile) return <QuickQueueLoadingScreen />;
 
   return <View style={s.screen}>
     <ImageBackground source={background} resizeMode="cover" style={StyleSheet.absoluteFill} />
@@ -56,7 +55,6 @@ export default function WelcomeBackScreen() {
 const s = StyleSheet.create({
   screen: { backgroundColor: '#063C99', flex: 1 },
   safe: { flex: 1 },
-  loading: { alignItems: 'center', backgroundColor: '#063C99', flex: 1, justifyContent: 'center' },
   content: { alignItems: 'center', flexGrow: 1, paddingBottom: 32, paddingHorizontal: 24 },
   branding: { alignItems: 'center', height: 250, paddingTop: 32 },
   logo: { height: 94, width: 94 },

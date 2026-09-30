@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAxiosError } from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, TextInput } from '@/components/Typography';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { sendChatMessage } from '@/services/api';
 
 const assistantLogo = require('../assets/images/qq-ai.png');
@@ -29,6 +30,7 @@ export function FloatingAiAssistant() {
   const [messages, setMessages] = useState<Message[]>(() => [{ id: 'assistant-welcome', role: 'assistant', suggestions, text: 'Hello! I’m the QuickQueue AI Assistant. How can I help you today?', time: timeNow() }]);
   const size = Math.max(56, Math.min(62, width * 0.15));
   const availableHeight = Math.max(280, height - insets.top - insets.bottom - 24);
+  const visibleMessages = useMemo(() => messages.slice(-50), [messages]);
 
   useEffect(() => {
     if (isOpen) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -39,7 +41,7 @@ export function FloatingAiAssistant() {
     if (!trimmed || !isOnline || isSending) return;
     const timestamp = timeNow();
     const residentId = `resident-${nextId.current++}`;
-    const history = messages.map(({ role, text: historyText }) => ({ role, text: historyText }));
+    const history = messages.slice(-6).map(({ role, text: historyText }) => ({ role, text: historyText }));
     setMessages((current) => [...current, { id: residentId, role: 'resident', text: trimmed, time: timestamp }]);
     setDraft('');
     setIsSending(true);
@@ -85,15 +87,15 @@ export function FloatingAiAssistant() {
           </View>
           {!isOnline && <View accessibilityLiveRegion="polite" style={styles.offlineBanner}><Ionicons color="#9B3A32" name="cloud-offline-outline" size={18} /><Text style={styles.offlineText}>An internet connection is required to send messages. We’ll reconnect automatically.</Text></View>}
           <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.conversation} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })} ref={scrollRef} showsVerticalScrollIndicator={false}>
-            {messages.map((message, index) => <View key={message.id}>
+            {visibleMessages.map((message, index) => <View key={message.id}>
               <MessageBubble assistantBubble={assistantBubble} colors={colors} message={message} />
-              {message.role === 'assistant' && index === messages.length - 1 && message.suggestions?.length && <View onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} style={[styles.suggestionsCard, { backgroundColor: inputBackground, borderColor: colors.border }]}><Text style={[styles.suggestionsTitle, { color: colors.text }]}>Suggested Questions</Text><View style={styles.suggestionList}>{message.suggestions.map((suggestion) => <Pressable accessibilityRole="button" disabled={!isOnline || isSending} key={`${message.id}-${suggestion}`} onPress={() => send(suggestion)} style={({ pressed }) => [styles.suggestion, { backgroundColor: panel, borderColor: isOnline ? '#B8D3FA' : colors.border, opacity: !isOnline || isSending ? 0.45 : pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: isOnline ? colors.accent : colors.muted }]}>{suggestion}</Text></Pressable>)}</View></View>}
+              {message.role === 'assistant' && index === visibleMessages.length - 1 && message.suggestions?.length && <View onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} style={[styles.suggestionsCard, { backgroundColor: inputBackground, borderColor: colors.border }]}><Text style={[styles.suggestionsTitle, { color: colors.text }]}>Suggested Questions</Text><View style={styles.suggestionList}>{message.suggestions.map((suggestion) => <Pressable accessibilityRole="button" disabled={!isOnline || isSending} key={`${message.id}-${suggestion}`} onPress={() => send(suggestion)} style={({ pressed }) => [styles.suggestion, { backgroundColor: panel, borderColor: isOnline ? '#B8D3FA' : colors.border, opacity: !isOnline || isSending ? 0.45 : pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: isOnline ? colors.accent : colors.muted }]}>{suggestion}</Text></Pressable>)}</View></View>}
             </View>)}
-            {isSending && <View accessibilityLabel="QuickQueue Assistant is typing" accessibilityLiveRegion="polite" style={styles.typingRow}><Image source={assistantLogo} style={styles.messageAvatar} /><View style={[styles.typingBubble, { backgroundColor: assistantBubble }]}><View style={styles.typingDot} /><View style={styles.typingDot} /><View style={styles.typingDot} /></View></View>}
+            {isSending && <View accessibilityLabel="QuickQueue Assistant is typing" accessibilityLiveRegion="polite" style={styles.typingRow}><Image source={assistantLogo} style={styles.messageAvatar} /><View style={[styles.typingBubble, { backgroundColor: assistantBubble }]}><QuickQueueLoadingIndicator size={34} /></View></View>}
           </ScrollView>
           <View style={[styles.composer, { backgroundColor: panel, borderTopColor: colors.border }]}>
             <TextInput accessibilityLabel="Message QuickQueue Smart Assistant" editable={isOnline && !isSending} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => send()} placeholder={!isOnline ? 'Connect to the internet to chat' : isSending ? 'Waiting for the assistant…' : 'Type your message…'} placeholderTextColor={colors.muted} returnKeyType="send" style={[styles.input, { backgroundColor: inputBackground, borderColor: colors.border, color: colors.text }]} value={draft} />
-            <Pressable accessibilityLabel="Send message" disabled={!isOnline || isSending || !draft.trim()} onPress={() => send()} style={({ pressed }) => [styles.sendButton, { opacity: !isOnline || isSending || !draft.trim() ? 0.4 : pressed ? 0.72 : 1 }]}>{isSending ? <View style={styles.sendLoadingDot} /> : <Ionicons color="#FFFFFF" name="send" size={20} />}</Pressable>
+            <Pressable accessibilityLabel="Send message" disabled={!isOnline || isSending || !draft.trim()} onPress={() => send()} style={({ pressed }) => [styles.sendButton, { opacity: !isOnline || isSending || !draft.trim() ? 0.4 : pressed ? 0.72 : 1 }]}>{isSending ? <QuickQueueLoadingIndicator size={30} /> : <Ionicons color="#FFFFFF" name="send" size={20} />}</Pressable>
           </View>
         </View>
       </View>
@@ -119,6 +121,6 @@ const styles = StyleSheet.create({
   conversation: { paddingBottom: 14, paddingHorizontal: 14, paddingTop: 16 }, messageRow: { alignItems: 'flex-start', flexDirection: 'row', marginBottom: 13, maxWidth: '88%' }, residentRow: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
   messageAvatar: { borderRadius: 16, height: 30, marginRight: 7, marginTop: 2, width: 30 }, messageContent: { flexShrink: 1 }, messageBubble: { borderRadius: 16, borderTopLeftRadius: 5, paddingHorizontal: 13, paddingVertical: 10 }, residentBubble: { backgroundColor: assistantBlue, borderRadius: 16, borderTopRightRadius: 5 }, messageText: { fontSize: 12, lineHeight: 18 }, timestamp: { fontSize: 9, marginTop: 4 }, residentTimestamp: { textAlign: 'right' },
   suggestionsCard: { borderRadius: 15, borderWidth: 1, marginBottom: 16, marginLeft: 37, padding: 11 }, suggestionsTitle: { fontSize: 11, fontWeight: '700', marginBottom: 9 }, suggestionList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, suggestion: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 7 }, suggestionText: { fontSize: 9, fontWeight: '600' },
-  typingRow: { alignItems: 'center', flexDirection: 'row', marginBottom: 13 }, typingBubble: { alignItems: 'center', borderRadius: 16, borderTopLeftRadius: 5, flexDirection: 'row', gap: 5, height: 38, paddingHorizontal: 14 }, typingDot: { backgroundColor: '#7D91AF', borderRadius: 4, height: 7, width: 7 }, sendLoadingDot: { backgroundColor: '#FFFFFF', borderRadius: 5, height: 10, width: 10 },
+  typingRow: { alignItems: 'center', flexDirection: 'row', marginBottom: 13 }, typingBubble: { alignItems: 'center', borderRadius: 16, borderTopLeftRadius: 5, flexDirection: 'row', height: 44, paddingHorizontal: 12 },
   composer: { alignItems: 'center', borderTopWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 }, input: { borderRadius: 13, borderWidth: 1, flex: 1, fontSize: 12, height: 46, paddingHorizontal: 13, paddingVertical: 9 }, sendButton: { alignItems: 'center', backgroundColor: assistantBlue, borderRadius: 13, height: 46, justifyContent: 'center', width: 46 },
 });

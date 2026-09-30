@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import SecuritySetupProgress from "@/components/SecuritySetupProgress";
@@ -12,6 +12,7 @@ import SecurityGradientButton from "@/components/SecurityGradientButton";
 import { Text } from "@/components/Typography";
 import { advanceSecuritySetup } from "@/services/api";
 import { enableBiometricLogin } from "@/services/secure-auth";
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 
 type Kind = "fingerprint" | "face";
 export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
@@ -67,7 +68,7 @@ export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
     }
   };
 
-  if (supported !== true) return <SafeAreaView style={s.safe}><View style={s.loading}><ActivityIndicator color="#0759D9" /><Text style={s.loadingText}>Checking device security…</Text></View></SafeAreaView>;
+  if (supported !== true) return <SafeAreaView style={s.safe}><View style={s.loading}><QuickQueueLoadingIndicator /><Text style={s.loadingText}>Checking device security…</Text></View></SafeAreaView>;
   return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><SecuritySetupBackdrop /><View style={s.content}>
     <SecuritySetupProgress current={isFingerprint ? 3 : 4} />
     <View style={s.stepIcon}><Ionicons name={isFingerprint ? "finger-print" : "person"} size={27} color="#FFF" /></View>

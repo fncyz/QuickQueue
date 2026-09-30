@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,6 +17,7 @@ import { residentLayout } from '@/constants/resident-layout';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
 import { readOfflineCache, removeOfflineCache, writeOfflineCache } from '@/services/offline-cache';
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 
 type Choice = { id: number; name?: string; label?: string };
 type BookingProfile = {
@@ -173,7 +174,7 @@ export default function BookingScreen() {
     }
   };
 
-  if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator size="large" color={colors.accent} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></SafeAreaView>;
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}>
     <Animated.ScrollView automaticallyAdjustKeyboardInsets style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
@@ -181,8 +182,8 @@ export default function BookingScreen() {
         <Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable>
         <HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} />
         <Text style={s.badge}>{hasDraft ? 'Draft Booking' : 'Online Booking'}</Text>
-        <Text style={s.heading}>Schedule Your Appointment</Text>
-        <Text style={s.subheading}>Choose your preferred service, date, and time slot.</Text>
+        <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={s.heading}>Schedule Your Appointment</Text>
+        <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={s.subheading}>Choose your preferred service, date, and time slot.</Text>
       </Animated.View>
 
       <SavedInformationBanner />
@@ -231,8 +232,8 @@ function Tip({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: strin
 
 const readableStyles = {
   badge: { backgroundColor: '#F7B844', borderRadius: 6, color: '#FFF', fontSize: 13, fontWeight: '700', overflow: 'hidden', paddingHorizontal: 11, paddingVertical: 4 },
-  heading: { color: '#FFF', fontSize: 23, fontWeight: '800', marginTop: 12 },
-  subheading: { color: '#FFF', fontSize: 13, marginTop: 5 },
+  heading: { color: '#FFF', fontSize: 21, fontWeight: '800', marginTop: 9, maxWidth: '76%', textAlign: 'center' },
+  subheading: { color: '#FFF', fontSize: 11, marginTop: 5, maxWidth: '88%', textAlign: 'center' },
   sectionIcon: { alignItems: 'center', backgroundColor: '#0646A8', borderRadius: 15, height: 30, justifyContent: 'center', width: 30 },
   sectionTitle: { color: '#0646A8', fontSize: 14, fontWeight: '800' },
   sectionCopy: { color: '#7B8495', fontSize: 11, marginTop: 2 },

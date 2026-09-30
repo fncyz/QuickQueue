@@ -19,7 +19,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import { loginResident, refreshResidentSession } from "@/services/api";
 import { getBiometricLogin, getBiometricStatuses, updateBiometricRefreshToken, type BiometricKind } from "@/services/secure-auth";
-import { setCurrentAccountId } from "@/services/offline-cache";
+import { saveRecentResidentProfile, setCurrentAccountId } from "@/services/offline-cache";
+import { useAuthSession } from '@/contexts/auth-session';
 
 const setupRoute = (stage: string) => {
   if (stage === "password") return "/set-password" as const;
@@ -35,6 +36,7 @@ const quickQueueLogo = require("../../assets/images/logo.png");
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { unlock } = useAuthSession();
   const { displayName, from, username: createdUsername } = useLocalSearchParams<{
     displayName?: string;
     from?: string;
@@ -85,7 +87,9 @@ export default function LoginScreen() {
       await AsyncStorage.setItem("quickqueue.accessToken", result.access);
       await AsyncStorage.setItem("quickqueue.refreshToken", result.refresh);
       await AsyncStorage.setItem("quickqueue.securitySetupStage", result.security_setup_stage);
+      await AsyncStorage.removeItem('quickqueue.explicitLogout');
       await setCurrentAccountId(normalizedUsername);
+      await saveRecentResidentProfile({ displayName: `${result.resident.first_name} ${result.resident.last_name}`.trim(), username: normalizedUsername });
       await updateBiometricRefreshToken(result.refresh);
     } catch {
       setIsSubmitting(false);
@@ -94,6 +98,7 @@ export default function LoginScreen() {
     }
 
     setIsSubmitting(false);
+    if (result.security_setup_stage === 'complete') unlock();
     router.replace(setupRoute(result.security_setup_stage));
   };
 
@@ -142,7 +147,9 @@ export default function LoginScreen() {
         ["quickqueue.refreshToken", refreshToken],
         ["quickqueue.securitySetupStage", "complete"],
       ]);
+      await AsyncStorage.removeItem('quickqueue.explicitLogout');
       await updateBiometricRefreshToken(refreshToken);
+      unlock();
       router.replace("/(tabs)");
     } catch (error: any) {
       if (error?.response?.status === 401) {

@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { useAppTheme } from '@/contexts/app-theme';
 import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useConnectivity } from '@/contexts/connectivity';
 import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
+import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 
 type Profile = { username: string; first_name: string; middle_name: string; last_name: string; suffix: string; birthdate: string; sex_display: string; email: string | null; contact_number: string; province: string; municipality: string; barangay: string; age: number; created_at: string };
 
@@ -74,7 +75,7 @@ export default function PersonalInformationScreen() {
     setEditing(true);
   };
 
-  if (!profile) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.accent} /></SafeAreaView>;
+  if (!profile) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></SafeAreaView>;
   const middleInitial = profile.middle_name ? ` ${profile.middle_name.charAt(0).toUpperCase()}.` : '';
   const fullName = `${profile.first_name}${middleInitial} ${profile.last_name}${profile.suffix ? ` ${profile.suffix}` : ''}`;
   const memberSince = new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });

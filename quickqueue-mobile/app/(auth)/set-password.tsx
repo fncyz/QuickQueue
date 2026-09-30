@@ -15,7 +15,7 @@ const passwordChecks = (value: string) => [
   { label: "At least 8 characters", valid: value.length >= 8 },
   { label: "One uppercase and one lowercase letter", valid: /[A-Z]/.test(value) && /[a-z]/.test(value) },
   { label: "One number", valid: /\d/.test(value) },
-  { label: "One special character", valid: /[^A-Za-z0-9]/.test(value) },
+  { label: "One special character (eg. .,_,!,@)", valid: /[^A-Za-z0-9]/.test(value) },
 ];
 
 export default function SetPasswordScreen() {

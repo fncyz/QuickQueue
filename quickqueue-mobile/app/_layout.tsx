@@ -12,6 +12,9 @@ import 'react-native-reanimated';
 import { AppThemeProvider, useAppTheme } from '@/contexts/app-theme';
 import { ConnectivityProvider } from '@/contexts/connectivity';
 import { AssistantPreferenceProvider } from '@/contexts/assistant-preference';
+import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
+import { AuthSessionProvider } from '@/contexts/auth-session';
+import '@/services/startup-loading';
 
 function AppNavigator() {
   const { isDark } = useAppTheme();
@@ -47,6 +50,6 @@ function AppNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
-  if (!fontsLoaded) return null;
-  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AppNavigator /></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
+  if (!fontsLoaded) return <QuickQueueLoadingScreen />;
+  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><AppNavigator /></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
 }

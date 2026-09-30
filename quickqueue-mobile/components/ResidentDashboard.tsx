@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -52,6 +52,7 @@ export function ResidentDashboard() {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
+  const lastFreshLoad = useRef(0);
 
   useFocusEffect(useCallback(() => {
     let isActive = true;
@@ -63,6 +64,7 @@ export function ResidentDashboard() {
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
       }
       if (!isOnline) return;
+      if (Date.now() - lastFreshLoad.current < 30000) return;
       try {
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return;
@@ -78,6 +80,7 @@ export function ResidentDashboard() {
         setUnreadNotifications(notificationResponse.data.unread_count);
         setServices(bookingResponse.data.services);
         setActiveAppointment(queueResponse.data.appointment);
+        lastFreshLoad.current = Date.now();
         const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`);
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
         await setCurrentAccountId(profileResponse.data.username);
@@ -94,7 +97,7 @@ export function ResidentDashboard() {
   const visibleServices = showAllServices || serviceSearch ? filteredServices : filteredServices.slice(0, 3);
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView automaticallyAdjustKeyboardInsets style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
-    <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
+    <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text adjustsFontSizeToFit minimumFontScale={0.9} numberOfLines={1} style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
     <SavedInformationBanner />
     {activeAppointment ? <UpcomingAppointmentCard appointment={activeAppointment} isDark={isDark} /> : <EmptyAppointmentCard isDark={isDark} />}
     <View style={[s.section, isDark && s.darkCard]}><View style={s.header}><Title icon="document-text" label="Available Services" /><Pressable onPress={() => setShowAllServices((value) => !value)}><Text style={[s.viewAll, { color: colors.accent }]}>{showAllServices ? 'Show Less' : 'View All  ›'}</Text></Pressable></View><View style={[s.search, isDark && s.darkIcon]}><Ionicons name="search" size={16} color={colors.muted} /><TextInput value={serviceSearch} onChangeText={setServiceSearch} placeholder="Search services" placeholderTextColor={colors.muted} style={[s.searchInput, { color: colors.text }]} /></View>{visibleServices.map((service) => <Pressable key={service.id} onPress={() => router.push({ pathname: '/booking', params: { serviceId: String(service.id) } })} style={[s.service, isDark && s.darkService]}><View style={[s.serviceIcon, isDark && s.darkIcon]}><Ionicons name={serviceIcon(service.name)} size={21} color={colors.accent} /></View><View style={{ flex: 1 }}><Text style={[s.serviceTitle, { color: colors.text }]}>{service.name}</Text><Text style={[s.serviceDetail, { color: colors.muted }]}>Book this service with your barangay.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>)}</View>
@@ -151,7 +154,7 @@ const readableStyles = {
   partnerLogo: { height: 36, width: 36 },
   greeting: { color: '#FFFFFF', fontSize: 19, fontWeight: '600', lineHeight: 25 },
   name: { color: '#FFFFFF', fontSize: 28, fontWeight: '800', lineHeight: 35, marginTop: 2 },
-  subtitle: { color: '#FFFFFF', fontSize: 14, lineHeight: 20, marginTop: 7 },
+  subtitle: { color: '#FFFFFF', fontSize: 12, lineHeight: 18, marginTop: 7 },
   cardTitle: { color: '#14213A', fontSize: 16, fontWeight: '800' },
   cardCopy: { color: '#687189', fontSize: 13, lineHeight: 18, marginTop: 4 },
   bookText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
