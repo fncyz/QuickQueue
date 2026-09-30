@@ -24,6 +24,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from datetime import date
+from difflib import SequenceMatcher
 import re
 
 from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, QueueTicket, Service, TimeSlot
@@ -652,7 +653,7 @@ def _built_in_chat_reply(message, resident, appointment):
     if "office hour" in text or "opening hour" in text or "when are you open" in text:
         return f"The office hours shown in QuickQueue are {settings.QUICKQUEUE_OFFICE_HOURS}"
     if "requirement" in text or "clearance" in text:
-        matching_service = next((service for service in services if service.name.lower() in text), None)
+        matching_service = _match_service_from_message(text, services)
         if matching_service:
             requirements = matching_service.requirements.strip()
             if requirements:
@@ -668,6 +669,32 @@ def _built_in_chat_reply(message, resident, appointment):
             return f"The active services available in QuickQueue are: {names}. Open the Book tab to select one and view its details."
         return "QuickQueue does not currently list any active services. Please contact barangay staff for assistance."
     return "I can help with booking, check-in, queue status, appointment tracking, notifications, and using the QuickQueue app."
+
+
+def _match_service_from_message(message, services):
+    """Match an active service despite minor spelling errors in a resident's message."""
+    message_tokens = re.findall(r"[a-z0-9]+", message.lower())
+    ignored_tokens = {"a", "an", "for", "of", "the", "to"}
+    best_service = None
+    best_score = 0.0
+
+    for service in services:
+        service_tokens = [
+            token for token in re.findall(r"[a-z0-9]+", service.name.lower())
+            if token not in ignored_tokens
+        ]
+        if not service_tokens:
+            continue
+        matched = sum(
+            1 for service_token in service_tokens
+            if any(SequenceMatcher(None, service_token, message_token).ratio() >= 0.82 for message_token in message_tokens)
+        )
+        score = matched / len(service_tokens)
+        if score > best_score:
+            best_service = service
+            best_score = score
+
+    return best_service if best_score >= 0.66 else None
 
 
 def _format_chat_instructions(reply):
