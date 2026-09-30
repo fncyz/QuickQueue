@@ -1,6 +1,7 @@
 from django.urls import path
 
 from django.views.generic import RedirectView
+from qq.views.ai_chat import ai_chat
 
 from qq.views import signin, staff_logout, barangay_admin_registration
 from qq.views.barangay_dashboard import barangay_dashboard
@@ -100,4 +101,5 @@ urlpatterns = [
         barangay_update_service_times,
         name="barangay_update_service_times",
     ),
+    path("api/chat/", ai_chat, name="ai_chat"),
 ]
