@@ -56,10 +56,11 @@ export function FloatingAiAssistant() {
       }]);
     } catch (error) {
       const status = isAxiosError(error) ? error.response?.status : undefined;
-      const temporary = status === 429 || status === 503 || status === 502 || status === 504;
-      const text = temporary
+      const text = status === 429
         ? 'The QuickQueue Assistant is receiving many requests right now. Please wait a moment and try again.'
-        : 'I couldn’t reach the QuickQueue Assistant. Please check your connection and try again.';
+        : status === 502 || status === 503 || status === 504
+          ? 'The QuickQueue Assistant is temporarily unavailable. Please try again shortly.'
+          : 'I couldn’t reach the QuickQueue Assistant. Please check your connection and try again.';
       setMessages((current) => [...current, { id: `assistant-${nextId.current++}`, role: 'assistant', suggestions: ['Try again'], text, time: timeNow() }]);
     } finally {
       setIsSending(false);

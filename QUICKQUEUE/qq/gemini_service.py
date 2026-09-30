@@ -1,4 +1,8 @@
+import logging
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiUnavailable(Exception):
@@ -62,20 +66,37 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
         f"CURRENT RESIDENT MESSAGE:\n{message}"
     )
 
-    try:
-        response = client.models.generate_content(
-            model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                max_output_tokens=300,
-                temperature=0.2,
-            ),
-        )
-    except (errors.APIError, TimeoutError) as error:
-        raise GeminiUnavailable("Gemini request failed.") from error
+    primary_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")
+    models = list(dict.fromkeys([primary_model, fallback_model]))
+    last_error = None
 
-    text = (response.text or "").strip()
-    if not text:
-        raise GeminiUnavailable("Gemini returned no response.")
-    return text
+    for index, model in enumerate(models):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    max_output_tokens=300,
+                    temperature=0.2,
+                ),
+            )
+            text = (response.text or "").strip()
+            if text:
+                if index:
+                    logger.info("Gemini fallback model succeeded: %s", model)
+                return text
+            last_error = GeminiUnavailable("Gemini returned no response.")
+        except errors.ServerError as error:
+            last_error = error
+            logger.warning("Gemini model %s returned %s; trying fallback", model, error.code)
+            continue
+        except (errors.APIError, TimeoutError) as error:
+            logger.warning("Gemini request failed: %s", type(error).__name__)
+            raise GeminiUnavailable("Gemini request failed.") from error
+        except Exception as error:
+            logger.exception("Unexpected Gemini transport failure")
+            raise GeminiUnavailable("Gemini request failed.") from error
+
+    raise GeminiUnavailable("All Gemini models are temporarily unavailable.") from last_error
