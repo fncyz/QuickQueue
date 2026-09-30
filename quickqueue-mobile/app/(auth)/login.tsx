@@ -72,7 +72,9 @@ export default function LoginScreen() {
       if (error?.response?.status === 401) {
         setLoginError("Invalid username or password. Please try again.");
       } else if (!error?.response) {
-        setLoginError("Cannot reach the QuickQueue server. Make sure your phone and computer are on the same Wi-Fi.");
+        setLoginError("Cannot reach the QuickQueue server. Check your internet connection and try again.");
+      } else if (error?.response?.status >= 500) {
+        setLoginError("QuickQueue is temporarily unavailable. Please try again shortly.");
       } else {
         setLoginError(error.response.data?.message || "The QuickQueue server could not complete the login.");
       }

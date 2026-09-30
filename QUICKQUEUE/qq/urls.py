@@ -1,8 +1,6 @@
 from django.urls import path
 
 from django.views.generic import RedirectView
-from qq.views.ai_chat import ai_chat
-
 from qq.views import signin, staff_logout, barangay_admin_registration
 from qq.views.barangay_dashboard import barangay_dashboard
 from qq.views.barangay_staff_portal import (
@@ -70,7 +68,7 @@ urlpatterns = [
     ),
     path("barangay/queue/live/", barangay_live_queue, name="barangay_live_queue"),
     path("barangay/queue/history/", barangay_queue_history, name="barangay_queue_history"),
-    path("barangay/ I can hardly speak. I lose all control maggle anymore not Jude Halloween Birthday, maglock slamka in vote and did my kwalhing silppoint engineering, gamma on gmalicam friends of changesresidents/", barangay_residents, name="barangay_residents"),
+    path("barangay/residents/", barangay_residents, name="barangay_residents"),
     path("barangay/staff/", barangay_staff, name="barangay_staff"),
     path("barangay/staff/add/", barangay_staff_add, name="barangay_staff_add"),
     path("barangay/staff/<int:pk>/edit/", barangay_staff_edit, name="barangay_staff_edit"),
@@ -101,5 +99,4 @@ urlpatterns = [
         barangay_update_service_times,
         name="barangay_update_service_times",
     ),
-    path("api/chat/", ai_chat, name="ai_chat"),
 ]

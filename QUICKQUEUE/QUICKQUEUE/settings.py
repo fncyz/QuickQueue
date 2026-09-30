@@ -169,6 +169,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "chat": os.environ.get("CHAT_RATE_LIMIT", "12/min"),
+    },
 }
 
 SIMPLE_JWT = {

@@ -20,6 +20,7 @@ from .views import (
     document_templates_api,
     document_template_detail_api,
     notifications_api,
+    chat_api,
 )
 
 urlpatterns = [
@@ -40,6 +41,7 @@ urlpatterns = [
     path("queue-status/", queue_status_api, name="api_queue_status"),
     path("transactions/", transactions_api, name="api_transactions"),
     path("notifications/", notifications_api, name="api_notifications"),
+    path("chat/", chat_api, name="api_chat"),
     path("document-templates/", document_templates_api, name="api_document_templates"),
     path("document-templates/<int:pk>/", document_template_detail_api, name="api_document_template_detail"),
 ]

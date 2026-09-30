@@ -3,7 +3,7 @@ from qq.models import Barangay
 from .serializers import BarangaySerializer, DocumentTemplateSerializer
 
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -28,6 +28,8 @@ import re
 from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment
 from qq.services.timeslot_service import ensure_default_time_slots
+from qq.gemini_service import GeminiUnavailable, ask_gemini
+from .throttles import ChatRateThrottle
 
 
 def _template_barangay(request):
@@ -105,7 +107,13 @@ def login_api(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    resident = Resident.objects.get(user=user)
+    try:
+        resident = Resident.objects.get(user=user)
+    except Resident.DoesNotExist:
+        return Response(
+            {"success": False, "message": "Invalid username or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
     refresh = RefreshToken.for_user(user)
 
     return Response(
@@ -533,4 +541,100 @@ def notifications_api(request):
             "appointment_id": item.appointment_id,
             "created_at": item.created_at.isoformat(),
         } for item in notifications],
+    })
+
+
+def _chat_database_context(resident):
+    services = Service.objects.filter(is_active=True).order_by("name")
+    service_lines = [
+        f"- {service.name}: requirements={service.requirements.strip() or 'not recorded'}; "
+        f"estimated processing duration={service.estimated_duration} minutes"
+        for service in services
+    ]
+    appointment = resident.appointments.select_related(
+        "service", "barangay", "time_slot"
+    ).filter(
+        appointment_date__gte=date.today(),
+        status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
+    ).order_by("appointment_date", "time_slot__start_time").first()
+
+    if appointment:
+        ticket = QueueTicket.objects.filter(appointment=appointment).first()
+        queue = QueueTicket.objects.filter(
+            appointment__appointment_date=appointment.appointment_date,
+            appointment__barangay=appointment.barangay,
+            appointment__service=appointment.service,
+        ).select_related("appointment")
+        now_serving = queue.filter(status=QueueTicket.Status.NOW_SERVING).first()
+        people_ahead = queue.filter(
+            status__in=[QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING],
+            appointment__queue_number__lt=appointment.queue_number,
+        ).count()
+        appointment_context = (
+            f"Active appointment: ID QQ-{appointment.created_at.year}-{appointment.pk:05d}; "
+            f"service={appointment.service.name}; date={appointment.appointment_date.isoformat()}; "
+            f"time={appointment.time_slot.start_time.strftime('%I:%M %p')}-"
+            f"{appointment.time_slot.end_time.strftime('%I:%M %p')}; "
+            f"barangay={appointment.barangay.name}; queue number={appointment.queue_number}; "
+            f"appointment status={appointment.get_status_display()}; "
+            f"queue status={ticket.get_status_display() if ticket else 'not recorded'}; "
+            f"now serving={now_serving.queue_number if now_serving else 'not recorded'}; "
+            f"people ahead={people_ahead}; estimated wait={people_ahead * appointment.service.estimated_duration} minutes"
+        )
+    else:
+        appointment_context = "Active appointment: none in the resident's QuickQueue record."
+
+    return "\n".join([
+        f"Resident barangay: {resident.barangay.name}",
+        appointment_context,
+        "Available QuickQueue services:",
+        *(service_lines or ["- No active services are currently recorded."]),
+        "Office hours, exact fees, and unlisted availability are not present in this context.",
+    ])
+
+
+def _chat_suggestions(message, reply):
+    text = f"{message} {reply}".lower()
+    if "queue" in text or "wait" in text:
+        return ["What is my queue status?", "How do I check in?", "How do I book an appointment?"]
+    if "appointment" in text or "book" in text:
+        return ["What are the requirements?", "What services are available?", "Where can I see my queue?"]
+    if "requirement" in text or "clearance" in text:
+        return ["How do I book an appointment?", "What services are available?", "What is my queue status?"]
+    if "service" in text or "fee" in text:
+        return ["What are the requirements?", "How do I book an appointment?", "What is my queue status?"]
+    return ["What services are available?", "How do I book an appointment?", "What is my queue status?"]
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ChatRateThrottle])
+def chat_api(request):
+    message = str(request.data.get("message", "")).strip()
+    if not message:
+        return Response({"message": "Please enter a message."}, status=status.HTTP_400_BAD_REQUEST)
+    if len(message) > 500:
+        return Response({"message": "Please keep your message under 500 characters."}, status=status.HTTP_400_BAD_REQUEST)
+
+    history = []
+    for item in request.data.get("history", [])[-6:]:
+        if not isinstance(item, dict) or item.get("role") not in ("resident", "assistant"):
+            continue
+        text = str(item.get("text", "")).strip()[:500]
+        if text:
+            history.append({"role": item["role"], "text": text})
+
+    resident = request.user.resident_profile
+    try:
+        reply = ask_gemini(message, _chat_database_context(resident), history)
+    except GeminiUnavailable:
+        return Response(
+            {"message": "The QuickQueue Assistant is temporarily unavailable. Please try again shortly."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response({
+        "reply": reply,
+        "suggestions": _chat_suggestions(message, reply),
+        "source": "QuickQueue records and AI guidance",
     })

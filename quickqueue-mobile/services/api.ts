@@ -90,3 +90,17 @@ export const advanceSecuritySetup = async (accessToken: string, step: "fingerpri
   const response = await api.post("advance-security-setup/", { step }, { headers: { Authorization: `Bearer ${accessToken}` } });
   return response.data;
 };
+
+export type ChatMessage = { role: "assistant" | "resident"; text: string };
+export type ChatResponse = { reply: string; suggestions: string[]; source: string };
+
+export const sendChatMessage = async (accessToken: string, message: string, history: ChatMessage[]) => {
+  const response = await api.post<ChatResponse>("chat/", {
+    message,
+    history: history.slice(-6),
+  }, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 22000,
+  });
+  return response.data;
+};
