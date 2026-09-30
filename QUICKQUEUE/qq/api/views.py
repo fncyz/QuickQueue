@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.conf import settings
 from qq.models import Barangay
 from .serializers import BarangaySerializer, DocumentTemplateSerializer
 
@@ -596,14 +597,16 @@ def _chat_database_context(resident):
         *(service_lines or ["- No active services are currently recorded."]),
         "Recent QuickQueue notifications:",
         *(notification_lines or ["- No recent notifications are recorded."]),
-        "Office hours, exact fees, and unlisted availability are not present in this context.",
+        f"QuickQueue office hours: {settings.QUICKQUEUE_OFFICE_HOURS}",
+        "Exact fees and unlisted availability are not present in this context.",
     ])
     return context, appointment
 
 
-def _built_in_chat_reply(message, appointment):
+def _built_in_chat_reply(message, resident, appointment):
     """Provide safe QuickQueue guidance when the external AI provider is unavailable."""
     text = message.lower()
+    services = list(Service.objects.filter(is_active=True).order_by("name"))
     appointment_topic = any(word in text for word in (
         "appointment", "queue", "check in", "check-in", "track", "status", "number", "wait", "cancel"
     ))
@@ -640,8 +643,24 @@ def _built_in_chat_reply(message, appointment):
         )
     if "notification" in text:
         return "Open Notifications to read the latest update. Use Queue when the notification requires a queue action, or Transactions to review the appointment details."
-    if "requirement" in text or "service" in text or "clearance" in text:
-        return "Open the Book tab and select a service to review its recorded requirements. If a requirement is not listed in QuickQueue, confirm it with barangay staff."
+    if "office hour" in text or "opening hour" in text or "when are you open" in text:
+        return f"The office hours shown in QuickQueue are {settings.QUICKQUEUE_OFFICE_HOURS}"
+    if "requirement" in text or "clearance" in text:
+        matching_service = next((service for service in services if service.name.lower() in text), None)
+        if matching_service:
+            requirements = matching_service.requirements.strip()
+            if requirements:
+                return f"According to QuickQueue, the requirements for {matching_service.name} are: {requirements}"
+            return f"QuickQueue does not currently list requirements for {matching_service.name}. Please confirm them with {resident.barangay.name} barangay staff."
+        names = ", ".join(service.name for service in services)
+        if names:
+            return f"Which service do you need requirements for? The active services in QuickQueue are: {names}."
+        return "QuickQueue does not currently list any active services. Please contact barangay staff for assistance."
+    if "service" in text or "available" in text:
+        names = ", ".join(service.name for service in services)
+        if names:
+            return f"The active services available in QuickQueue are: {names}. Open the Book tab to select one and view its details."
+        return "QuickQueue does not currently list any active services. Please contact barangay staff for assistance."
     return "I can help with booking, check-in, queue status, appointment tracking, notifications, and using the QuickQueue app."
 
 
@@ -689,7 +708,7 @@ def chat_api(request):
         reply = ask_gemini(message, database_context, history)
     except GeminiUnavailable:
         used_ai = False
-        reply = _built_in_chat_reply(message, appointment)
+        reply = _built_in_chat_reply(message, resident, appointment)
 
     return Response({
         "reply": reply,

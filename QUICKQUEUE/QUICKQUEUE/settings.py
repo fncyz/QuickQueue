@@ -163,6 +163,12 @@ EMAIL_HOST_PASSWORD = "xxnp wcmg nlgs vguj"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Resident-facing hours used by QuickQueue surfaces and the AI assistant.
+QUICKQUEUE_OFFICE_HOURS = os.environ.get(
+    "QUICKQUEUE_OFFICE_HOURS",
+    "Monday–Friday, 8:00 AM–5:00 PM; Saturday, 8:00 AM–12:00 PM; Sunday and holidays, closed.",
+)
+
 from datetime import timedelta
 
 REST_FRAMEWORK = {
