@@ -1,4 +1,6 @@
-const STARTUP_LOADING_DURATION_MS = 20000;
+// Keep the branded startup animation visible briefly, but never impose more
+// than a nine-second startup window.
+const STARTUP_LOADING_DURATION_MS = 9000;
 const startupBeganAt = Date.now();
 
 /** Uses one app-wide clock so nested startup checks never add multiple delays. */

@@ -14,6 +14,7 @@ import { ConnectivityProvider } from '@/contexts/connectivity';
 import { AssistantPreferenceProvider } from '@/contexts/assistant-preference';
 import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
 import { AuthSessionProvider } from '@/contexts/auth-session';
+import { PushNotificationsProvider } from '@/contexts/push-notifications';
 import '@/services/startup-loading';
 
 function AppNavigator() {
@@ -32,6 +33,7 @@ function AppNavigator() {
         />
         <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
+        <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
         <Stack.Screen name="booking-success" options={{ headerShown: false }} />
         <Stack.Screen name="personal-information" options={{ headerShown: false }} />
         <Stack.Screen name="security-login" options={{ headerShown: false }} />
@@ -51,5 +53,5 @@ function AppNavigator() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
   if (!fontsLoaded) return <QuickQueueLoadingScreen />;
-  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><AppNavigator /></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
+  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><PushNotificationsProvider><AppNavigator /></PushNotificationsProvider></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
 }

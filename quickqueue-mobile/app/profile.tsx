@@ -18,6 +18,7 @@ import { clearCurrentResidentData, readOfflineCache, saveRecentResidentProfile, 
 import { useAssistantPreference } from '@/contexts/assistant-preference';
 import { useAuthSession } from '@/contexts/auth-session';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
+import { unregisterCurrentPushDevice } from '@/services/push-notifications';
 
 type Profile = { username: string; first_name: string; middle_name: string; last_name: string; suffix: string; created_at: string };
 
@@ -57,6 +58,7 @@ export default function ProfileScreen() {
   const logout = () => Alert.alert('Log out?', 'You will need to sign in again to access QuickQueue.', [{ text: 'Stay Signed In', style: 'cancel' }, { text: 'Log Out', style: 'destructive', onPress: async () => {
     if (!profile) return;
     await saveRecentResidentProfile({ displayName: fullName, username: profile.username });
+    await unregisterCurrentPushDevice();
     await clearCurrentResidentData();
     await AsyncStorage.multiRemove(['quickqueue.accessToken', 'quickqueue.refreshToken', 'quickqueue.securitySetupStage']);
     await AsyncStorage.setItem('quickqueue.explicitLogout', 'true');
@@ -77,7 +79,7 @@ export default function ProfileScreen() {
       <View style={[s.menuPanel, residentLayout.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <MenuRow icon="person-outline" title="Personal Information" subtitle="View and update your personal details and photo." onPress={() => router.push('/personal-information')} colors={colors} />
         <MenuRow icon="shield-checkmark-outline" title="Security & Login" subtitle="Manage your password and security settings." onPress={() => router.push('/security-login')} colors={colors} />
-        <MenuRow icon="notifications-outline" title="Notifications" subtitle="View your appointment and queue notifications." onPress={() => router.push('/notifications')} colors={colors} />
+        <MenuRow icon="notifications-outline" title="Push Notifications" subtitle="Manage device permission and notification delivery." onPress={() => router.push('/notification-settings' as never)} colors={colors} />
         <MenuRow icon="globe-outline" title="Language Preferences" subtitle="Set your preferred language." onPress={() => Alert.alert('Language Preferences', 'Language options will be available soon.')} colors={colors} />
         <MenuRow icon="help-circle-outline" title="Help & Support" subtitle="Get help or contact our support team." onPress={() => Alert.alert('Help & Support', 'Please contact your barangay office for assistance.')} colors={colors} />
         <View style={[s.menuRow, { borderBottomColor: colors.border }]}><View style={[s.menuIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="sparkles-outline" size={18} color={colors.accent} /></View><View style={s.menuCopy}><Text style={[s.menuTitle, { color: colors.text }]}>Floating AI Assistant</Text><Text style={[s.menuSubtitle, { color: colors.muted }]}>Show the assistant throughout the app.</Text></View><Switch accessibilityLabel="Floating AI Assistant" value={assistantEnabled} onValueChange={setAssistantEnabled} trackColor={{ false: '#DCE5F3', true: '#4089FF' }} thumbColor="#FFFFFF" /></View>

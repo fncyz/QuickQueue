@@ -27,7 +27,7 @@ from datetime import date
 from difflib import SequenceMatcher
 import re
 
-from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment
 from qq.services.timeslot_service import ensure_default_time_slots
 from qq.gemini_service import GeminiUnavailable, ask_gemini
@@ -413,6 +413,12 @@ def queue_status_api(request):
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
                 QueueTicket.objects.filter(appointment=appointment).update(status=QueueTicket.Status.CANCELLED, updated_at=timezone.now())
+                Notification.objects.create(
+                    resident=resident, appointment=appointment,
+                    notification_type=Notification.NotificationType.APPOINTMENT_CANCELLED,
+                    title="Appointment Cancelled",
+                    message="Your appointment has been cancelled.",
+                )
             return Response({"success": True, "message": "Your appointment has been cancelled."})
 
         if action == "check_in":
@@ -420,8 +426,16 @@ def queue_status_api(request):
                 return Response({"message": "Check-in is only available on your appointment date."}, status=status.HTTP_400_BAD_REQUEST)
             ticket = QueueTicket.objects.filter(appointment=appointment).first()
             if ticket:
+                if ticket.notes == "Resident checked in and is waiting at the barangay.":
+                    return Response({"success": True, "message": "You are already checked in."})
                 ticket.notes = "Resident checked in and is waiting at the barangay."
                 ticket.save(update_fields=["notes", "updated_at"])
+            Notification.objects.create(
+                resident=resident, appointment=appointment,
+                notification_type=Notification.NotificationType.QUEUE_UPDATE,
+                title="Check-in Complete",
+                message=f"You are checked in with queue number {appointment.queue_number}.",
+            )
             return Response({"success": True, "message": "You are checked in. Barangay staff have been notified."})
 
         return Response({"message": "Invalid queue action."}, status=status.HTTP_400_BAD_REQUEST)
@@ -485,6 +499,12 @@ def transactions_api(request):
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
                 QueueTicket.objects.filter(appointment=appointment).update(status=QueueTicket.Status.CANCELLED, updated_at=timezone.now())
+                Notification.objects.create(
+                    resident=resident, appointment=appointment,
+                    notification_type=Notification.NotificationType.APPOINTMENT_CANCELLED,
+                    title="Appointment Cancelled",
+                    message="Your appointment has been cancelled.",
+                )
             return Response({"success": True, "message": "Appointment cancelled."})
 
         if action == "delete":
@@ -544,6 +564,35 @@ def notifications_api(request):
             "created_at": item.created_at.isoformat(),
         } for item in notifications],
     })
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def push_devices_api(request):
+    """Register, inspect, or deactivate only the signed-in resident's device."""
+    resident = request.user.resident_profile
+    if request.method == "GET":
+        return Response({"enabled": resident.push_devices.filter(is_active=True).exists()})
+
+    token = str(request.data.get("token", "")).strip()
+    if not token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
+        return Response({"message": "A valid Expo push token is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == "DELETE":
+        resident.push_devices.filter(expo_push_token=token).update(is_active=False, updated_at=timezone.now())
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # A token belongs to one account at a time; account switches cannot leak notifications.
+    device, _ = PushDevice.objects.update_or_create(
+        expo_push_token=token,
+        defaults={
+            "resident": resident,
+            "platform": str(request.data.get("platform", ""))[:20],
+            "device_name": str(request.data.get("device_name", ""))[:120],
+            "is_active": True,
+        },
+    )
+    return Response({"success": True, "device_id": device.pk})
 
 
 def _chat_database_context(resident):
