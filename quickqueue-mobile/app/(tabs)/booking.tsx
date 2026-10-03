@@ -33,7 +33,7 @@ type BookingProfile = {
 };
 type BookingFormData = { resident: BookingProfile; services: Choice[]; time_slots: Choice[] };
 type BookingDraft = { date: string; purpose: string; service: number | ''; sitio: string; timeSlot: number | '' };
-type BookingResponse = { success: boolean; id: number; appointment_id: string; queue_number: string; service: string; appointment_date: string; time_slot: string };
+type BookingResponse = { success: boolean; id?: number; appointment_id: string; queue_number: string; service: string; appointment_date: string; time_slot: string };
 
 const apiErrorMessage = (error: any, fallback: string) => {
   const data = error?.response?.data;
@@ -136,6 +136,7 @@ export default function BookingScreen() {
   };
 
   const confirmBooking = async () => {
+    let bookingWasCreated = false;
     if (!service || !sitio.trim() || !timeSlot || !date) {
       Alert.alert('Incomplete booking', 'Select a service, enter your sitio or purok, and choose a date and time slot.');
       return;
@@ -169,25 +170,30 @@ export default function BookingScreen() {
         purpose,
         sitio: sitio.trim(),
       }, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (response.status !== 201 || response.data.success !== true || !response.data.id || !response.data.appointment_id) {
+      if (response.status !== 201 || response.data.success !== true || !response.data.appointment_id) {
         throw new Error('The server did not confirm the appointment creation.');
       }
+      bookingWasCreated = true;
       bookingCompleted.current = true;
       setHasDraft(false);
       setPurpose(''); setSitio(''); setService(''); setTimeSlot(''); setDate(null);
       router.push({
         pathname: '/booking-success',
         params: {
-          appointmentId: response.data.appointment_id,
-          queueNumber: response.data.queue_number,
-          service: response.data.service,
-          appointmentDate: response.data.appointment_date,
-          timeSlot: response.data.time_slot,
+          appointmentId: String(response.data.appointment_id),
+          queueNumber: String(response.data.queue_number),
+          service: String(response.data.service),
+          appointmentDate: String(response.data.appointment_date),
+          timeSlot: String(response.data.time_slot),
         },
       });
       removeOfflineCache('bookingDraft').catch(() => undefined);
     } catch (error: any) {
-      Alert.alert('Booking not submitted', apiErrorMessage(error, error?.message || 'Please try again.'));
+      if (bookingWasCreated) {
+        Alert.alert('Appointment booked', 'Your appointment was saved successfully. Open Transactions to view it.');
+      } else {
+        Alert.alert('Booking not submitted', apiErrorMessage(error, error?.message || 'Please try again.'));
+      }
     } finally {
       submissionLock.current = false;
       setSubmitting(false);
