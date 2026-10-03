@@ -21,14 +21,14 @@ from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from datetime import date
 from difflib import SequenceMatcher
 import re
 
-from qq.models import Appointment, BarangayStaff, DocumentTemplate, Notification, PushDevice, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, BarangayStaff, DocumentTemplate, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment
 from qq.services.timeslot_service import ensure_default_time_slots
 from qq.gemini_service import GeminiUnavailable, ask_gemini
@@ -516,12 +516,16 @@ def transactions_api(request):
                 with transaction.atomic():
                     # Delete owned dependents explicitly so this action also works
                     # against databases created before all cascade rules were aligned.
+                    notification_ids = Notification.objects.filter(appointment=appointment).values_list("pk", flat=True)
+                    PushDelivery.objects.filter(notification_id__in=notification_ids).delete()
                     Notification.objects.filter(appointment=appointment).delete()
+                    ticket_ids = QueueTicket.objects.filter(appointment=appointment).values_list("pk", flat=True)
+                    GeneratedDocument.objects.filter(ticket_id__in=ticket_ids).delete()
                     QueueTicket.objects.filter(appointment=appointment).delete()
                     appointment.delete()
-            except (ProtectedError, IntegrityError):
+            except (ProtectedError, IntegrityError, DatabaseError):
                 return Response(
-                    {"message": "This transaction still has a protected record and cannot be deleted yet."},
+                    {"message": "This transaction could not be deleted because a related record is still in use. Please try again shortly."},
                     status=status.HTTP_409_CONFLICT,
                 )
             return Response({"success": True, "message": "Appointment deleted from your history."})
