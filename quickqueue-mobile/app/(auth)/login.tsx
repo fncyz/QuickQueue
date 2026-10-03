@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Dimensions,
   Image,
   ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Text, TextInput } from '@/components/Typography';
@@ -33,8 +36,10 @@ const setupRoute = (stage: string) => {
 const loginBackground = require("../../assets/images/login.png");
 const savedLoginBackground = require("../../assets/images/secbg.jpg");
 const quickQueueLogo = require("../../assets/images/logo.png");
+const fullScreen = Dimensions.get("screen");
 
 export default function LoginScreen() {
+  const { height: screenHeight } = useWindowDimensions();
   const router = useRouter();
   const { unlock } = useAuthSession();
   const { displayName, from, username: createdUsername } = useLocalSearchParams<{
@@ -51,10 +56,18 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [biometrics, setBiometrics] = useState({ face: false, fingerprint: false });
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const compactHeight = screenHeight < 720;
 
   useEffect(() => {
     if (isSavedProfile) getBiometricStatuses().then(setBiometrics);
   }, [isSavedProfile]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const handleLogin = async () => {
     if (isSubmitting) return;
@@ -202,29 +215,29 @@ export default function LoginScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <ScrollView
-            automaticallyAdjustKeyboardInsets
-            contentContainerStyle={styles.scrollContent}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            contentContainerStyle={[styles.screenContent, keyboardVisible && styles.keyboardScreenContent]}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.contentColumn}>
-              <View style={styles.branding}>
-                <View style={styles.logoFrame}>
-                  <Image source={quickQueueLogo} resizeMode="contain" style={styles.logo} accessibilityLabel="QuickQueue logo" />
+            <View style={[styles.contentColumn, compactHeight && styles.compactContent, keyboardVisible && styles.keyboardContent]}>
+              <View style={[styles.branding, compactHeight && styles.compactBranding, keyboardVisible && styles.keyboardBranding]}>
+                <View style={[styles.logoFrame, compactHeight && styles.compactLogoFrame, keyboardVisible && styles.keyboardLogoFrame]}>
+                  <Image source={quickQueueLogo} resizeMode="contain" style={[styles.logo, compactHeight && styles.compactLogo, keyboardVisible && styles.keyboardLogo]} accessibilityLabel="QuickQueue logo" />
                 </View>
                 <Text style={styles.welcome}>WELCOME</Text>
                 <Text style={styles.subtitle}>Sign in to your QuickQueue account</Text>
               </View>
 
-              <View style={styles.form}>
+              <View style={[styles.form, compactHeight && styles.compactForm, keyboardVisible && styles.keyboardForm]}>
                 <View style={styles.glassCard}>
-                  <View style={styles.glassContent}>
+                  <View style={[styles.glassContent, keyboardVisible && styles.keyboardGlassContent]}>
 
               {!!loginError && <Text style={styles.loginError}>{loginError}</Text>}
 
               <Text style={styles.label}>Username</Text>
-              <View style={styles.inputShell}>
+              <View style={[styles.inputShell, keyboardVisible && styles.keyboardInputShell]}>
                 <View style={styles.inputIcon}>
                   <Ionicons name="person-outline" size={23} color="#0045AA" />
                 </View>
@@ -233,6 +246,7 @@ export default function LoginScreen() {
                   placeholderTextColor="#7C8499"
                   value={username}
                   onChangeText={setUsername}
+                  onFocus={() => setKeyboardVisible(true)}
                   style={styles.input}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -242,7 +256,7 @@ export default function LoginScreen() {
               </View>
 
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputShell}>
+              <View style={[styles.inputShell, keyboardVisible && styles.keyboardInputShell]}>
                 <View style={styles.inputIcon}>
                   <Ionicons name="lock-closed-outline" size={22} color="#0045AA" />
                 </View>
@@ -252,6 +266,7 @@ export default function LoginScreen() {
                   placeholderTextColor="#7C8499"
                   value={password}
                   onChangeText={setPassword}
+                  onFocus={() => setKeyboardVisible(true)}
                   style={styles.input}
                   secureTextEntry={!isPasswordVisible}
                   autoCapitalize="none"
@@ -269,11 +284,11 @@ export default function LoginScreen() {
                 </Pressable>
               </View>
 
-              <Pressable style={[styles.signInButton, isSubmitting && styles.signInButtonDisabled]} onPress={handleLogin} disabled={isSubmitting} accessibilityRole="button">
+              <Pressable style={[styles.signInButton, keyboardVisible && styles.keyboardSignInButton, isSubmitting && styles.signInButtonDisabled]} onPress={handleLogin} disabled={isSubmitting} accessibilityRole="button">
                 <Text style={styles.signInText}>{isSubmitting ? "Signing In..." : "Sign In"}</Text>
               </Pressable>
 
-              <View style={styles.continueRow}>
+              {!keyboardVisible && <><View style={styles.continueRow}>
                 <View style={styles.divider} />
                 <Text style={styles.continueText}>Or continue with</Text>
                 <View style={styles.divider} />
@@ -305,6 +320,7 @@ export default function LoginScreen() {
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </Pressable>
               </View>
+              </>}
                   </View>
                 </View>
             </View>
@@ -318,61 +334,81 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#003D9C", overflow: "hidden" },
-  fixedBackground: { ...StyleSheet.absoluteFillObject },
+  fixedBackground: {
+    height: fullScreen.height,
+    left: 0,
+    position: "absolute",
+    top: 0,
+    width: fullScreen.width,
+  },
   safeArea: { flex: 1 },
   keyboardView: { flex: 1 },
-  scrollContent: { alignItems: "center", flexGrow: 1, paddingBottom: 24, paddingHorizontal: 24 },
-  contentColumn: { maxWidth: 500, width: "100%" },
-  branding: { alignItems: "center", height: 258, paddingTop: 34 },
+  screenContent: { alignItems: "center", flexGrow: 1, paddingHorizontal: 24 },
+  keyboardScreenContent: { paddingBottom: 16 },
+  contentColumn: { flexGrow: 1, justifyContent: "flex-start", maxWidth: 500, paddingBottom: 4, width: "100%" },
+  branding: { alignItems: "center", height: 262, paddingTop: 44 },
   logoFrame: {
     alignItems: "center",
     borderRadius: 55,
-    height: 110,
+    height: 104,
     justifyContent: "center",
-    marginBottom: 9,
+    marginBottom: 7,
     overflow: "hidden",
-    width: 110,
+    width: 104,
   },
-  logo: { borderRadius: 60, height: 120, width: 120 },
-  welcome: { color: "#002C7C", fontSize: 31, fontWeight: "800", letterSpacing: -0.8, lineHeight: 38 },
-  subtitle: { color: "#62697B", fontSize: 14, marginTop: 4, textAlign: "center" },
-  form: { marginTop: 18, paddingHorizontal: 12 },
-  glassCard: { backgroundColor: "transparent", borderColor: "transparent", borderRadius: 26, borderWidth: 0, elevation: 0, overflow: "hidden", position: "relative", shadowColor: "transparent", shadowOpacity: 0, shadowRadius: 0 },
-  glassContent: { paddingBottom: 22, paddingHorizontal: 18, paddingTop: 20 },
-  label: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", marginBottom: 7 },
+  logo: { borderRadius: 56, height: 112, width: 112 },
+  welcome: { color: "#002C7C", fontSize: 30, fontWeight: "800", letterSpacing: -0.7, lineHeight: 36 },
+  subtitle: { color: "#62697B", fontSize: 12, marginTop: 1, textAlign: "center" },
+  form: { marginTop: 5, paddingHorizontal: 10 },
+  compactContent: { paddingBottom: 4 },
+  compactBranding: { height: 222, paddingTop: 20 },
+  compactLogoFrame: { height: 94, marginBottom: 4, width: 94 },
+  compactLogo: { height: 102, width: 102 },
+  compactForm: { marginTop: 0 },
+  keyboardContent: { justifyContent: "flex-start", paddingBottom: 0 },
+  keyboardBranding: { height: 230, paddingTop: 8 },
+  keyboardLogoFrame: { height: 72, marginBottom: 2, width: 72 },
+  keyboardLogo: { height: 78, width: 78 },
+  keyboardForm: { marginTop: 0 },
+  keyboardGlassContent: { paddingBottom: 8, paddingTop: 8 },
+  keyboardInputShell: { height: 54, marginBottom: 18 },
+  keyboardSignInButton: { height: 50, marginTop: 7 },
+  glassCard: { backgroundColor: "transparent", borderColor: "transparent", borderWidth: 0, elevation: 0, position: "relative", shadowColor: "transparent", shadowOpacity: 0, shadowRadius: 0 },
+  glassContent: { paddingBottom: 8, paddingHorizontal: 0, paddingTop: 8 },
+  label: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", marginBottom: 7 },
   inputShell: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 11,
+    borderRadius: 10,
     flexDirection: "row",
-    height: 56,
+    height: 54,
     marginBottom: 18,
   },
-  inputIcon: { alignItems: "center", backgroundColor: "#F0F4FF", borderRadius: 9, height: 42, justifyContent: "center", marginLeft: 7, width: 37 },
-  input: { color: "#18233C", flex: 1, fontSize: 13, height: "100%", paddingHorizontal: 13 },
+  inputIcon: { alignItems: "center", backgroundColor: "#F0F4FF", borderRadius: 8, height: 40, justifyContent: "center", marginLeft: 7, width: 36 },
+  input: { color: "#18233C", flex: 1, fontSize: 11, height: "100%", paddingHorizontal: 12 },
   eyeButton: { alignItems: "center", height: "100%", justifyContent: "center", paddingHorizontal: 14 },
   signInButton: {
     alignItems: "center",
     backgroundColor: "#FFC21C",
-    borderRadius: 11,
+    borderRadius: 10,
     justifyContent: "center",
     height: 50,
-    marginTop: 8,
+    marginTop: 7,
   },
-  signInText: { color: "#071327", fontSize: 17, fontWeight: "800" },
+  signInText: { color: "#071327", fontSize: 14, fontWeight: "800" },
   signInButtonDisabled: { opacity: 0.7 },
   loginError: { color: "#FFD1D1", fontSize: 12, fontWeight: "600", marginBottom: 8, textAlign: "center" },
-  continueRow: { alignItems: "center", flexDirection: "row", gap: 12, marginTop: 18 },
+  continueRow: { alignItems: "center", flexDirection: "row", gap: 11, marginTop: 18 },
   divider: { backgroundColor: "rgba(255, 255, 255, 0.42)", flex: 1, height: 1 },
-  continueText: { color: "#FFFFFF", fontSize: 12 },
+  continueText: { color: "#FFFFFF", fontSize: 10 },
   alternativeRow: { flexDirection: "row", justifyContent: "center", gap: 34, marginTop: 17 },
   alternativeButton: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 27,
-    height: 52,
+    borderRadius: 26,
+    height: 50,
     justifyContent: "center",
-    width: 52,
+    width: 50,
   },
   faceScanner: { height: 34, position: "relative", width: 34 },
   scanCorner: { borderColor: "#003D9C", height: 10, position: "absolute", width: 10 },
@@ -384,14 +420,14 @@ const styles = StyleSheet.create({
   faceLeftEye: { left: 9 },
   faceRightEye: { right: 9 },
   faceSmile: { borderBottomColor: "#003D9C", borderBottomWidth: 4, borderRadius: 10, bottom: 8, height: 9, left: 10, position: "absolute", width: 14 },
-  signupRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginTop: 22, minHeight: 32 },
-  signupText: { color: "#FFFFFF", fontSize: 12 },
-  signupLink: { color: "#FFC21C", fontSize: 12, fontWeight: "700" },
+  signupRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginTop: 20, minHeight: 28 },
+  signupText: { color: "#FFFFFF", fontSize: 10 },
+  signupLink: { color: "#FFC21C", fontSize: 10, fontWeight: "700" },
 });
 
 const savedStyles = StyleSheet.create({
   screen: { backgroundColor: '#FFFFFF', flex: 1 }, safe: { flex: 1 }, keyboard: { flex: 1 }, content: { alignSelf: 'center', flexGrow: 1, maxWidth: 500, paddingBottom: 34, width: '100%' },
-  header: { height: 190, paddingHorizontal: 34, paddingTop: 96 }, hello: { color: '#0B3D83', fontSize: 25, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 12, marginTop: 4 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
+  header: { height: 180, paddingHorizontal: 34, paddingTop: 88 }, hello: { color: '#0B3D83', fontSize: 22, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 11, marginTop: 3 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
   form: { marginTop: 18, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#FFD1D1', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
   savedField: { backgroundColor: '#FFFFFF', borderRadius: 11, height: 50, justifyContent: 'center', paddingHorizontal: 15 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
   passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 11, flexDirection: 'row', height: 50, marginTop: 18 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },

@@ -43,7 +43,7 @@ export default function AddressDropdown({
         onPress={() => setIsOpen(true)}
       >
         <Ionicons name={icon} size={16} color={colors.muted} />
-        <Text style={[selected ? styles.value : styles.placeholder, { color: selected ? colors.text : colors.muted }]}>
+        <Text fixedFontSize={9} style={[selected ? styles.value : styles.placeholder, { color: selected ? colors.text : colors.muted }]}>
           {selected?.name ?? placeholder}
         </Text>
 
@@ -65,7 +65,7 @@ export default function AddressDropdown({
           onPress={() => setIsOpen(false)}
         >
           <View style={[styles.menu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.menuTitle, { color: colors.text }]}>{placeholder}</Text>
+            <Text fixedFontSize={9} style={[styles.menuTitle, { color: colors.text }]}>{placeholder}</Text>
 
             <ScrollView>
               {options.map((option) => (
@@ -77,7 +77,7 @@ export default function AddressDropdown({
                     setIsOpen(false);
                   }}
                 >
-                  <Text style={[styles.optionText, { color: colors.text }]}>
+                  <Text fixedFontSize={9} style={[styles.optionText, { color: colors.text }]}>
                     {option.name}
                   </Text>
 
@@ -116,12 +116,16 @@ const styles = StyleSheet.create({
     ...appTypography.input,
     flex: 1,
     color: "#273246",
+    fontSize: 9,
+    lineHeight: 13,
   },
 
   placeholder: {
     ...appTypography.input,
     flex: 1,
     color: "#777E8D",
+    fontSize: 9,
+    lineHeight: 13,
   },
 
   backdrop: {
@@ -147,6 +151,8 @@ const styles = StyleSheet.create({
     ...appTypography.sectionTitle,
     padding: 18,
     color: "#163C7D",
+    fontSize: 9,
+    lineHeight: 13,
   },
 
   option: {
@@ -162,5 +168,7 @@ const styles = StyleSheet.create({
   optionText: {
     ...appTypography.body,
     color: "#1D2738",
+    fontSize: 9,
+    lineHeight: 13,
   },
 });

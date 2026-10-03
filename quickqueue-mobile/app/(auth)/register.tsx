@@ -9,7 +9,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Text, TextInput } from '@/components/Typography';
+import { Text as TypographyText, TextInput } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +21,12 @@ import { AuthBackButton } from "@/components/AuthBackButton";
 
 import { registerResident } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const Text = forwardRef<React.ElementRef<typeof TypographyText>, React.ComponentProps<typeof TypographyText>>(
+  function RegistrationText({ fixedFontSize = 9, ...props }, ref) {
+    return <TypographyText ref={ref} fixedFontSize={fixedFontSize} {...props} />;
+  },
+);
 
 const registrationErrorMessage = (error: any) => {
   if (!error?.response) {
@@ -93,7 +99,7 @@ const IconInput = forwardRef<React.ElementRef<typeof TextInput>, React.Component
   return (
     <View style={styles.inputShell}>
       <Ionicons name={icon} size={16} color="#72809C" />
-      <TextInput ref={ref} style={styles.inputText} placeholderTextColor="#98A2B7" {...props} />
+      <TextInput ref={ref} fixedFontSize={9} style={styles.inputText} placeholderTextColor="#98A2B7" {...props} />
     </View>
   );
 });
@@ -199,7 +205,7 @@ const handleRegister = async () => {
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.card}>
-            <Text style={styles.title}>Create Account</Text>
+            <Text fixedFontSize={22} style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join us to get started</Text>
 
             <SectionTitle icon="person-outline">PERSONAL INFORMATION</SectionTitle>
@@ -317,18 +323,18 @@ const handleRegister = async () => {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#FFFFFF" }, keyboardView: { flex: 1 }, scrollContent: { flexGrow: 1 },
-  card: { alignSelf: "center", backgroundColor: "#FFFFFF", flex: 1, maxWidth: 600, paddingBottom: 18, paddingHorizontal: 17, paddingTop: 16, width: "100%" },
-  title: { color: "#0E3978", fontSize: 27, fontWeight: "800", letterSpacing: -0.5, textAlign: "center" }, subtitle: { color: "#69738A", fontSize: 15, marginTop: 3, textAlign: "center" },
-  sectionTitle: { alignItems: "center", borderBottomColor: "#EEF3FA", borderBottomWidth: 1, flexDirection: "row", gap: 12, marginTop: 24, marginBottom: 13, paddingBottom: 7 }, sectionTitleText: { color: "#086DFF", fontSize: 11, fontWeight: "700" },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 }, field: { flex: 1, flexBasis: 140, marginBottom: 14, minWidth: 0 }, fieldLabel: { color: "#17366D", fontSize: 10, fontWeight: "700", marginBottom: 6 }, optional: { color: "#8A94A8", fontWeight: "400" }, required: { color: "#F02D2D" },
+  card: { alignSelf: "center", backgroundColor: "#FFFFFF", flex: 1, maxWidth: 600, paddingBottom: 18, paddingHorizontal: 17, paddingTop: 8, width: "100%" },
+  title: { color: "#0E3978", fontSize: 22, fontWeight: "800", letterSpacing: -0.3, textAlign: "center" }, subtitle: { color: "#69738A", fontSize: 9, marginTop: 2, textAlign: "center" },
+  sectionTitle: { alignItems: "center", borderBottomColor: "#EEF3FA", borderBottomWidth: 1, flexDirection: "row", gap: 12, marginTop: 24, marginBottom: 13, paddingBottom: 7 }, sectionTitleText: { color: "#086DFF", fontSize: 9, fontWeight: "700" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 }, field: { flex: 1, flexBasis: 140, marginBottom: 14, minWidth: 0 }, fieldLabel: { color: "#17366D", fontSize: 9, fontWeight: "700", marginBottom: 6 }, optional: { color: "#8A94A8", fontSize: 9, fontWeight: "400" }, required: { color: "#F02D2D" },
   inputShell: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 },
-  inputText: { color: "#273246", flex: 1, fontSize: 11, height: "100%", paddingVertical: 0 },
-  dateInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, dateText: { color: "#273246", fontSize: 11 }, placeholder: { color: "#98A2B7", fontSize: 10 },
+  inputText: { color: "#273246", flex: 1, fontSize: 9, height: "100%", paddingVertical: 0 },
+  dateInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, dateText: { color: "#273246", fontSize: 9 }, placeholder: { color: "#98A2B7", fontSize: 9 },
   selectInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, selectText: { flex: 1 },
   actionArea: { marginTop: "auto" },
   termsBox: { alignItems: "center", backgroundColor: "#F0F7FF", borderRadius: 10, flexDirection: "row", marginTop: 1, minHeight: 44, paddingHorizontal: 18, paddingVertical: 8 }, checkbox: { alignItems: "center", borderColor: "#30445F", borderRadius: 4, borderWidth: 1.5, height: 17, justifyContent: "center", marginRight: 10, width: 17 }, checkboxChecked: { backgroundColor: "#1671FF", borderColor: "#1671FF" }, termsText: { color: "#647087", flex: 1, fontSize: 9 }, termsLink: { color: "#1671FF", fontWeight: "700", textDecorationLine: "underline" },
-  createButton: { alignItems: "center", backgroundColor: "#17468F", borderRadius: 10, height: 43, justifyContent: "center", marginTop: 12 }, createButtonDisabled: { opacity: 0.65 }, createButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
-  signInRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginVertical: 13 }, signInText: { color: "#69738A", fontSize: 10 }, signInLink: { color: "#1671FF", fontSize: 10, fontWeight: "600" },
-  modalBackdrop: { alignItems: "center", backgroundColor: "rgba(0, 0, 0, 0.35)", flex: 1, justifyContent: "center", padding: 28 }, sexMenu: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", width: "100%" }, sexMenuTitle: { color: "#163C7D", fontSize: 16, fontWeight: "700", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 }, sexOption: { alignItems: "center", borderTopColor: "#E5E7EB", borderTopWidth: 1, flexDirection: "row", height: 50, justifyContent: "space-between", paddingHorizontal: 18 }, sexOptionText: { color: "#1D2738", fontSize: 15 },
-  termsModalBackdrop: { alignItems: "center", backgroundColor: "rgba(2, 18, 48, 0.58)", flex: 1, justifyContent: "center", padding: 22 }, termsModal: { backgroundColor: "#FFFFFF", borderRadius: 18, maxHeight: "78%", overflow: "hidden", width: "100%" }, termsModalHeader: { alignItems: "center", borderBottomColor: "#E8EEF6", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 15 }, termsModalTitle: { color: "#0E3978", flex: 1, fontSize: 17, fontWeight: "800" }, termsModalScroll: { flexGrow: 0 }, termsModalContent: { padding: 18, paddingBottom: 6 }, termsParagraph: { color: "#46546B", fontSize: 12, lineHeight: 19, marginBottom: 14 }, agreeButton: { alignItems: "center", backgroundColor: "#075BCF", borderRadius: 10, margin: 18, marginTop: 10, paddingVertical: 13 }, agreeButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  createButton: { alignItems: "center", backgroundColor: "#17468F", borderRadius: 10, height: 43, justifyContent: "center", marginTop: 12 }, createButtonDisabled: { opacity: 0.65 }, createButtonText: { color: "#FFFFFF", fontSize: 9, fontWeight: "700" },
+  signInRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginVertical: 13 }, signInText: { color: "#69738A", fontSize: 9 }, signInLink: { color: "#1671FF", fontSize: 9, fontWeight: "600" },
+  modalBackdrop: { alignItems: "center", backgroundColor: "rgba(0, 0, 0, 0.35)", flex: 1, justifyContent: "center", padding: 28 }, sexMenu: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", width: "100%" }, sexMenuTitle: { color: "#163C7D", fontSize: 9, fontWeight: "700", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 }, sexOption: { alignItems: "center", borderTopColor: "#E5E7EB", borderTopWidth: 1, flexDirection: "row", height: 50, justifyContent: "space-between", paddingHorizontal: 18 }, sexOptionText: { color: "#1D2738", fontSize: 9 },
+  termsModalBackdrop: { alignItems: "center", backgroundColor: "rgba(2, 18, 48, 0.58)", flex: 1, justifyContent: "center", padding: 22 }, termsModal: { backgroundColor: "#FFFFFF", borderRadius: 18, maxHeight: "78%", overflow: "hidden", width: "100%" }, termsModalHeader: { alignItems: "center", borderBottomColor: "#E8EEF6", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 15 }, termsModalTitle: { color: "#0E3978", flex: 1, fontSize: 9, fontWeight: "800" }, termsModalScroll: { flexGrow: 0 }, termsModalContent: { padding: 18, paddingBottom: 6 }, termsParagraph: { color: "#46546B", fontSize: 9, lineHeight: 13, marginBottom: 14 }, agreeButton: { alignItems: "center", backgroundColor: "#075BCF", borderRadius: 10, margin: 18, marginTop: 10, paddingVertical: 13 }, agreeButtonText: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
 });

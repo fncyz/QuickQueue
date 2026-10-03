@@ -77,7 +77,7 @@ export function FloatingAiAssistant() {
   const assistantBubble = isDark ? '#1C2B42' : '#F0F5FC';
   const inputBackground = isDark ? '#19263A' : '#F8FAFD';
   return <Modal animationType="fade" onRequestClose={() => setIsOpen(false)} transparent visible>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalRoot}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
       <View style={[styles.backdrop, { paddingBottom: insets.bottom + 12, paddingHorizontal: width < 380 ? 10 : 16, paddingTop: insets.top + 12 }]}>
         <View style={[styles.chatWindow, { backgroundColor: panel, borderColor: colors.border, height: Math.min(720, availableHeight) }]}>
           <View style={[styles.header, { backgroundColor: isDark ? '#102851' : '#EAF3FF', borderBottomColor: colors.border }]}>
@@ -94,7 +94,7 @@ export function FloatingAiAssistant() {
             {isSending && <View accessibilityLabel="QuickQueue Assistant is typing" accessibilityLiveRegion="polite" style={styles.typingRow}><Image source={assistantLogo} style={styles.messageAvatar} /><View style={[styles.typingBubble, { backgroundColor: assistantBubble }]}><QuickQueueLoadingIndicator size={34} /></View></View>}
           </ScrollView>
           <View style={[styles.composer, { backgroundColor: panel, borderTopColor: colors.border }]}>
-            <TextInput accessibilityLabel="Message QuickQueue Smart Assistant" editable={isOnline && !isSending} maxLength={500} onChangeText={setDraft} onSubmitEditing={() => send()} placeholder={!isOnline ? 'Connect to the internet to chat' : isSending ? 'Waiting for the assistant…' : 'Type your message…'} placeholderTextColor={colors.muted} returnKeyType="send" style={[styles.input, { backgroundColor: inputBackground, borderColor: colors.border, color: colors.text }]} value={draft} />
+            <TextInput accessibilityLabel="Message QuickQueue Smart Assistant" editable={isOnline && !isSending} maxLength={500} onChangeText={setDraft} onFocus={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} onSubmitEditing={() => send()} placeholder={!isOnline ? 'Connect to the internet to chat' : isSending ? 'Waiting for the assistant…' : 'Type your message…'} placeholderTextColor={colors.muted} returnKeyType="send" style={[styles.input, { backgroundColor: inputBackground, borderColor: colors.border, color: colors.text }]} value={draft} />
             <Pressable accessibilityLabel="Send message" disabled={!isOnline || isSending || !draft.trim()} onPress={() => send()} style={({ pressed }) => [styles.sendButton, { opacity: !isOnline || isSending || !draft.trim() ? 0.4 : pressed ? 0.72 : 1 }]}>{isSending ? <QuickQueueLoadingIndicator size={30} /> : <Ionicons color="#FFFFFF" name="send" size={20} />}</Pressable>
           </View>
         </View>
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   button: { alignItems: 'center', backgroundColor: assistantBlue, borderColor: '#76ACFA', borderRadius: 999, borderWidth: 2, elevation: 7, justifyContent: 'center', overflow: 'hidden', position: 'absolute', shadowColor: '#082F76', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 7, zIndex: 20 },
   logo: { borderRadius: 999 }, modalRoot: { flex: 1 },
   backdrop: { alignItems: 'center', backgroundColor: 'rgba(3, 15, 35, 0.42)', flex: 1, justifyContent: 'flex-end' },
-  chatWindow: { borderRadius: 24, borderWidth: 1, elevation: 18, maxWidth: 520, overflow: 'hidden', shadowColor: '#001A45', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 20, width: '100%' },
+  chatWindow: { borderRadius: 24, borderWidth: 1, elevation: 18, flexShrink: 1, maxWidth: 520, overflow: 'hidden', shadowColor: '#001A45', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 20, width: '100%' },
   header: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 76, paddingHorizontal: 14, paddingVertical: 11 },
   headerLogo: { borderRadius: 23, height: 46, width: 46 }, headerCopy: { flex: 1, marginLeft: 10, minWidth: 0 }, headerName: { fontSize: 14, fontWeight: '700' },
   statusRow: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 3 }, statusDot: { borderRadius: 5, height: 8, width: 8 }, statusText: { fontSize: 11 },

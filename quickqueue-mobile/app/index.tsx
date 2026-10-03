@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { securitySetupRoute } from '@/services/security-flow';
 import { readRecentResidentProfile } from '@/services/offline-cache';
 import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
+import { waitForStartupLoadingWindow } from '@/services/startup-loading';
 
 export default function Index() {
   const [hasSession, setHasSession] = useState<boolean | null>(null);
@@ -11,8 +12,11 @@ export default function Index() {
   const [destination, setDestination] = useState<ReturnType<typeof securitySetupRoute>>('/(tabs)');
   useEffect(() => {
     let active = true;
-    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage'), AsyncStorage.getItem('quickqueue.pendingUsername'), readRecentResidentProfile()])
-      .then(([token, stage, pending, recentProfile]) => {
+    Promise.all([
+      Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage'), AsyncStorage.getItem('quickqueue.pendingUsername'), readRecentResidentProfile()]),
+      waitForStartupLoadingWindow(),
+    ])
+      .then(([[token, stage, pending, recentProfile]]) => {
         if (!active) return;
         setDestination(securitySetupRoute(stage, Boolean(pending)));
         setHasRecentProfile(Boolean(recentProfile));

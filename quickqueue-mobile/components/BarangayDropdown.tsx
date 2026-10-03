@@ -40,6 +40,7 @@ export default function BarangayDropdown({
       >
         <Ionicons name="home-outline" size={16} color={colors.muted} />
         <Text
+          fixedFontSize={9}
           style={[selectedBarangay ? styles.value : styles.placeholder, { color: selectedBarangay ? colors.text : colors.muted }]}
         >
           {selectedBarangay?.name ?? "Select Barangay"}
@@ -63,7 +64,7 @@ export default function BarangayDropdown({
           onPress={() => setIsOpen(false)}
         >
           <View style={[styles.menu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.menuTitle, { color: colors.text }]}>Select Barangay</Text>
+          <Text fixedFontSize={9} style={[styles.menuTitle, { color: colors.text }]}>Select Barangay</Text>
 
             <ScrollView>
               {barangays.map((barangay) => (
@@ -75,7 +76,7 @@ export default function BarangayDropdown({
                     setIsOpen(false);
                   }}
                 >
-                  <Text style={[styles.optionText, { color: colors.text }]}>
+                  <Text fixedFontSize={9} style={[styles.optionText, { color: colors.text }]}>                                    
                     {barangay.name}
                   </Text>
 
@@ -109,8 +110,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 14,
   },
-  value: { ...appTypography.input, color: "#273246", flex: 1, marginRight: 8 },
-  placeholder: { ...appTypography.input, color: "#777E8D", flex: 1, marginRight: 8 },
+  value: { ...appTypography.input, color: "#273246", flex: 1, fontSize: 9, lineHeight: 13, marginRight: 8 },
+  placeholder: { ...appTypography.input, color: "#777E8D", flex: 1, fontSize: 9, lineHeight: 13, marginRight: 8 },
   backdrop: {
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.35)",
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
   },
   menu: { backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, maxHeight: "65%", maxWidth: 520, overflow: "hidden", width: "100%" },
-  menuTitle: { ...appTypography.sectionTitle, color: "#163C7D", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 },
+  menuTitle: { ...appTypography.sectionTitle, color: "#163C7D", fontSize: 9, lineHeight: 13, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 },
   option: {
     alignItems: "center",
     borderTopColor: "#E5E7EB",
@@ -130,5 +131,5 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 18,
   },
-  optionText: { ...appTypography.body, color: "#1D2738" },
+  optionText: { ...appTypography.body, color: "#1D2738", fontSize: 9, lineHeight: 13 },
 });
