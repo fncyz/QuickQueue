@@ -4,6 +4,7 @@ import {
   TouchableOpacityProps,
 } from "react-native";
 import { Text } from '@/components/Typography';
+import { appTypography } from '@/constants/typography';
 
 interface Props extends TouchableOpacityProps {
   title: string;
@@ -32,8 +33,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   text: {
+    ...appTypography.button,
     color: "#fff",
-    fontWeight: "bold",
-    fontSize: 18,
   },
 });

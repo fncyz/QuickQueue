@@ -60,7 +60,7 @@ const s = StyleSheet.create({
   logo: { height: 94, width: 94 },
   title: { color: '#082E78', fontSize: 25, fontWeight: '800', letterSpacing: 0.2, marginTop: 5 },
   subtitle: { color: '#5B6475', fontSize: 13, marginTop: 1 },
-  actions: { marginTop: 20, maxWidth: 500, width: '100%' },
+  actions: { backgroundColor: 'transparent', borderColor: 'transparent', borderRadius: 26, borderWidth: 0, elevation: 0, marginTop: 20, maxWidth: 500, padding: 18, shadowColor: 'transparent', shadowOpacity: 0, shadowRadius: 0, width: '100%' },
   profileCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 0, elevation: 3, flexDirection: 'row', height: 59, overflow: 'hidden', paddingLeft: 18, shadowColor: '#31598A', shadowOffset: { height: 3, width: 0 }, shadowOpacity: 0.14, shadowRadius: 7 },
   profileName: { color: '#12366F', flex: 1, fontSize: 14, fontWeight: '800' },
   chevron: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#FFFFFF', justifyContent: 'center', width: 42 },

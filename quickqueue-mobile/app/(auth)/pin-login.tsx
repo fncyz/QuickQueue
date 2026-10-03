@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import SecuritySetupBackdrop from "@/components/SecuritySetupBackdrop";
@@ -63,7 +63,7 @@ export default function PinLoginScreen() {
 
   return <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
     <SecuritySetupBackdrop />
-    <View style={s.content}>
+    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <Pressable onPress={() => router.back()} style={s.back} accessibilityLabel="Back to sign in"><Ionicons name="chevron-back" size={25} color="#083778" /></Pressable>
       <View style={s.iconHalo}><View style={s.icon}><Ionicons name="shield-checkmark" size={31} color="#FFF" /></View></View>
       <Text style={s.title}>Enter Your Secure PIN</Text>
@@ -72,16 +72,16 @@ export default function PinLoginScreen() {
       {!!error && <Text style={s.error}>{error}</Text>}
       <SecurityGradientButton onPress={submit} disabled={pin.length !== 4 || submitting} label={submitting ? "Signing In..." : "Sign In"} style={s.button} />
       <View style={s.keypad}>{keys.map((key, index) => key === "" ? <View key={`spacer-${index}`} style={s.key} /> : <Pressable key={`key-${key}`} onPress={() => pressKey(key)} style={s.key}>{key === "back" ? <Ionicons name="backspace-outline" size={22} color="#113878" /> : <><Text style={s.keyNumber}>{key}</Text>{letters[key] && <Text style={s.keyLetters}>{letters[key]}</Text>}</>}</Pressable>)}</View>
-    </View>
+    </ScrollView>
   </SafeAreaView>;
 }
 
 const s = StyleSheet.create({
-  safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { flex: 1, paddingHorizontal: 24, paddingTop: 22 }, back: { alignItems: "center", height: 44, justifyContent: "center", width: 44 },
+  safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { alignSelf: "center", flexGrow: 1, maxWidth: 500, paddingBottom: 20, paddingHorizontal: 24, paddingTop: 22, width: "100%" }, back: { alignItems: "center", height: 44, justifyContent: "center", width: 44 },
   iconHalo: { alignItems: "center", alignSelf: "center", backgroundColor: "rgba(224,239,255,0.72)", borderRadius: 38, height: 76, justifyContent: "center", marginTop: 18, width: 76 },
   icon: { alignItems: "center", backgroundColor: "#0645A8", borderRadius: 25, height: 50, justifyContent: "center", width: 50 },
   title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 17, textAlign: "center" }, description: { color: "#7083A2", fontSize: 12, marginTop: 5, textAlign: "center" },
   pinRow: { flexDirection: "row", gap: 8, justifyContent: "center", marginTop: 30 }, pinBox: { alignItems: "center", backgroundColor: "#FFF", borderColor: "#D6E0EF", borderRadius: 10, borderWidth: 1, height: 52, justifyContent: "center", width: 54 }, pinBoxActive: { borderColor: "#1671FF" }, dot: { backgroundColor: "#153A76", borderRadius: 6, height: 12, width: 12 }, revealedDigit: { color: "#153A76", fontSize: 21, fontWeight: "700" },
   error: { color: "#B42318", fontSize: 11, marginTop: 12, textAlign: "center" }, button: { marginTop: 25 },
-  keypad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginTop: 24 }, key: { alignItems: "center", backgroundColor: "rgba(255,255,255,0.82)", borderColor: "#E7EEF8", borderRadius: 9, borderWidth: 1, height: 56, justifyContent: "center", margin: 4, width: "29%" }, keyNumber: { color: "#0B2E70", fontSize: 18, fontWeight: "700", lineHeight: 21 }, keyLetters: { color: "#6F80A0", fontSize: 6, letterSpacing: 2 },
+  keypad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginTop: 24 }, key: { alignItems: "center", aspectRatio: 1.55, backgroundColor: "rgba(255,255,255,0.82)", borderColor: "#E7EEF8", borderRadius: 9, borderWidth: 1, justifyContent: "center", margin: 4, maxHeight: 56, minHeight: 48, width: "29%" }, keyNumber: { color: "#0B2E70", fontSize: 18, fontWeight: "700", lineHeight: 21 }, keyLetters: { color: "#6F80A0", fontSize: 6, letterSpacing: 2 },
 });

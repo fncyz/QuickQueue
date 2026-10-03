@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { Text } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from '@/contexts/app-theme';
+import { appTypography } from '@/constants/typography';
 
 const barangays = [
   { id: 5, name: "Daanlungsod" },
@@ -26,18 +28,19 @@ export default function BarangayDropdown({
   onValueChange,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const { colors } = useAppTheme();
 
   const selectedBarangay = barangays.find((b) => b.id === value);
 
   return (
     <>
       <Pressable
-        style={styles.trigger}
+        style={[styles.trigger, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
         onPress={() => setIsOpen(true)}
       >
-        <Ionicons name="home-outline" size={16} color="#72809C" />
+        <Ionicons name="home-outline" size={16} color={colors.muted} />
         <Text
-          style={selectedBarangay ? styles.value : styles.placeholder}
+          style={[selectedBarangay ? styles.value : styles.placeholder, { color: selectedBarangay ? colors.text : colors.muted }]}
         >
           {selectedBarangay?.name ?? "Select Barangay"}
         </Text>
@@ -45,7 +48,7 @@ export default function BarangayDropdown({
         <Ionicons
           name="chevron-down"
           size={14}
-          color="#18233C"
+          color={colors.muted}
         />
       </Pressable>
 
@@ -59,20 +62,20 @@ export default function BarangayDropdown({
           style={styles.backdrop}
           onPress={() => setIsOpen(false)}
         >
-          <View style={styles.menu}>
-            <Text style={styles.menuTitle}>Select Barangay</Text>
+          <View style={[styles.menu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.menuTitle, { color: colors.text }]}>Select Barangay</Text>
 
             <ScrollView>
               {barangays.map((barangay) => (
                 <Pressable
                   key={barangay.id}
-                  style={styles.option}
+                  style={[styles.option, { borderTopColor: colors.border }]}
                   onPress={() => {
                     onValueChange(barangay.id);
                     setIsOpen(false);
                   }}
                 >
-                  <Text style={styles.optionText}>
+                  <Text style={[styles.optionText, { color: colors.text }]}>
                     {barangay.name}
                   </Text>
 
@@ -106,17 +109,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 14,
   },
-  value: { color: "#273246", flex: 1, fontSize: 11, marginRight: 8 },
-  placeholder: { color: "#777E8D", flex: 1, fontSize: 10, marginRight: 8 },
+  value: { ...appTypography.input, color: "#273246", flex: 1, marginRight: 8 },
+  placeholder: { ...appTypography.input, color: "#777E8D", flex: 1, marginRight: 8 },
   backdrop: {
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.35)",
     flex: 1,
     justifyContent: "center",
-    padding: 28,
+    paddingHorizontal: 18,
+    paddingVertical: 28,
   },
-  menu: { backgroundColor: "#FFFFFF", borderRadius: 14, maxHeight: "65%", overflow: "hidden", width: "100%" },
-  menuTitle: { color: "#163C7D", fontSize: 16, fontWeight: "700", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 },
+  menu: { backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, maxHeight: "65%", maxWidth: 520, overflow: "hidden", width: "100%" },
+  menuTitle: { ...appTypography.sectionTitle, color: "#163C7D", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 },
   option: {
     alignItems: "center",
     borderTopColor: "#E5E7EB",
@@ -126,5 +130,5 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 18,
   },
-  optionText: { color: "#1D2738", fontSize: 15 },
+  optionText: { ...appTypography.body, color: "#1D2738" },
 });

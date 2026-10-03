@@ -15,6 +15,7 @@ import { residentLayout } from '@/constants/resident-layout';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
+import { appTypography } from '@/constants/typography';
 import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 
 type Appointment = { id: number; appointment_id: string; name: string; service: string; service_fee: string; date: string; time_slot: string; barangay: string; queue_number: string; now_serving: string; people_ahead: number; estimated_wait: number };
@@ -72,7 +73,7 @@ export default function QueueScreen() {
   if (loading) return <SafeAreaView style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></SafeAreaView>;
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
-    <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><View style={s.live}><View style={s.dot} /><Text style={s.liveText}>Live Status</Text></View><Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={s.heading}>Current Queue Status</Text><Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={s.subheading}>Track your queue in real time and stay ready for your turn.</Text></Animated.View>
+    <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><View style={s.live}><View style={s.dot} /><Text style={s.liveText}>Live Status</Text></View><Text numberOfLines={2} style={s.heading}>Queue Status</Text><Text numberOfLines={2} style={s.subheading}>Track your queue in real time and stay ready for your turn.</Text></Animated.View>
     <SavedInformationBanner followedByOverlap={false} message="Saved appointment · queue status may not be up to date." />
     {!appointment ? <View style={[s.empty, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><Ionicons name="people-outline" size={48} color={colors.accent} /><Text style={[s.emptyTitle, { color: colors.text }]}>No active appointment</Text><Text style={[s.emptyCopy, { color: colors.muted }]}>Book an appointment to view your live queue position here.</Text><Pressable onPress={() => router.push('/booking')} style={s.book}><Text style={s.bookText}>Book Now</Text></Pressable></View> : <>
       <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><SectionTitle icon="people-circle" title="Your Queue Status" subtitle="Real-time updates on your queue." right="You’re all set!" /><View style={[s.ticketPanel, { backgroundColor: colors.surfaceAlt }]}><Metric label="NOW SERVING" value={appointment.now_serving} icon="megaphone-outline" detail="Please proceed to the service counter." /><Metric label="YOUR NUMBER" value={appointment.queue_number} icon="person-outline" detail={appointment.people_ahead ? `${appointment.people_ahead} people ahead of you` : 'You are next in line'} center /><Metric label="ESTIMATED WAITING TIME" value={`${appointment.estimated_wait} minutes`} icon="time-outline" detail="Please wait for your turn." /></View><View style={[s.note, { backgroundColor: colors.iconBackground }]}><Ionicons name="notifications-outline" size={14} color={colors.accent} /><Text style={[s.noteText, { color: colors.muted }]}><Text style={[s.noteStrong, { color: colors.accent }]}>Note: </Text>Waiting time may change based on the number of people being served.</Text></View></View>
@@ -89,11 +90,11 @@ function SectionTitle({ icon, title, subtitle, right }: { icon: keyof typeof Ion
 function Metric({ label, value, icon, detail, center }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; detail: string; center?: boolean }) { const { colors } = useAppTheme(); return <View style={[s.metric, center && s.metricCenter, center && { borderLeftColor: colors.border, borderRightColor: colors.border }]}><Text style={[s.metricLabel, { color: colors.muted }]}>{label}</Text><Text style={[s.metricValue, { color: colors.accent }]}>{value}</Text><Ionicons name={icon} size={19} color={colors.text} /><Text style={[s.metricDetail, { color: colors.muted }]}>{detail}</Text></View>; }
 
 const readableStyles = {
-  liveText: { color: '#14B863', fontSize: 13 }, heading: { color: '#FFF', fontSize: 21, fontWeight: '800', marginTop: 9, maxWidth: '76%', textAlign: 'center' }, subheading: { color: '#FFF', fontSize: 11, marginTop: 5, maxWidth: '88%', textAlign: 'center' },
-  sectionIcon: { alignItems: 'center', backgroundColor: '#0646A8', borderRadius: 15, height: 30, justifyContent: 'center', marginRight: 8, width: 30 }, sectionTitle: { color: '#152654', fontSize: 14, fontWeight: '800' }, sectionSubtitle: { color: '#758096', fontSize: 10, marginTop: 2 }, ready: { color: '#0759D9', fontSize: 10, fontWeight: '700' },
-  metric: { alignItems: 'center', flex: 1, minHeight: 125, paddingHorizontal: 6, paddingVertical: 13 }, metricLabel: { color: '#34415B', fontSize: 9, fontWeight: '700', textAlign: 'center' }, metricValue: { color: '#0646A8', fontSize: 21, fontWeight: '800', marginVertical: 7, textAlign: 'center' }, metricDetail: { color: '#34415B', fontSize: 9, fontWeight: '600', lineHeight: 12, marginTop: 6, textAlign: 'center' },
-  noteText: { color: '#657089', flex: 1, fontSize: 10, lineHeight: 14 }, checkTitle: { color: '#1D9D4C', fontSize: 12, fontWeight: '800' }, cancelTitle: { color: '#E91E2B', fontSize: 12, fontWeight: '800' }, actionText: { color: '#667187', fontSize: 10, lineHeight: 13, marginTop: 3 },
-  detail: { alignItems: 'center', borderBottomColor: '#E8ECF4', borderBottomWidth: 1, flexDirection: 'row', minHeight: 39 }, detailLabel: { color: '#34415B', fontSize: 11, marginLeft: 8, width: 88 }, detailValue: { color: '#152654', flex: 1, fontSize: 11, fontWeight: '700' }, alertTitle: { color: '#0759D9', fontSize: 12, fontWeight: '800' }, alertCopy: { color: '#657089', flex: 1, fontSize: 10 },
+  liveText: { color: '#14B863', fontSize: 13 }, heading: { ...appTypography.pageTitle, color: '#FFF', marginTop: 9, maxWidth: '76%', textAlign: 'center' }, subheading: { ...appTypography.pageSubtitle, color: '#FFF', marginTop: 5, maxWidth: '88%', textAlign: 'center' },
+  sectionIcon: { alignItems: 'center', backgroundColor: '#0646A8', borderRadius: 12, height: 24, justifyContent: 'center', marginRight: 7, width: 24 }, sectionTitle: { color: '#152654', fontSize: 14, fontWeight: '700', lineHeight: 19 }, sectionSubtitle: { color: '#758096', fontSize: 10, lineHeight: 16, marginTop: 1 }, ready: { color: '#0759D9', fontSize: 10, fontWeight: '600' },
+  metric: { alignItems: 'center', flex: 1, minHeight: 94, paddingHorizontal: 5, paddingVertical: 8 }, metricLabel: { color: '#34415B', fontSize: 10, fontWeight: '500', textAlign: 'center' }, metricValue: { color: '#0646A8', fontSize: 14, fontWeight: '600', marginVertical: 3, textAlign: 'center' }, metricDetail: { color: '#34415B', fontSize: 10, fontWeight: '400', lineHeight: 15, marginTop: 2, textAlign: 'center' },
+  noteText: { color: '#657089', flex: 1, fontSize: 10, lineHeight: 16 }, checkTitle: { color: '#1D9D4C', fontSize: 14, fontWeight: '600' }, cancelTitle: { color: '#E91E2B', fontSize: 14, fontWeight: '600' }, actionText: { color: '#667187', fontSize: 10, lineHeight: 16, marginTop: 2 },
+  detail: { alignItems: 'center', borderBottomColor: '#E8ECF4', borderBottomWidth: 1, flexDirection: 'row', minHeight: 32 }, detailLabel: { color: '#34415B', fontSize: 10, fontWeight: '500', marginLeft: 7, width: 96 }, detailValue: { color: '#152654', flex: 1, fontSize: 10, fontWeight: '600' }, alertTitle: { color: '#0759D9', fontSize: 10, fontWeight: '600' }, alertCopy: { color: '#657089', flex: 1, fontSize: 10 },
 } as const;
 
 const s = StyleSheet.create({
@@ -102,8 +103,17 @@ const s = StyleSheet.create({
   ...(readableStyles as Record<string, object>),
   ...({
     hero: { ...residentLayout.header, alignItems: 'center', justifyContent: 'center', paddingTop: 44 },
-    card: { ...residentLayout.card, backgroundColor: '#FFF', borderColor: '#E6EBF4', borderWidth: 1, padding: 12 },
-    empty: { ...residentLayout.card, alignItems: 'center', backgroundColor: '#FFF', padding: 30 },
-    alert: { ...residentLayout.card, alignItems: 'center', backgroundColor: '#EEF4FF', flexDirection: 'row', gap: 7, padding: 11 },
+    card: { ...residentLayout.card, alignSelf: 'center', backgroundColor: '#FFF', borderColor: '#E6EBF4', borderWidth: 1, marginHorizontal: 0, maxWidth: 600, padding: 12, width: '92%' },
+    empty: { ...residentLayout.card, alignItems: 'center', alignSelf: 'center', backgroundColor: '#FFF', marginHorizontal: 0, maxWidth: 600, padding: 30, width: '92%' },
+    alert: { ...residentLayout.card, alignItems: 'center', alignSelf: 'center', backgroundColor: '#EEF4FF', flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginHorizontal: 0, maxWidth: 600, padding: 11, width: '92%' },
+    sectionHead: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', marginBottom: 9, minWidth: 0 },
+    sectionCopy: { flex: 1, minWidth: 150 },
+    ticketPanel: { backgroundColor: '#F4F7FD', borderRadius: 8, flexDirection: 'row', overflow: 'hidden', width: '100%' },
+    metric: { alignItems: 'center', flex: 1, minHeight: 94, minWidth: 0, paddingHorizontal: 5, paddingVertical: 8 },
+    actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+    action: { alignItems: 'center', borderRadius: 8, borderWidth: 1, flexBasis: 220, flexDirection: 'row', flexGrow: 1, minHeight: 50, minWidth: 0, padding: 8 },
+    actionCopy: { flex: 1, marginLeft: 6, minWidth: 0 },
+    detail: { alignItems: 'center', borderBottomColor: '#E8ECF4', borderBottomWidth: 1, flexDirection: 'row', minHeight: 34, paddingVertical: 4 },
+    detailValue: { color: '#152654', flex: 1, flexShrink: 1, fontSize: 10, fontWeight: '600', marginLeft: 8, minWidth: 0 },
   } as Record<string, object>),
 });

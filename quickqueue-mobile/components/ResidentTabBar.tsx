@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/contexts/app-theme';
+import { appTypography } from '@/constants/typography';
 
 const items = {
   index: { label: 'Home', icon: 'home' as const, center: false },
@@ -23,7 +24,7 @@ export function ResidentTabBar({ state, navigation }: BottomTabBarProps) {
 
       const focused = state.index === index;
       return <Pressable key={route.key} onPress={() => !focused && navigation.navigate(route.name)} style={[styles.item, item.center && styles.centerItem]} accessibilityRole="button" accessibilityState={focused ? { selected: true } : {}}>
-        <View style={[styles.iconWrap, item.center && styles.centerIcon]}><Ionicons name={item.icon} size={item.center ? 36 : 24} color={item.center ? '#FFFFFF' : focused ? colors.accent : colors.muted} /></View>{!item.center && <Text numberOfLines={1} style={[styles.label, { color: focused ? colors.accent : colors.muted }, focused && styles.labelActive]}>{item.label}</Text>}
+        <View style={[styles.iconWrap, item.center && styles.centerIcon]}><Ionicons name={item.icon} size={item.center ? 36 : 24} color={item.center ? '#FFFFFF' : focused ? colors.accent : colors.muted} /></View>{!item.center && <Text fixedFontSize={10} numberOfLines={1} style={[styles.label, { color: focused ? colors.accent : colors.muted }, focused && styles.labelActive]}>{item.label}</Text>}
       </Pressable>;
     })}
   </View></SafeAreaView>;
@@ -36,7 +37,7 @@ const styles = StyleSheet.create({
   centerItem: { height: 90 },
   iconWrap: { alignItems: 'center', height: 28, justifyContent: 'center', width: 36 },
   centerIcon: { backgroundColor: '#0639B7', borderRadius: 37, height: 74, shadowColor: '#0A2D82', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2, width: 74 },
-  label: { color: '#344158', fontSize: 10, fontWeight: '600' },
+  label: { ...appTypography.tabLabel, color: '#344158' },
   labelActive: { color: '#073CB5', fontWeight: '800' },
   centerLabel: { color: '#073CB5', fontWeight: '800' },
 });

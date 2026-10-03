@@ -10,7 +10,7 @@ export function SavedInformationBanner({ message = 'Saved Information · Statuse
 
   return <View style={[s.banner, followedByOverlap && s.beforeOverlap]}>
     <Ionicons name="cloud-offline-outline" size={20} color="#9A6400" />
-    <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={s.text}>{message}</Text>
+    <Text style={s.text}>{message}</Text>
   </View>;
 }
 

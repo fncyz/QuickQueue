@@ -384,6 +384,7 @@ def appointments_api(request):
     return Response({
         "success": True,
         "message": "Appointment submitted successfully.",
+        "id": appointment.pk,
         "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
         "queue_number": appointment.queue_number,
         "service": appointment.service.name,

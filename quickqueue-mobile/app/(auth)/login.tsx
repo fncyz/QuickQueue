@@ -217,6 +217,8 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.form}>
+                <View style={styles.glassCard}>
+                  <View style={styles.glassContent}>
 
               {!!loginError && <Text style={styles.loginError}>{loginError}</Text>}
 
@@ -302,6 +304,8 @@ export default function LoginScreen() {
                   <Text style={styles.signupLink}>Sign Up</Text>
                 </Pressable>
               </View>
+                  </View>
+                </View>
             </View>
             </View>
           </ScrollView>
@@ -332,19 +336,16 @@ const styles = StyleSheet.create({
   welcome: { color: "#002C7C", fontSize: 31, fontWeight: "800", letterSpacing: -0.8, lineHeight: 38 },
   subtitle: { color: "#62697B", fontSize: 14, marginTop: 4, textAlign: "center" },
   form: { marginTop: 18, paddingHorizontal: 12 },
+  glassCard: { backgroundColor: "transparent", borderColor: "transparent", borderRadius: 26, borderWidth: 0, elevation: 0, overflow: "hidden", position: "relative", shadowColor: "transparent", shadowOpacity: 0, shadowRadius: 0 },
+  glassContent: { paddingBottom: 22, paddingHorizontal: 18, paddingTop: 20 },
   label: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", marginBottom: 7 },
   inputShell: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 11,
-    elevation: 5,
     flexDirection: "row",
     height: 56,
     marginBottom: 18,
-    shadowColor: "#001B51",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.23,
-    shadowRadius: 7,
   },
   inputIcon: { alignItems: "center", backgroundColor: "#F0F4FF", borderRadius: 9, height: 42, justifyContent: "center", marginLeft: 7, width: 37 },
   input: { color: "#18233C", flex: 1, fontSize: 13, height: "100%", paddingHorizontal: 13 },
@@ -353,14 +354,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFC21C",
     borderRadius: 11,
-    elevation: 4,
     justifyContent: "center",
     height: 50,
     marginTop: 8,
-    shadowColor: "#001B51",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
   },
   signInText: { color: "#071327", fontSize: 17, fontWeight: "800" },
   signInButtonDisabled: { opacity: 0.7 },
@@ -373,13 +369,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 27,
-    elevation: 3,
     height: 52,
     justifyContent: "center",
-    shadowColor: "#001B51",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
     width: 52,
   },
   faceScanner: { height: 34, position: "relative", width: 34 },
@@ -392,7 +383,7 @@ const styles = StyleSheet.create({
   faceLeftEye: { left: 9 },
   faceRightEye: { right: 9 },
   faceSmile: { borderBottomColor: "#003D9C", borderBottomWidth: 4, borderRadius: 10, bottom: 8, height: 9, left: 10, position: "absolute", width: 14 },
-  signupRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginTop: 34 },
+  signupRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginTop: 22, minHeight: 32 },
   signupText: { color: "#FFFFFF", fontSize: 12 },
   signupLink: { color: "#FFC21C", fontSize: 12, fontWeight: "700" },
 });
@@ -400,9 +391,9 @@ const styles = StyleSheet.create({
 const savedStyles = StyleSheet.create({
   screen: { backgroundColor: '#FFFFFF', flex: 1 }, safe: { flex: 1 }, keyboard: { flex: 1 }, content: { alignSelf: 'center', flexGrow: 1, maxWidth: 500, paddingBottom: 34, width: '100%' },
   header: { height: 190, paddingHorizontal: 34, paddingTop: 96 }, hello: { color: '#0B3D83', fontSize: 25, fontWeight: '800' }, loginTitle: { color: '#173B72', fontSize: 12, marginTop: 4 }, quick: { color: '#173B72', fontWeight: '700' }, queue: { color: '#E82929', fontWeight: '700' },
-  form: { marginTop: 18, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#B42318', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
-  savedField: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 0, elevation: 3, height: 50, justifyContent: 'center', paddingHorizontal: 15, shadowColor: '#31598A', shadowOffset: { height: 3, width: 0 }, shadowOpacity: 0.14, shadowRadius: 7 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
-  passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 0, elevation: 3, flexDirection: 'row', height: 50, marginTop: 18, shadowColor: '#31598A', shadowOffset: { height: 3, width: 0 }, shadowOpacity: 0.14, shadowRadius: 7 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },
+  form: { marginTop: 18, paddingBottom: 28, paddingHorizontal: 34 }, error: { color: '#FFD1D1', fontSize: 11, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+  savedField: { backgroundColor: '#FFFFFF', borderRadius: 11, height: 50, justifyContent: 'center', paddingHorizontal: 15 }, savedName: { color: '#173B72', fontSize: 12, fontWeight: '800' },
+  passwordField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 11, flexDirection: 'row', height: 50, marginTop: 18 }, passwordInput: { color: '#18233C', flex: 1, fontSize: 11, height: '100%', paddingHorizontal: 15 }, passwordEye: { alignItems: 'center', height: '100%', justifyContent: 'center', paddingHorizontal: 12 },
   loginButton: { marginTop: 26 },
   continueRow: { alignItems: 'center', flexDirection: 'row', gap: 11, marginTop: 26 }, continueLine: { backgroundColor: '#90B4E8', flex: 1, height: 1 }, continueText: { color: '#274A7F', fontSize: 10 }, methods: { flexDirection: 'row', gap: 24, justifyContent: 'center', marginTop: 17 }, method: { alignItems: 'center', backgroundColor: '#F2F7FF', borderRadius: 29, height: 58, justifyContent: 'center', width: 58 }, methodDisabled: { opacity: 0.35 },
 });

@@ -7,6 +7,7 @@ import { Poppins_800ExtraBold } from '@expo-google-fonts/poppins/800ExtraBold';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { AppThemeProvider, useAppTheme } from '@/contexts/app-theme';
@@ -22,6 +23,7 @@ function AppNavigator() {
   return (
     <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen
           name="(auth)"
           options={{ headerShown: false }}
@@ -53,5 +55,5 @@ function AppNavigator() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
   if (!fontsLoaded) return <QuickQueueLoadingScreen />;
-  return <AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><PushNotificationsProvider><AppNavigator /></PushNotificationsProvider></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider>;
+  return <SafeAreaProvider initialMetrics={initialWindowMetrics}><AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><PushNotificationsProvider><AppNavigator /></PushNotificationsProvider></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider></SafeAreaProvider>;
 }

@@ -1,7 +1,10 @@
+from datetime import date, time
+
 from django.contrib.auth.hashers import check_password
+from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
-from qq.models import Barangay, Resident
+from qq.models import Appointment, Barangay, Resident, Service, TimeSlot
 
 
 class RegistrationSecurityFlowTests(APITestCase):
@@ -51,3 +54,116 @@ class RegistrationSecurityFlowTests(APITestCase):
             advanced = self.client.post("/api/advance-security-setup/", {"step": step}, format="json")
             self.assertEqual(advanced.status_code, 200)
             self.assertEqual(advanced.data["next_step"], next_step)
+
+
+class ResidentAppointmentApiTests(APITestCase):
+    def setUp(self):
+        self.barangay = Barangay.objects.create(
+            name="Appointment Test Barangay",
+            address="Toledo City",
+            contact_number="09111111111",
+        )
+        self.user = User.objects.create_user(username="appointment-resident", password="secret")
+        self.resident = Resident.objects.create(
+            user=self.user,
+            first_name="Appointment",
+            last_name="Resident",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.MALE,
+            contact_number="09222222222",
+            barangay=self.barangay,
+        )
+        self.service = Service.objects.create(
+            code="DOC",
+            name="Appointment Test Service",
+            description="Test service",
+            estimated_duration=15,
+        )
+        self.time_slot = TimeSlot.objects.create(
+            barangay=self.barangay,
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            max_appointments=5,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_booking_returns_database_and_display_ids_and_creates_once(self):
+        payload = {
+            "service": self.service.pk,
+            "time_slot": self.time_slot.pk,
+            "appointment_date": date.today().isoformat(),
+            "purpose": "API contract test",
+            "sitio": "Test Sitio",
+        }
+
+        response = self.client.post("/api/appointments/", payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["success"])
+        self.assertIsInstance(response.data["id"], int)
+        self.assertEqual(response.data["appointment_id"], f"QQ-{date.today().year}-{response.data['id']:05d}")
+        self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
+
+        duplicate = self.client.post("/api/appointments/", payload, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
+
+    def test_transaction_cancel_then_delete_uses_database_id(self):
+        appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=date.today(),
+            time_slot=self.time_slot,
+            purpose="Action contract test",
+            queue_number="DOC-001",
+        )
+
+        cancel = self.client.post(
+            "/api/transactions/",
+            {"appointment_id": appointment.pk, "action": "cancel"},
+            format="json",
+        )
+        self.assertEqual(cancel.status_code, 200)
+        self.assertTrue(cancel.data["success"])
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, Appointment.Status.CANCELLED)
+
+        delete = self.client.post(
+            "/api/transactions/",
+            {"appointment_id": appointment.pk, "action": "delete"},
+            format="json",
+        )
+        self.assertEqual(delete.status_code, 200)
+        self.assertTrue(delete.data["success"])
+        self.assertFalse(Appointment.objects.filter(pk=appointment.pk).exists())
+
+    def test_transaction_action_cannot_access_another_residents_appointment(self):
+        other_user = User.objects.create_user(username="other-resident", password="secret")
+        other = Resident.objects.create(
+            user=other_user,
+            first_name="Other",
+            last_name="Resident",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.FEMALE,
+            contact_number="09333333333",
+            barangay=self.barangay,
+        )
+        appointment = Appointment.objects.create(
+            resident=other,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=date.today(),
+            time_slot=self.time_slot,
+            queue_number="DOC-002",
+        )
+
+        response = self.client.post(
+            "/api/transactions/",
+            {"appointment_id": appointment.pk, "action": "cancel"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, Appointment.Status.PENDING)

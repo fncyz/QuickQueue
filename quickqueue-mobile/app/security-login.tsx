@@ -11,6 +11,7 @@ import { SuccessAnimation } from '@/components/SuccessAnimation';
 import { useAppTheme } from '@/contexts/app-theme';
 import { changePassword, changeSecurityPin, verifyAccountPassword, verifySecurityPin } from '@/services/api';
 import { BiometricKind, disableBiometricLogin, enableBiometricLogin, getBiometricStatuses } from '@/services/secure-auth';
+import { appTypography } from '@/constants/typography';
 
 export default function SecurityLoginScreen() {
   const { colors } = useAppTheme();
@@ -103,7 +104,7 @@ export default function SecurityLoginScreen() {
   };
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-    <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable accessibilityLabel="Back to profile" onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={25} color="#FFF" /></Pressable><Text style={s.heading}>Security & Login</Text></View>
+    <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable accessibilityLabel="Back to profile" onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={25} color="#FFF" /></Pressable><Text style={[s.heading, appTypography.pageTitle]}>Security & Login</Text></View>
     <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <Section title="Biometric Login" copy="Choose which device biometrics can be used to sign in." colors={colors}>
         <BiometricRow label="Fingerprint" icon="finger-print" enabled={statuses.fingerprint} onPress={() => beginBiometric('fingerprint')} colors={colors} />

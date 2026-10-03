@@ -317,10 +317,10 @@ const handleRegister = async () => {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#FFFFFF" }, keyboardView: { flex: 1 }, scrollContent: { flexGrow: 1 },
-  card: { backgroundColor: "#FFFFFF", flex: 1, paddingHorizontal: 17, paddingTop: 16, paddingBottom: 18 },
+  card: { alignSelf: "center", backgroundColor: "#FFFFFF", flex: 1, maxWidth: 600, paddingBottom: 18, paddingHorizontal: 17, paddingTop: 16, width: "100%" },
   title: { color: "#0E3978", fontSize: 27, fontWeight: "800", letterSpacing: -0.5, textAlign: "center" }, subtitle: { color: "#69738A", fontSize: 15, marginTop: 3, textAlign: "center" },
   sectionTitle: { alignItems: "center", borderBottomColor: "#EEF3FA", borderBottomWidth: 1, flexDirection: "row", gap: 12, marginTop: 24, marginBottom: 13, paddingBottom: 7 }, sectionTitleText: { color: "#086DFF", fontSize: 11, fontWeight: "700" },
-  row: { flexDirection: "row", gap: 14 }, field: { flex: 1, marginBottom: 14 }, fieldLabel: { color: "#17366D", fontSize: 10, fontWeight: "700", marginBottom: 6 }, optional: { color: "#8A94A8", fontWeight: "400" }, required: { color: "#F02D2D" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 }, field: { flex: 1, flexBasis: 140, marginBottom: 14, minWidth: 0 }, fieldLabel: { color: "#17366D", fontSize: 10, fontWeight: "700", marginBottom: 6 }, optional: { color: "#8A94A8", fontWeight: "400" }, required: { color: "#F02D2D" },
   inputShell: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 },
   inputText: { color: "#273246", flex: 1, fontSize: 11, height: "100%", paddingVertical: 0 },
   dateInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, dateText: { color: "#273246", fontSize: 11 }, placeholder: { color: "#98A2B7", fontSize: 10 },

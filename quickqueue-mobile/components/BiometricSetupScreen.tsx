@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import SecuritySetupProgress from "@/components/SecuritySetupProgress";
@@ -69,7 +69,7 @@ export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
   };
 
   if (supported !== true) return <SafeAreaView style={s.safe}><View style={s.loading}><QuickQueueLoadingIndicator /><Text style={s.loadingText}>Checking device security…</Text></View></SafeAreaView>;
-  return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><SecuritySetupBackdrop /><View style={s.content}>
+  return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><SecuritySetupBackdrop /><ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
     <SecuritySetupProgress current={isFingerprint ? 3 : 4} />
     <View style={s.stepIcon}><Ionicons name={isFingerprint ? "finger-print" : "person"} size={27} color="#FFF" /></View>
     <Text style={s.title}>{isFingerprint ? "Enable Fingerprint" : "Face Recognition"}</Text>
@@ -77,7 +77,7 @@ export default function BiometricSetupScreen({ kind }: { kind: Kind }) {
     <View style={[s.graphic, !isFingerprint && s.faceGraphic]}>{isFingerprint ? <Ionicons name="finger-print" size={94} color="#1680FF" /> : <><Ionicons name="scan-outline" size={94} color="#1680FF" /><Ionicons name="person" size={57} color="#1680FF" style={s.facePerson} /></>}</View>
     <SecurityGradientButton disabled={saving} onPress={configure} label={saving ? "Verifying…" : isFingerprint ? "Set Up Fingerprint" : "Set Up Face Recognition"} style={s.button} />
     <Pressable disabled={saving} onPress={skip} style={s.skip}><Text style={s.skipText}>Not Now</Text></Pressable>
-  </View></SafeAreaView>;
+  </ScrollView></SafeAreaView>;
 }
 
-const s = StyleSheet.create({ safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { flex: 1, paddingHorizontal: 22, paddingTop: 45 }, loading: { alignItems: "center", flex: 1, justifyContent: "center" }, loadingText: { color: "#68748A", fontSize: 12, marginTop: 10 }, stepIcon: { alignItems: "center", alignSelf: "center", backgroundColor: "#0645A8", borderRadius: 30, height: 60, justifyContent: "center", marginTop: 3, width: 60 }, title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 18, textAlign: "center" }, description: { alignSelf: "center", color: "#7083A2", fontSize: 12, lineHeight: 18, marginTop: 6, maxWidth: 265, textAlign: "center" }, graphic: { alignItems: "center", alignSelf: "center", borderColor: "#DCEBFC", borderRadius: 73, borderWidth: 5, height: 146, justifyContent: "center", marginTop: 27, width: 146 }, faceGraphic: { backgroundColor: "rgba(230,244,255,0.7)", borderWidth: 0, height: 135, position: "relative", width: 135 }, facePerson: { position: "absolute" }, button: { marginTop: 28 }, skip: { alignItems: "center", paddingVertical: 14 }, skipText: { color: "#60718C", fontSize: 12, fontWeight: "600" } });
+const s = StyleSheet.create({ safe: { backgroundColor: "#F8FBFF", flex: 1 }, content: { alignSelf: "center", flexGrow: 1, justifyContent: "center", maxWidth: 500, paddingBottom: 20, paddingHorizontal: 22, paddingTop: 24, width: "100%" }, loading: { alignItems: "center", flex: 1, justifyContent: "center" }, loadingText: { color: "#68748A", fontSize: 12, marginTop: 10 }, stepIcon: { alignItems: "center", alignSelf: "center", backgroundColor: "#0645A8", borderRadius: 30, height: 60, justifyContent: "center", marginTop: 3, width: 60 }, title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 18, textAlign: "center" }, description: { alignSelf: "center", color: "#7083A2", fontSize: 12, lineHeight: 18, marginTop: 6, maxWidth: 265, textAlign: "center" }, graphic: { alignItems: "center", alignSelf: "center", aspectRatio: 1, borderColor: "#DCEBFC", borderRadius: 73, borderWidth: 5, justifyContent: "center", marginTop: 27, maxWidth: 146, width: "42%" }, faceGraphic: { backgroundColor: "rgba(230,244,255,0.7)", borderWidth: 0, maxWidth: 135, position: "relative", width: "39%" }, facePerson: { position: "absolute" }, button: { marginTop: 28 }, skip: { alignItems: "center", minHeight: 44, paddingVertical: 14 }, skipText: { color: "#60718C", fontSize: 12, fontWeight: "600" } });

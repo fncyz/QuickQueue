@@ -7,7 +7,7 @@ export const lightPalette = {
   background: '#FFFFFF', surface: '#FFFFFF', surfaceAlt: '#F3F7FD', text: '#10295E', muted: '#718098', border: '#E1E9F4', primary: '#07419C', accent: '#0873FF', iconBackground: '#EDF4FF', dangerBackground: '#FFF3F6',
 };
 export const darkPalette = {
-  background: '#0B1220', surface: '#131E30', surfaceAlt: '#19263A', text: '#F4F7FC', muted: '#A9B7CC', border: '#2A3A52', primary: '#0B3474', accent: '#67A8FF', iconBackground: '#203553', dangerBackground: '#351D29',
+  background: '#08131F', surface: '#101E2F', surfaceAlt: '#17283B', text: '#F5F7FB', muted: '#A8B6CA', border: '#2A3D55', primary: '#0A3474', accent: '#4F91E8', iconBackground: '#1B3552', dangerBackground: '#351D29',
 };
 
 type AppThemeContextValue = {

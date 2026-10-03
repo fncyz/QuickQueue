@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { Text } from '@/components/Typography';
 import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from '@/contexts/app-theme';
+import { appTypography } from '@/constants/typography';
 
 interface Option {
   id: number;
@@ -30,24 +32,25 @@ export default function AddressDropdown({
   icon = "business-outline",
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const { colors } = useAppTheme();
 
   const selected = options.find((o) => o.id === value);
 
   return (
     <>
       <Pressable
-        style={styles.trigger}
+        style={[styles.trigger, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
         onPress={() => setIsOpen(true)}
       >
-        <Ionicons name={icon} size={16} color="#72809C" />
-        <Text style={selected ? styles.value : styles.placeholder}>
+        <Ionicons name={icon} size={16} color={colors.muted} />
+        <Text style={[selected ? styles.value : styles.placeholder, { color: selected ? colors.text : colors.muted }]}>
           {selected?.name ?? placeholder}
         </Text>
 
         <Ionicons
           name="chevron-down"
           size={14}
-          color="#18233C"
+          color={colors.muted}
         />
       </Pressable>
 
@@ -61,20 +64,20 @@ export default function AddressDropdown({
           style={styles.backdrop}
           onPress={() => setIsOpen(false)}
         >
-          <View style={styles.menu}>
-            <Text style={styles.menuTitle}>{placeholder}</Text>
+          <View style={[styles.menu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.menuTitle, { color: colors.text }]}>{placeholder}</Text>
 
             <ScrollView>
               {options.map((option) => (
                 <Pressable
                   key={option.id}
-                  style={styles.option}
+                  style={[styles.option, { borderTopColor: colors.border }]}
                   onPress={() => {
                     onValueChange(option.id);
                     setIsOpen(false);
                   }}
                 >
-                  <Text style={styles.optionText}>
+                  <Text style={[styles.optionText, { color: colors.text }]}>
                     {option.name}
                   </Text>
 
@@ -110,15 +113,15 @@ const styles = StyleSheet.create({
   },
 
   value: {
+    ...appTypography.input,
     flex: 1,
     color: "#273246",
-    fontSize: 11,
   },
 
   placeholder: {
+    ...appTypography.input,
     flex: 1,
     color: "#777E8D",
-    fontSize: 10,
   },
 
   backdrop: {
@@ -126,10 +129,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,.35)",
-    padding: 28,
+    paddingHorizontal: 18,
+    paddingVertical: 28,
   },
 
   menu: {
+    borderWidth: 1,
+    maxWidth: 520,
     width: "100%",
     maxHeight: "65%",
     backgroundColor: "#fff",
@@ -138,9 +144,8 @@ const styles = StyleSheet.create({
   },
 
   menuTitle: {
+    ...appTypography.sectionTitle,
     padding: 18,
-    fontSize: 16,
-    fontWeight: "700",
     color: "#163C7D",
   },
 
@@ -155,7 +160,7 @@ const styles = StyleSheet.create({
   },
 
   optionText: {
-    fontSize: 15,
+    ...appTypography.body,
     color: "#1D2738",
   },
 });
