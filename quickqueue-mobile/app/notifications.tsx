@@ -15,6 +15,7 @@ import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen
 import { appTypography } from '@/constants/typography';
 
 type NotificationItem = { id: number; type: string; title: string; message: string; is_read: boolean; appointment_id: number; created_at: string };
+type NotificationsResponse = { notifications: NotificationItem[]; pagination?: { has_more: boolean; page: number } };
 type Filter = 'All' | 'Unread' | 'Appointments' | 'Queue' | 'Transactions';
 
 const filterMatches = (item: NotificationItem, filter: Filter) => filter === 'All'
@@ -38,25 +39,40 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('All');
   const [visibleLimit, setVisibleLimit] = useState(25);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const lastFreshLoad = useRef(0);
+  const loadInFlight = useRef(false);
+  const readInFlight = useRef(new Set<number>());
+  const markAllInFlight = useRef(false);
 
-  const request = useCallback(async (method: 'get' | 'post', data?: object) => {
+  const request = useCallback(async (method: 'get' | 'post', data?: object, url = 'notifications/') => {
     const token = await AsyncStorage.getItem('quickqueue.accessToken');
     if (!token) return router.replace('/login');
-    return api.request({ method, url: 'notifications/', data, headers: { Authorization: `Bearer ${token}` } });
+    return api.request({ method, url, data, headers: { Authorization: `Bearer ${token}` } });
   }, []);
 
   const load = useCallback(async () => {
-    const saved = await readOfflineCache<NotificationItem[]>('notifications');
-    if (saved) { setItems(saved.value); setLoading(false); }
-    if (!isOnline) { setLoading(false); return; }
-    if (Date.now() - lastFreshLoad.current < 30000) { setLoading(false); return; }
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+    let hasCachedNotifications = false;
     try {
-      const response = await request('get');
-      if (response) { setItems(response.data.notifications); lastFreshLoad.current = Date.now(); await writeOfflineCache('notifications', response.data.notifications); }
+      const saved = await readOfflineCache<NotificationItem[]>('notifications');
+      hasCachedNotifications = Boolean(saved);
+      if (saved) { setItems(saved.value); setLoading(false); }
+      if (!isOnline) return;
+      if (Date.now() - lastFreshLoad.current < 30000) return;
+      const response = await request('get', undefined, 'notifications/?page=1&page_size=50');
+      if (response) {
+        const data = response.data as NotificationsResponse;
+        setItems(data.notifications); setPage(1); setHasMore(Boolean(data.pagination?.has_more));
+        lastFreshLoad.current = Date.now(); await writeOfflineCache('notifications', data.notifications);
+      }
     } catch (error: any) {
-      if (!saved) Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
+      if (!hasCachedNotifications) Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
     } finally {
+      loadInFlight.current = false;
       setLoading(false);
     }
   }, [isOnline, request]);
@@ -66,15 +82,41 @@ export default function NotificationsScreen() {
     load();
   }, [load]));
 
+  const loadMore = async () => {
+    if (visibleLimit < filtered.length) { setVisibleLimit((current) => current + 25); return; }
+    if (!hasMore || loadingMore || !isOnline) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const response = await request('get', undefined, `notifications/?page=${nextPage}&page_size=50`);
+      if (!response) return;
+      const data = response.data as NotificationsResponse;
+      setItems((current) => {
+        const known = new Set(current.map((item) => item.id));
+        const merged = [...current, ...data.notifications.filter((item) => !known.has(item.id))];
+        writeOfflineCache('notifications', merged).catch(() => undefined);
+        return merged;
+      });
+      setPage(nextPage);
+      setHasMore(Boolean(data.pagination?.has_more));
+      setVisibleLimit((current) => current + 25);
+    } catch (error: any) {
+      Alert.alert('Unable to load more notifications', error?.response?.data?.message || 'Please try again.');
+    } finally { setLoadingMore(false); }
+  };
+
   const markRead = async (item: NotificationItem) => {
     if (!isOnline) return router.push('/queue');
-    if (!item.is_read) {
+    if (!item.is_read && !readInFlight.current.has(item.id)) {
+      readInFlight.current.add(item.id);
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry));
       try {
         await request('post', { notification_id: item.id });
       } catch {
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: false } : entry));
         return;
+      } finally {
+        readInFlight.current.delete(item.id);
       }
     }
     router.push('/queue');
@@ -82,12 +124,14 @@ export default function NotificationsScreen() {
 
   const markAllRead = async () => {
     if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect to update notifications.');
+    if (markAllInFlight.current) return;
+    markAllInFlight.current = true;
     try {
       await request('post');
       setItems((current) => current.map((item) => ({ ...item, is_read: true })));
     } catch (error: any) {
       Alert.alert('Unable to update notifications', error?.response?.data?.message || 'Please try again.');
-    }
+    } finally { markAllInFlight.current = false; }
   };
 
   const unread = items.filter((item) => !item.is_read).length;
@@ -103,7 +147,7 @@ export default function NotificationsScreen() {
     {loading ? <View style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></View> : <ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters}>{filters.map((value) => { const count = items.filter((item) => !item.is_read && filterMatches(item, value)).length; return <Pressable key={value} onPress={() => { setFilter(value); setVisibleLimit(25); }} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</ScrollView>
       {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={isOnline ? markAllRead : undefined} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={isOnline && !todayItems.length ? markAllRead : undefined} />}</>}
-      {visibleLimit < filtered.length && <Pressable onPress={() => setVisibleLimit((current) => current + 25)} style={[s.loadMore, { borderColor: colors.accent }]}><Text style={[s.loadMoreText, { color: colors.accent }]}>Load more</Text></Pressable>}
+      {(visibleLimit < filtered.length || hasMore) && <Pressable disabled={loadingMore} onPress={loadMore} style={[s.loadMore, { borderColor: colors.accent }]}><Text style={[s.loadMoreText, { color: colors.accent }]}>{loadingMore ? 'Loading...' : 'Load more'}</Text></Pressable>}
     </ScrollView>}
   </SafeAreaView>;
 }

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
-import { PropsWithChildren, useEffect } from 'react';
+import { PropsWithChildren, useEffect, useRef } from 'react';
 
 import { useAuthSession } from '@/contexts/auth-session';
 import { notificationRoute, PENDING_ROUTE_KEY, registerForPushNotifications, syncChangedPushToken } from '@/services/push-notifications';
@@ -12,13 +12,16 @@ Notifications.setNotificationHandler({
 
 export function PushNotificationsProvider({ children }: PropsWithChildren) {
   const { isUnlocked } = useAuthSession();
+  const isUnlockedRef = useRef(isUnlocked);
+
+  useEffect(() => { isUnlockedRef.current = isUnlocked; }, [isUnlocked]);
 
   useEffect(() => {
     registerForPushNotifications(false).catch(() => undefined);
     const tokenSubscription = Notifications.addPushTokenListener(({ data }) => { syncChangedPushToken(data).catch(() => undefined); });
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
       const target = notificationRoute(response.notification.request.content.data);
-      if (isUnlocked) router.push(target);
+      if (isUnlockedRef.current) router.push(target);
       else {
         await AsyncStorage.setItem(PENDING_ROUTE_KEY, String(target));
         router.push('/welcome-back');
@@ -27,12 +30,12 @@ export function PushNotificationsProvider({ children }: PropsWithChildren) {
     Notifications.getLastNotificationResponseAsync().then(async (response) => {
       if (!response) return;
       const target = notificationRoute(response.notification.request.content.data);
-      if (isUnlocked) router.push(target);
+      if (isUnlockedRef.current) router.push(target);
       else await AsyncStorage.setItem(PENDING_ROUTE_KEY, String(target));
       await Notifications.clearLastNotificationResponseAsync();
     }).catch(() => undefined);
     return () => { tokenSubscription.remove(); responseSubscription.remove(); };
-  }, [isUnlocked]);
+  }, []);
 
   useEffect(() => {
     if (!isUnlocked) return;

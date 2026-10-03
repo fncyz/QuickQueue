@@ -119,6 +119,36 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
 
+    def test_mobile_summary_and_notification_pagination_contracts(self):
+        appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=date.today(),
+            time_slot=self.time_slot,
+            queue_number="DOC-004",
+        )
+        for index in range(3):
+            Notification.objects.create(
+                resident=self.resident,
+                appointment=appointment,
+                notification_type=Notification.NotificationType.QUEUE_UPDATE,
+                title=f"Update {index}",
+                message="Queue changed.",
+            )
+
+        profile = self.client.get("/api/profile/?summary=1")
+        appointments = self.client.get("/api/appointments/?summary=1")
+        notifications = self.client.get("/api/notifications/?summary=1")
+        first_page = self.client.get("/api/notifications/?page=1&page_size=2")
+
+        self.assertEqual(profile.data, {"username": self.user.username, "first_name": self.resident.first_name})
+        self.assertIn({"id": self.service.pk, "name": self.service.name}, appointments.data["services"])
+        self.assertEqual(notifications.data, {"unread_count": 3})
+        self.assertEqual(len(first_page.data["notifications"]), 2)
+        self.assertTrue(first_page.data["pagination"]["has_more"])
+        self.assertEqual(first_page.data["pagination"]["total"], 3)
+
     def test_transaction_cancel_then_delete_uses_database_id(self):
         appointment = Appointment.objects.create(
             resident=self.resident,
@@ -172,9 +202,18 @@ class ResidentAppointmentApiTests(APITestCase):
 
     @patch("qq.services.push_notifications.Thread")
     def test_notification_push_is_started_in_background_after_commit(self, thread):
+        appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=date.today(),
+            time_slot=self.time_slot,
+            queue_number="DOC-003",
+        )
         with self.captureOnCommitCallbacks(execute=True):
             notification = Notification.objects.create(
                 resident=self.resident,
+                appointment=appointment,
                 notification_type=Notification.NotificationType.QUEUE_UPDATE,
                 title="Queue update",
                 message="Your queue changed.",

@@ -28,11 +28,19 @@ load_dotenv(BASE_DIR.parent / ".env")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
-    'django-insecure-u3je*s3z0#%y(w_-)-1@q2dd9q($9d^z%w1a$qff=jhvm%cjsc',
+    'SECRET_KEY',
     'django-insecure-local-development-key'
 )
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+IS_PRODUCTION = os.environ.get('VERCEL') == '1' or os.environ.get('ENVIRONMENT', '').lower() == 'production'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = IS_PRODUCTION
+SESSION_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+SECURE_HSTS_SECONDS = 3600 if IS_PRODUCTION else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
 
 ALLOWED_HOSTS = [
     'localhost',
@@ -102,7 +110,7 @@ DATABASES = {
         conn_max_age=0,
         conn_health_checks=True,
         disable_server_side_cursors=True,
-        ssl_require=True,
+        ssl_require=database_url.startswith(("postgres://", "postgresql://")),
     )
 }
 

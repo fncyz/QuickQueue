@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,13 +28,19 @@ export default function QueueScreen() {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const loadInFlight = useRef(false);
+  const actionInFlight = useRef(false);
 
   const loadQueue = useCallback(async (showLoader = true) => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+    let hasCachedAppointment = false;
     if (showLoader) setLoading(true);
-    const saved = await readOfflineCache<Appointment | null>('appointment');
-    if (saved) { setAppointment(saved.value); if (showLoader) setLoading(false); }
-    if (!isOnline) { if (showLoader) setLoading(false); return; }
     try {
+      const saved = await readOfflineCache<Appointment | null>('appointment');
+      hasCachedAppointment = Boolean(saved);
+      if (saved) { setAppointment(saved.value); if (showLoader) setLoading(false); }
+      if (!isOnline) return;
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
       setToken(accessToken);
@@ -42,8 +48,11 @@ export default function QueueScreen() {
       setAppointment(response.data.appointment);
       await writeOfflineCache('appointment', response.data.appointment);
     } catch (error: any) {
-      if (showLoader && !saved) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
-    } finally { if (showLoader) setLoading(false); }
+      if (showLoader && !hasCachedAppointment) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
+    } finally {
+      loadInFlight.current = false;
+      if (showLoader) setLoading(false);
+    }
   }, [isOnline]);
 
   useFocusEffect(useCallback(() => {
@@ -53,16 +62,17 @@ export default function QueueScreen() {
   }, [isOnline, loadQueue]));
 
   const performAction = async (action: 'check_in' | 'cancel') => {
-    if (!appointment || acting) return;
+    if (!appointment || actionInFlight.current) return;
     if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect to update this appointment.');
     try {
+      actionInFlight.current = true;
       setActing(true);
       const response = await api.post('queue-status/', { appointment_id: appointment.id, action }, { headers: { Authorization: `Bearer ${token}` } });
       Alert.alert(action === 'check_in' ? 'Checked in' : 'Appointment cancelled', response.data.message);
       await loadQueue(false);
     } catch (error: any) {
       Alert.alert('Action unavailable', error?.response?.data?.message || 'Please try again.');
-    } finally { setActing(false); }
+    } finally { actionInFlight.current = false; setActing(false); }
   };
 
   const confirmCancellation = () => Alert.alert('Cancel appointment?', 'Your queue reservation will also be cancelled.', [

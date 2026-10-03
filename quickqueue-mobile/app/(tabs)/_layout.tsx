@@ -10,7 +10,6 @@ import { useAssistantPreference } from '@/contexts/assistant-preference';
 import { securitySetupRoute } from '@/services/security-flow';
 import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
 import { useAuthSession } from '@/contexts/auth-session';
-import { waitForStartupLoadingWindow } from '@/services/startup-loading';
 
 export default function TabLayout() {
   const { notice } = useConnectivity();
@@ -23,11 +22,8 @@ export default function TabLayout() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage')]),
-      waitForStartupLoadingWindow(),
-    ])
-      .then(([[token, stage]]) => {
+    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage')])
+      .then(([token, stage]) => {
         if (!active) return;
         setHasSession(Boolean(token));
         setSetupStage(stage);

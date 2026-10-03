@@ -57,6 +57,7 @@ export default function LoginScreen() {
   }, [isSavedProfile]);
 
   const handleLogin = async () => {
+    if (isSubmitting) return;
     const normalizedUsername = username.trim();
 
     if (!normalizedUsername || !password) {

@@ -53,10 +53,14 @@ export function ResidentDashboard() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
   const lastFreshLoad = useRef(0);
+  const loadInFlight = useRef(false);
 
   useFocusEffect(useCallback(() => {
     let isActive = true;
     const loadDashboard = async () => {
+      if (loadInFlight.current) return;
+      loadInFlight.current = true;
+      try {
       const saved = await readOfflineCache<DashboardCache>('dashboard');
       if (saved && isActive) {
         setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setActiveAppointment(saved.value.activeAppointment);
@@ -65,14 +69,13 @@ export function ResidentDashboard() {
       }
       if (!isOnline) return;
       if (Date.now() - lastFreshLoad.current < 30000) return;
-      try {
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return;
         const config = { headers: { Authorization: `Bearer ${accessToken}` } };
         const [profileResponse, notificationResponse, bookingResponse, queueResponse] = await Promise.all([
-          api.get<{ username: string; first_name: string }>('profile/', config),
-          api.get<{ unread_count: number }>('notifications/', config),
-          api.get<{ services: Service[] }>('appointments/', config),
+          api.get<{ username: string; first_name: string }>('profile/?summary=1', config),
+          api.get<{ unread_count: number }>('notifications/?summary=1', config),
+          api.get<{ services: Service[] }>('appointments/?summary=1', config),
           api.get<{ appointment: ActiveAppointment | null }>('queue-status/', config),
         ]);
         if (!isActive) return;
@@ -87,6 +90,8 @@ export function ResidentDashboard() {
         await writeOfflineCache<DashboardCache>('dashboard', { activeAppointment: queueResponse.data.appointment, residentName: profileResponse.data.first_name, services: bookingResponse.data.services, unreadNotifications: notificationResponse.data.unread_count, username: profileResponse.data.username });
       } catch {
         // Keep the dashboard usable if fresh server data is temporarily unavailable.
+      } finally {
+        loadInFlight.current = false;
       }
     };
     loadDashboard();

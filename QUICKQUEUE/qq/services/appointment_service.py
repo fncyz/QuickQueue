@@ -4,6 +4,7 @@ from qq.models import (
     Appointment,
     QueueTicket,
     Notification,
+    TimeSlot,
 )
 
 from .queue_service import generate_queue_number
@@ -56,6 +57,10 @@ def create_appointment(
     Creates an appointment together with its
     queue ticket and notification.
     """
+
+    # Serialize bookings for the same slot so capacity and duplicate checks
+    # remain correct even when requests arrive at nearly the same time.
+    time_slot = TimeSlot.objects.select_for_update().select_related("barangay").get(pk=time_slot.pk)
 
     if check_duplicate_appointment(
         resident,

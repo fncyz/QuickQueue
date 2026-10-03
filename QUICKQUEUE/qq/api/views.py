@@ -156,6 +156,9 @@ def pin_login_api(request):
 def profile_api(request):
     resident = request.user.resident_profile
 
+    if request.method == "GET" and request.query_params.get("summary") == "1":
+        return Response({"username": request.user.username, "first_name": resident.first_name})
+
     if request.method == "PATCH":
         email = request.data.get("email", "").strip() or None
         contact_number = request.data.get("contact_number", "").strip()
@@ -344,6 +347,9 @@ def appointments_api(request):
     ).order_by("start_time")
 
     if request.method == "GET":
+        service_choices = [{"id": service.pk, "name": service.name} for service in services]
+        if request.query_params.get("summary") == "1":
+            return Response({"services": service_choices})
         return Response({
             "resident": {
                 "first_name": resident.first_name,
@@ -356,7 +362,7 @@ def appointments_api(request):
                 "address": f"{resident.barangay.name}, {resident.municipality}, {resident.province}",
                 "barangay": resident.barangay.name,
             },
-            "services": [{"id": service.pk, "name": service.name} for service in services],
+            "services": service_choices,
             "time_slots": [{
                 "id": slot.pk,
                 "label": f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}",
@@ -532,10 +538,13 @@ def transactions_api(request):
 
         return Response({"message": "Invalid transaction action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    appointments = resident.appointments.select_related("service", "barangay", "time_slot").order_by("-appointment_date", "-created_at")
+    appointments = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket").order_by("-appointment_date", "-created_at")
     records = []
     for appointment in appointments:
-        ticket = QueueTicket.objects.filter(appointment=appointment).first()
+        try:
+            ticket = appointment.queue_ticket
+        except QueueTicket.DoesNotExist:
+            ticket = None
         records.append({
             "id": appointment.pk,
             "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
@@ -568,9 +577,25 @@ def notifications_api(request):
             resident.notifications.filter(is_read=False).update(is_read=True)
         return Response({"success": True})
 
-    notifications = resident.notifications.select_related("appointment").order_by("-created_at")
+    notifications = resident.notifications.order_by("-created_at")
+    unread_count = notifications.filter(is_read=False).count()
+    if request.query_params.get("summary") == "1":
+        return Response({"unread_count": unread_count})
+    page_value = request.query_params.get("page")
+    if page_value:
+        try:
+            page = max(1, int(page_value))
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 50))))
+        except (TypeError, ValueError):
+            return Response({"message": "Invalid pagination parameters."}, status=status.HTTP_400_BAD_REQUEST)
+        total = notifications.count()
+        start = (page - 1) * page_size
+        notifications = notifications[start:start + page_size]
+        pagination = {"page": page, "page_size": page_size, "total": total, "has_more": start + page_size < total}
+    else:
+        pagination = None
     return Response({
-        "unread_count": notifications.filter(is_read=False).count(),
+        "unread_count": unread_count,
         "notifications": [{
             "id": item.pk,
             "type": item.notification_type,
@@ -580,6 +605,7 @@ def notifications_api(request):
             "appointment_id": item.appointment_id,
             "created_at": item.created_at.isoformat(),
         } for item in notifications],
+        **({"pagination": pagination} if pagination else {}),
     })
 
 

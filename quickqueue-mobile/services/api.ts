@@ -1,4 +1,5 @@
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "@/src/config/api";
 
@@ -10,6 +11,45 @@ export const api = axios.create({
     "Cache-Control": "no-cache",
   },
 });
+
+let refreshInFlight: Promise<string> | null = null;
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const request = error.config as (typeof error.config & { _retried?: boolean }) | undefined;
+    const wasAuthenticated = Boolean(request?.headers?.Authorization);
+    if (error.response?.status !== 401 || !request || request._retried || !wasAuthenticated || request.url === "token/refresh/") {
+      return Promise.reject(error);
+    }
+
+    request._retried = true;
+    try {
+      if (!refreshInFlight) {
+        refreshInFlight = AsyncStorage.getItem("quickqueue.refreshToken").then(async (refresh) => {
+          if (!refresh) throw error;
+          const response = await axios.post<{ access: string; refresh?: string }>(`${API_BASE_URL}/token/refresh/`, { refresh }, { timeout: 15000 });
+          const nextRefresh = response.data.refresh;
+          await AsyncStorage.multiSet([
+            ["quickqueue.accessToken", response.data.access],
+            ...(nextRefresh ? [["quickqueue.refreshToken", nextRefresh] as [string, string]] : []),
+          ]);
+          return response.data.access;
+        }).finally(() => { refreshInFlight = null; });
+      }
+      const access = await refreshInFlight;
+      request.headers.Authorization = `Bearer ${access}`;
+      return api.request(request);
+    } catch (refreshError: any) {
+      // Keep the saved session on transient network/server failures. Only an
+      // explicit refresh-token rejection proves that the session has expired.
+      if (refreshError?.response?.status === 401) {
+        await AsyncStorage.multiRemove(["quickqueue.accessToken", "quickqueue.refreshToken"]);
+      }
+      return Promise.reject(refreshError);
+    }
+  },
+);
 
 export const registerResident = async (data: any) => {
   const response = await api.post("register/", data);

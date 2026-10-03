@@ -41,14 +41,19 @@ export default function TransactionsScreen() {
   const [visibleLimit, setVisibleLimit] = useState(20);
   const lastFreshLoad = useRef(0);
   const actionLock = useRef(false);
+  const loadInFlight = useRef(false);
 
   const loadTransactions = useCallback(async (force = false) => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+    let hasCachedTransactions = false;
     setLoading(true);
-    const saved = await readOfflineCache<Transaction[]>('transactions');
-    if (saved) { setTransactions(saved.value); setCached(true); setLoading(false); }
-    if (!isOnline) { setLoading(false); return; }
-    if (!force && Date.now() - lastFreshLoad.current < 30000) { setLoading(false); return; }
     try {
+      const saved = await readOfflineCache<Transaction[]>('transactions');
+      hasCachedTransactions = Boolean(saved);
+      if (saved) { setTransactions(saved.value); setCached(true); setLoading(false); }
+      if (!isOnline) return;
+      if (!force && Date.now() - lastFreshLoad.current < 30000) return;
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
       setToken(accessToken);
@@ -58,8 +63,8 @@ export default function TransactionsScreen() {
       setCached(false);
       await writeOfflineCache('transactions', response.data.transactions);
     } catch (error: any) {
-      if (!saved) Alert.alert('Unable to load transactions', error?.response?.data?.message || 'Please check your connection.');
-    } finally { setLoading(false); }
+      if (!hasCachedTransactions) Alert.alert('Unable to load transactions', error?.response?.data?.message || 'Please check your connection.');
+    } finally { loadInFlight.current = false; setLoading(false); }
   }, [isOnline]);
 
   useFocusEffect(useCallback(() => { loadTransactions(); }, [loadTransactions]));
@@ -91,7 +96,6 @@ export default function TransactionsScreen() {
       setCached(false);
       writeOfflineCache('transactions', updated).catch(() => undefined);
       Alert.alert(action === 'cancel' ? 'Appointment cancelled' : 'Record deleted', response.data.message);
-      await loadTransactions(true);
     } catch (error: any) {
       Alert.alert(action === 'cancel' ? 'Unable to cancel appointment' : 'Unable to delete transaction', apiErrorMessage(error, error?.message || 'Please try again.'));
     } finally { actionLock.current = false; setActingId(null); }
