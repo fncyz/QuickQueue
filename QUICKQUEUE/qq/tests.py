@@ -1,4 +1,5 @@
 from datetime import date, time
+from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
@@ -168,6 +169,21 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertFalse(Appointment.objects.filter(pk=appointment.pk).exists())
         self.assertFalse(QueueTicket.objects.filter(pk=ticket.pk).exists())
         self.assertFalse(GeneratedDocument.objects.filter(ticket_id=ticket.pk).exists())
+
+    @patch("qq.services.push_notifications.Thread")
+    def test_notification_push_is_started_in_background_after_commit(self, thread):
+        with self.captureOnCommitCallbacks(execute=True):
+            notification = Notification.objects.create(
+                resident=self.resident,
+                notification_type=Notification.NotificationType.QUEUE_UPDATE,
+                title="Queue update",
+                message="Your queue changed.",
+            )
+
+        thread.assert_called_once()
+        self.assertEqual(thread.call_args.kwargs["args"], (notification.pk,))
+        self.assertTrue(thread.call_args.kwargs["daemon"])
+        thread.return_value.start.assert_called_once_with()
 
     def test_transaction_action_cannot_access_another_residents_appointment(self):
         other_user = User.objects.create_user(username="other-resident", password="secret")

@@ -1,9 +1,10 @@
 import json
 import logging
+from threading import Thread
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from django.db import transaction
+from django.db import close_old_connections, transaction
 
 from qq.models import PushDelivery
 
@@ -12,8 +13,27 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 
 def queue_notification_push(notification):
-    """Send once per resident device after the notification transaction commits."""
-    transaction.on_commit(lambda: _send_notification_push(notification.pk))
+    """Schedule delivery after commit without delaying the API response."""
+    notification_id = notification.pk
+    transaction.on_commit(
+        lambda: Thread(
+            target=_send_notification_push_in_background,
+            args=(notification_id,),
+            daemon=True,
+            name=f"notification-push-{notification_id}",
+        ).start()
+    )
+
+
+def _send_notification_push_in_background(notification_id):
+    # A background thread must not reuse the request thread's DB connection.
+    close_old_connections()
+    try:
+        _send_notification_push(notification_id)
+    except Exception:
+        logger.exception("Unexpected push delivery failure for notification %s", notification_id)
+    finally:
+        close_old_connections()
 
 
 def _send_notification_push(notification_id):
