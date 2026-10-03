@@ -123,7 +123,7 @@ export default function TransactionsScreen() {
 }
 
 function displayStatus(item: Transaction) { return item.status_code === 'M' ? 'Expired' : item.status; }
-function displayStatusDetail(item: Transaction) { return item.status_detail || (item.status_code === 'P' ? '1–3 working days' : null); }
+function displayStatusDetail(item: Transaction) { return item.status_detail || null; }
 function statusColors(code: string) { if (code === 'D') return ['#E5FAEC', '#159447']; if (code === 'X') return ['#FFE8EB', '#E21E31']; if (code === 'M') return ['#EEF0F4', '#596277']; if (code === 'P') return ['#FFF1DD', '#E98216']; return ['#E9F1FF', '#0759D9']; }
 function statusIcon(code: string) { if (code === 'D') return 'checkmark-circle-outline' as const; if (code === 'M' || code === 'P') return 'time-outline' as const; return 'close-circle-outline' as const; }
 function TransactionCard({ item, disabled, onView, onAction }: { item: Transaction; disabled: boolean; onView: () => void; onAction: (action: 'cancel' | 'delete') => void }) {
