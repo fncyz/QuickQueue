@@ -4,7 +4,17 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
-from qq.models import Appointment, Barangay, Resident, Service, TimeSlot
+from qq.models import (
+    Appointment,
+    Barangay,
+    DocumentTemplate,
+    GeneratedDocument,
+    Notification,
+    QueueTicket,
+    Resident,
+    Service,
+    TimeSlot,
+)
 
 
 class RegistrationSecurityFlowTests(APITestCase):
@@ -118,6 +128,25 @@ class ResidentAppointmentApiTests(APITestCase):
             purpose="Action contract test",
             queue_number="DOC-001",
         )
+        ticket = QueueTicket.objects.create(appointment=appointment, queue_number=appointment.queue_number)
+        Notification.objects.create(
+            resident=self.resident,
+            appointment=appointment,
+            notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
+            title="Appointment Submitted",
+            message="Full relation graph test",
+        )
+        template = DocumentTemplate.objects.create(
+            barangay=self.barangay,
+            service=self.service,
+            name="Test Template",
+            template_file="document_templates/test.docx",
+        )
+        GeneratedDocument.objects.create(
+            ticket=ticket,
+            template=template,
+            document_file="generated_documents/test.pdf",
+        )
 
         cancel = self.client.post(
             "/api/transactions/",
@@ -137,6 +166,8 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(delete.status_code, 200)
         self.assertTrue(delete.data["success"])
         self.assertFalse(Appointment.objects.filter(pk=appointment.pk).exists())
+        self.assertFalse(QueueTicket.objects.filter(pk=ticket.pk).exists())
+        self.assertFalse(GeneratedDocument.objects.filter(ticket_id=ticket.pk).exists())
 
     def test_transaction_action_cannot_access_another_residents_appointment(self):
         other_user = User.objects.create_user(username="other-resident", password="secret")

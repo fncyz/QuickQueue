@@ -21,7 +21,8 @@ from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from datetime import date
 from difflib import SequenceMatcher
@@ -511,7 +512,18 @@ def transactions_api(request):
         if action == "delete":
             if appointment.status not in (Appointment.Status.COMPLETED, Appointment.Status.CANCELLED, Appointment.Status.MISSED):
                 return Response({"message": "Only completed, cancelled, or expired appointments can be deleted."}, status=status.HTTP_400_BAD_REQUEST)
-            appointment.delete()
+            try:
+                with transaction.atomic():
+                    # Delete owned dependents explicitly so this action also works
+                    # against databases created before all cascade rules were aligned.
+                    Notification.objects.filter(appointment=appointment).delete()
+                    QueueTicket.objects.filter(appointment=appointment).delete()
+                    appointment.delete()
+            except (ProtectedError, IntegrityError):
+                return Response(
+                    {"message": "This transaction still has a protected record and cannot be deleted yet."},
+                    status=status.HTTP_409_CONFLICT,
+                )
             return Response({"success": True, "message": "Appointment deleted from your history."})
 
         return Response({"message": "Invalid transaction action."}, status=status.HTTP_400_BAD_REQUEST)
