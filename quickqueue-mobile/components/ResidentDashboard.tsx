@@ -138,7 +138,7 @@ function EventCarousel({ events }: { events: TemporaryService[] }) {
       {events.map((item) => <Pressable key={item.id} onPress={() => open(item)} style={[s.eventCard, { width: cardWidth }]}>
         <ImageBackground source={servicesBackground} resizeMode="cover" imageStyle={s.eventBackgroundImage} style={s.eventBackground}>
           <View style={[s.eventContentShade, isDark && s.eventContentShadeDark]}>
-            <View style={s.eventBadges}><Text numberOfLines={1} style={s.eventKind}>{item.type === 'Event' ? 'COMMUNITY EVENT' : 'SPECIAL SERVICE'}</Text><Text numberOfLines={1} style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding, item.is_booked && s.eventBooked]}>{item.is_booked ? 'BOOKED ✓' : item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text></View>
+            <View style={s.eventBadges}><Text adjustsFontSizeToFit minimumFontScale={0.65} numberOfLines={1} style={s.eventKind}>{item.type === 'Event' ? 'COMMUNITY EVENT' : 'COMMUNITY SERVICE'}</Text><Text adjustsFontSizeToFit minimumFontScale={0.65} numberOfLines={1} style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding, item.is_booked && s.eventBooked]}>{item.is_booked ? 'BOOKED ✓' : item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text></View>
             <Text numberOfLines={2} style={[s.eventTitle, isDark && s.eventTextDark]}>{item.name}</Text><Text numberOfLines={2} style={[s.eventDescription, isDark && s.eventMutedDark]}>{item.description}</Text>
             <View style={s.eventDetails}><View style={s.eventMeta}><Ionicons name="calendar-outline" size={14} color={isDark ? '#8CBBF5' : '#0759D9'} /><Text numberOfLines={1} style={[s.eventMetaText, isDark && s.eventTextDark]}>{formatRange(item)}</Text></View>{Boolean(item.location) && <View style={s.eventMeta}><Ionicons name="location-outline" size={14} color={isDark ? '#8CBBF5' : '#0759D9'} /><Text numberOfLines={1} style={[s.eventMetaText, isDark && s.eventTextDark]}>{item.location}</Text></View>}</View>
             <View style={s.eventAction}><Text style={s.eventActionText}>{item.is_booked ? 'VIEW QR PASS' : item.can_book ? 'BOOK NOW' : 'VIEW DETAILS'}</Text><Ionicons name={item.is_booked ? 'qr-code-outline' : 'arrow-forward'} size={14} color="#FFF" /></View>
@@ -249,9 +249,9 @@ const s = StyleSheet.create({
   eventBackgroundImage: { borderRadius: 14 },
   eventContentShade: { backgroundColor: 'rgba(255,255,255,0.42)', flex: 1, minHeight: 224, paddingBottom: 13, paddingHorizontal: 14, paddingTop: 12, width: '82%' },
   eventContentShadeDark: { backgroundColor: 'rgba(9,20,38,0.76)' },
-  eventBadges: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  eventKind: { backgroundColor: '#E7F2FF', borderRadius: 10, color: '#0759D9', flexShrink: 1, fontSize: 7, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
-  eventStatus: { backgroundColor: '#E4F6E9', borderRadius: 10, color: '#17713C', flexShrink: 1, fontSize: 7, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
+  eventBadges: { alignItems: 'center', flexDirection: 'row', gap: 5, minWidth: 0 },
+  eventKind: { backgroundColor: '#E7F2FF', borderRadius: 10, color: '#0759D9', flexShrink: 1, fontSize: 6, fontWeight: '900', minWidth: 0, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
+  eventStatus: { backgroundColor: '#E4F6E9', borderRadius: 10, color: '#17713C', flexShrink: 1, fontSize: 6, fontWeight: '900', minWidth: 0, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
   eventEnding: { backgroundColor: '#FFF0D4', color: '#A85A00' }, eventBooked: { backgroundColor: '#E3EEFF', color: '#0759D9' },
   eventTitle: { color: '#10336C', fontSize: 16, fontWeight: '900', lineHeight: 20, marginTop: 9 },
   eventDescription: { color: '#405574', fontSize: 10, lineHeight: 14, marginTop: 3, minHeight: 28 },
