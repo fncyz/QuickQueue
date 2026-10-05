@@ -7,6 +7,7 @@ from qq.models import (
     QueueTicket,
     Notification,
     TimeSlot,
+    EventBooking,
 )
 from django.utils import timezone
 
@@ -110,6 +111,10 @@ def create_appointment(
             ).count()
             if booked >= service.capacity:
                 raise ValueError("This event is fully booked.")
+        if service.temporary_type == service.TemporaryType.EVENT and Appointment.objects.filter(
+            resident=resident, service=service
+        ).exclude(status=Appointment.Status.CANCELLED).exists():
+            raise ValueError("You are already registered for this event.")
 
     if not check_timeslot_capacity(
         appointment_date,
@@ -136,18 +141,27 @@ def create_appointment(
         queue_number=queue_number,
     )
 
-    QueueTicket.objects.create(
-        appointment=appointment,
-        queue_number=queue_number,
-    )
+    is_event = service.is_temporary and service.temporary_type == service.TemporaryType.EVENT
+    if is_event:
+        EventBooking.objects.create(appointment=appointment)
+    else:
+        QueueTicket.objects.create(
+            appointment=appointment,
+            queue_number=queue_number,
+        )
 
+    notification_intro = (
+        f"Your registration for {service.name} is confirmed. Open your QR Pass at the venue.\n"
+        if is_event else
+        "Your appointment request has been submitted and is awaiting staff confirmation.\n"
+    )
     Notification.objects.create(
         resident=resident,
         appointment=appointment,
         notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
-        title="Appointment Submitted",
+        title="Event Booking Confirmed" if is_event else "Appointment Submitted",
         message=(
-            f"Your appointment request has been submitted and is awaiting staff confirmation.\n"
+            notification_intro +
             f"Queue Number: {queue_number}\n"
             f"Date: {appointment_date}\n"
             f"Time: {time_slot.start_time} - {time_slot.end_time}"

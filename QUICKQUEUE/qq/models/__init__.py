@@ -10,3 +10,4 @@ from .barangay_staff import BarangayStaff
 from .document_template import DocumentTemplate
 from .generated_document import GeneratedDocument
 from .push_device import PushDevice, PushDelivery
+from .event_booking import EventBooking

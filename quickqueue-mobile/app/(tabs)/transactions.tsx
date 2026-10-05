@@ -18,7 +18,7 @@ import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
 
-type Transaction = { id: number; appointment_id: string; service: string; status: string; status_code: string; status_detail?: string | null; date_booked: string; appointment_date: string; date_claimed: string | null; time_slot: string; barangay: string; queue_number: string };
+type Transaction = { id: number; appointment_id: string; service: string; status: string; status_code: string; status_detail?: string | null; date_booked: string; appointment_date: string; date_claimed: string | null; time_slot: string; barangay: string; queue_number: string; is_event: boolean; event_booking_id: number | null; booking_reference: string | null; event_booking_status: string | null };
 type Filter = 'All' | 'Pending' | 'Completed' | 'Cancelled' | 'Expired';
 const filters: Filter[] = ['All', 'Pending', 'Completed', 'Cancelled', 'Expired'];
 
@@ -108,6 +108,7 @@ export default function TransactionsScreen() {
   );
 
   const view = (item: Transaction) => {
+    if (item.is_event && item.event_booking_id) return router.push({ pathname: '/event-pass' as never, params: { bookingId: String(item.event_booking_id) } });
     if (['P', 'C', 'O'].includes(item.status_code)) return router.push('/queue');
     Alert.alert(item.service, `Appointment ID: ${item.appointment_id}\nQueue: ${item.queue_number}\nDate: ${item.appointment_date}\nTime: ${item.time_slot}\nBarangay: ${item.barangay}\nStatus: ${displayStatus(item)}`);
   };
@@ -126,7 +127,7 @@ export default function TransactionsScreen() {
   </Animated.ScrollView></SafeAreaView>;
 }
 
-function displayStatus(item: Transaction) { return item.status_code === 'M' ? 'Expired' : item.status; }
+function displayStatus(item: Transaction) { if (item.is_event) return item.event_booking_status === 'checked_in' ? 'Checked In' : item.event_booking_status === 'cancelled' ? 'Cancelled' : item.event_booking_status === 'event_ended' ? 'Event Ended' : 'Confirmed'; return item.status_code === 'M' ? 'Expired' : item.status; }
 function displayStatusDetail(item: Transaction) { return item.status_detail || null; }
 function statusColors(code: string) { if (code === 'D') return ['#E5FAEC', '#159447']; if (code === 'X') return ['#FFE8EB', '#E21E31']; if (code === 'M') return ['#EEF0F4', '#596277']; if (code === 'P') return ['#FFF1DD', '#E98216']; return ['#E9F1FF', '#0759D9']; }
 function statusIcon(code: string) { if (code === 'D') return 'checkmark-circle-outline' as const; if (code === 'M' || code === 'P') return 'time-outline' as const; return 'close-circle-outline' as const; }
@@ -134,11 +135,11 @@ function TransactionCard({ item, disabled, onView, onAction }: { item: Transacti
   const { colors } = useAppTheme();
   const [chipBg, chipText] = statusColors(item.status_code);
   const cancellable = ['P', 'C'].includes(item.status_code);
-  const deletable = ['D', 'X', 'M'].includes(item.status_code);
+  const deletable = !item.is_event && ['D', 'X', 'M'].includes(item.status_code);
   const statusDetail = displayStatusDetail(item);
   return <View style={[s.transaction, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }, disabled && s.disabledCard]}>
     <View style={s.transactionHead}>
-      <View style={s.serviceGroup}><View style={[s.documentIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name="document-text-outline" size={20} color={colors.accent} /></View><Text fixedFontSize={13} style={[s.service, { color: colors.text }]}>{item.service}</Text></View>
+      <View style={s.serviceGroup}><View style={[s.documentIcon, { backgroundColor: colors.iconBackground }]}><Ionicons name={item.is_event ? 'ticket-outline' : 'document-text-outline'} size={20} color={colors.accent} /></View><View style={{ flex: 1, minWidth: 0 }}>{item.is_event && <Text style={s.eventBadge}>EVENT</Text>}<Text fixedFontSize={13} style={[s.service, { color: colors.text }]}>{item.service}</Text></View></View>
       <View style={s.statusGroup}><View style={[s.status, { backgroundColor: chipBg }]}><Ionicons name={statusIcon(item.status_code)} size={13} color={chipText} /><Text fixedFontSize={10} style={[s.statusText, { color: chipText }]}>{displayStatus(item)}</Text></View>{statusDetail && <Text fixedFontSize={9} style={[s.statusDetail, { color: colors.muted }]}>{statusDetail}</Text>}</View>
     </View>
     <View style={[s.transactionBody, { borderTopColor: colors.border }]}>
@@ -168,6 +169,7 @@ const s = StyleSheet.create({
   statusGroup: { alignItems: 'flex-end' },
   statusDetail: { fontSize: 9, textAlign: 'right' },
   details: { gap: 7 },
+  eventBadge: { color: '#A45A00', fontSize: 8, fontWeight: '900', letterSpacing: 0.8, marginBottom: 2 },
   dateCopy: { flex: 1, minWidth: 0 },
   ...(readableStyles as Record<string, object>),
   ...({

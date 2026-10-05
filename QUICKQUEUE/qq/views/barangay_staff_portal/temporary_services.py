@@ -2,12 +2,15 @@ from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core import signing
 from django.core.exceptions import ValidationError
-from django.http import Http404
+from django.db import transaction
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from qq.models import Appointment, BarangayStaff, Notification, Service, TimeSlot
+from qq.models import Appointment, BarangayStaff, EventBooking, Notification, Service, TimeSlot
+import json
 
 
 def _staff_for(user):
@@ -104,6 +107,11 @@ def staff_temporary_service_action(request, pk):
     if action == "cancel" and offering.computed_status() not in {"expired", "cancelled"}:
         offering.lifecycle = Service.Lifecycle.CANCELLED
         offering.save(update_fields=["lifecycle", "updated_at"])
+        EventBooking.objects.filter(appointment__service=offering).update(
+            status=EventBooking.Status.CANCELLED,
+            cancelled_at=timezone.now(),
+            updated_at=timezone.now(),
+        )
         for appointment in offering.appointments.select_related("resident"):
             Notification.objects.get_or_create(
                 resident=appointment.resident, appointment=appointment,
@@ -117,3 +125,54 @@ def staff_temporary_service_action(request, pk):
         offering.save(update_fields=["is_active", "updated_at"])
         messages.success(request, "The event/service is no longer accepting bookings.")
     return redirect("staff_temporary_services")
+
+
+def _scan_payload(booking, now):
+    appointment, event = booking.appointment, booking.appointment.service
+    resident = appointment.resident
+    base = {
+        "event_name": event.name,
+        "resident_name": resident.full_name if hasattr(resident, "full_name") else str(resident),
+        "booking_reference": booking.booking_reference,
+        "event_datetime": f"{event.start_datetime:%b %d, %Y %I:%M %p} – {event.end_datetime:%b %d, %Y %I:%M %p}",
+        "checked_in_at": timezone.localtime(booking.checked_in_at).strftime("%b %d, %Y %I:%M %p") if booking.checked_in_at else None,
+    }
+    if booking.status == EventBooking.Status.CANCELLED or appointment.status == Appointment.Status.CANCELLED or event.lifecycle == Service.Lifecycle.CANCELLED:
+        return {**base, "result": "cancelled", "message": "Booking Cancelled", "can_check_in": False}
+    if event.end_datetime and now >= event.end_datetime:
+        return {**base, "result": "expired", "message": "Event Booking Expired", "can_check_in": False}
+    if booking.status == EventBooking.Status.CHECKED_IN:
+        return {**base, "result": "checked_in", "message": "Already Checked In", "can_check_in": False}
+    if not event.start_datetime or now < event.start_datetime:
+        return {**base, "result": "upcoming", "message": "Event Has Not Started", "can_check_in": False}
+    return {**base, "result": "valid", "message": "Valid Booking", "can_check_in": True}
+
+
+@login_required(login_url="signin")
+def staff_event_scanner(request):
+    staff = _staff_for(request.user)
+    if request.method == "GET":
+        return render(request, "barangay_staff/event_scanner.html", {"active_page": "event_scanner", "staff": staff})
+    try:
+        body = json.loads(request.body or "{}")
+        booking_id = EventBooking.booking_id_from_token(str(body.get("token", "")))
+    except (ValueError, KeyError, signing.BadSignature, json.JSONDecodeError):
+        return JsonResponse({"result": "invalid", "message": "Invalid QR Code", "can_check_in": False}, status=400)
+    try:
+        with transaction.atomic():
+            booking = EventBooking.objects.select_for_update().select_related(
+                "appointment__service", "appointment__resident"
+            ).get(booking_id=booking_id, appointment__barangay=staff.barangay)
+            payload = _scan_payload(booking, timezone.now())
+            if body.get("action") == "check_in":
+                if not payload["can_check_in"]:
+                    return JsonResponse(payload, status=409)
+                booking.status = EventBooking.Status.CHECKED_IN
+                booking.checked_in_at = timezone.now()
+                booking.checked_in_by = request.user
+                booking.save(update_fields=["status", "checked_in_at", "checked_in_by", "updated_at"])
+                payload = _scan_payload(booking, timezone.now())
+                payload["message"] = "Check-In Successful"
+            return JsonResponse(payload)
+    except EventBooking.DoesNotExist:
+        return JsonResponse({"result": "not_found", "message": "Booking Not Found", "can_check_in": False}, status=404)

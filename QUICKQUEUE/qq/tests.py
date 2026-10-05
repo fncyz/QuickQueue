@@ -9,9 +9,11 @@ from rest_framework.test import APITestCase
 from qq.models import (
     Appointment,
     Barangay,
+    BarangayStaff,
     DocumentTemplate,
     GeneratedDocument,
     Notification,
+    EventBooking,
     QueueTicket,
     Resident,
     Service,
@@ -283,6 +285,19 @@ class ResidentAppointmentApiTests(APITestCase):
         temporary.save(update_fields=["start_datetime", "end_datetime"])
         booked = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(booked.status_code, 201)
+        self.assertTrue(booked.data["is_event"])
+        self.assertTrue(booked.data["booking_reference"].startswith("EVT-"))
+        event_booking = EventBooking.objects.get(appointment_id=booked.data["id"])
+        self.assertFalse(QueueTicket.objects.filter(appointment_id=booked.data["id"]).exists())
+
+        duplicate = self.client.post("/api/appointments/", payload, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(EventBooking.objects.filter(appointment__resident=self.resident, appointment__service=temporary).count(), 1)
+
+        event_pass = self.client.get(f"/api/event-bookings/{event_booking.pk}/pass/")
+        self.assertEqual(event_pass.status_code, 200)
+        self.assertEqual(event_pass.data["booking_reference"], event_booking.booking_reference)
+        self.assertEqual(EventBooking.booking_id_from_token(event_pass.data["qr_token"]), event_booking.booking_id)
 
         summary = self.client.get("/api/appointments/?summary=1")
         event = next(item for item in summary.data["temporary_services"] if item["id"] == temporary.pk)
@@ -305,3 +320,44 @@ class ResidentAppointmentApiTests(APITestCase):
         names = {item["name"] for item in summary.data["temporary_services"]}
         self.assertNotIn("Hidden Event Expired", names)
         self.assertNotIn("Hidden Event Cancelled", names)
+
+    def test_staff_event_qr_checkin_is_atomic_and_cannot_be_reused(self):
+        now = timezone.now()
+        event = Service.objects.create(
+            code="SCAN", name="Scanner Event Test", description="Scan test", estimated_duration=15,
+            is_temporary=True, temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
+            start_datetime=now - timedelta(days=1), end_datetime=now + timedelta(days=1), capacity=10,
+        )
+        appointment = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=event,
+            appointment_date=date.today(), time_slot=self.time_slot, queue_number="SCAN-001",
+        )
+        booking = EventBooking.objects.create(appointment=appointment)
+        staff_user = User.objects.create_user(username="event-scanner", password="secret")
+        BarangayStaff.objects.create(
+            user=staff_user, barangay=self.barangay, first_name="Event", last_name="Staff",
+            username="event-scanner", role=BarangayStaff.Role.STAFF,
+        )
+        self.client.force_authenticate(user=None)
+        self.client.force_login(staff_user)
+        token = booking.qr_token()
+
+        valid = self.client.post("/barangay/staff/events/scanner/", {"token": token}, format="json")
+        self.assertEqual(valid.status_code, 200)
+        self.assertEqual(valid.json()["result"], "valid")
+
+        checked = self.client.post("/barangay/staff/events/scanner/", {"token": token, "action": "check_in"}, format="json")
+        self.assertEqual(checked.status_code, 200)
+        booking.refresh_from_db()
+        first_checked_at = booking.checked_in_at
+        self.assertEqual(booking.status, EventBooking.Status.CHECKED_IN)
+
+        reused = self.client.post("/barangay/staff/events/scanner/", {"token": token, "action": "check_in"}, format="json")
+        self.assertEqual(reused.status_code, 409)
+        self.assertEqual(reused.json()["message"], "Already Checked In")
+        booking.refresh_from_db()
+        self.assertEqual(booking.checked_in_at, first_checked_at)
+
+        invalid = self.client.post("/barangay/staff/events/scanner/", {"token": token + "tampered"}, format="json")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["message"], "Invalid QR Code")

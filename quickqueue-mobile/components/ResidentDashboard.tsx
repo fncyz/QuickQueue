@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,9 +18,10 @@ import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/serv
 const quickQueueLogo = require('../assets/images/qqlogo.png');
 const toledoLogo = require('../assets/images/toledo.png');
 const cctcLogo = require('../assets/images/cctc.png');
+const servicesBackground = require('../assets/images/services_bg.png');
 
 type Service = { id: number; name: string };
-type TemporaryService = { id: number; name: string; description: string; type: string; location: string; start_datetime: string; end_datetime: string; status: 'active' | 'ending_soon' | 'upcoming' | 'fully_booked'; capacity: number | null; remaining_capacity: number | null; can_book: boolean };
+type TemporaryService = { id: number; name: string; description: string; type: string; location: string; start_datetime: string; end_datetime: string; status: 'active' | 'ending_soon' | 'upcoming' | 'fully_booked'; capacity: number | null; remaining_capacity: number | null; can_book: boolean; is_event: boolean; is_booked: boolean; event_booking_id: number | null };
 type ActiveAppointment = {
   appointment_id: string;
   barangay: string;
@@ -108,11 +109,45 @@ export function ResidentDashboard() {
     <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text numberOfLines={2} style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
     <SavedInformationBanner />
     {activeAppointment ? <UpcomingAppointmentCard appointment={activeAppointment} isDark={isDark} /> : <EmptyAppointmentCard isDark={isDark} />}
-    {temporaryServices.length > 0 && <View style={[s.eventSection, isDark && s.darkCard]}><Title icon="sparkles" label="Events & Special Services" /><Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.eventList}>{temporaryServices.map((item) => <Pressable key={item.id} onPress={() => router.push({ pathname: '/event-details' as never, params: { event: JSON.stringify(item) } })} style={[s.eventCard, isDark && s.darkService]}><View style={s.eventTop}><Text numberOfLines={1} style={s.eventKind}>{item.type}</Text><Text style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding]}>{item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text></View><Text numberOfLines={2} style={[s.eventTitle, { color: colors.text }]}>{item.name}</Text><Text numberOfLines={2} style={[s.eventDescription, { color: colors.muted }]}>{item.description}</Text><View style={s.eventMeta}><Ionicons name="calendar-outline" size={14} color="#B65C00" /><Text style={[s.eventMetaText, { color: colors.text }]}>{new Date(item.start_datetime).toLocaleDateString()}</Text></View>{Boolean(item.location) && <View style={s.eventMeta}><Ionicons name="location-outline" size={14} color="#B65C00" /><Text numberOfLines={1} style={[s.eventMetaText, { color: colors.text }]}>{item.location}</Text></View>}<View style={s.eventAction}><Text style={s.eventActionText}>{item.can_book ? 'Book Now' : 'View Details'}</Text><Ionicons name="arrow-forward" size={15} color="#FFF" /></View></Pressable>)}</Animated.ScrollView></View>}
+    {temporaryServices.length > 0 && <EventCarousel events={temporaryServices} />}
     <View style={[s.section, isDark && s.darkCard]}><View style={s.header}><Title icon="document-text" label="Available Services" /><Pressable onPress={() => setShowAllServices((value) => !value)}><Text style={[s.viewAll, { color: colors.accent }]}>{showAllServices ? 'Show Less' : 'View All  ›'}</Text></Pressable></View><View style={[s.search, isDark && s.darkIcon]}><Ionicons name="search" size={16} color={colors.muted} /><TextInput value={serviceSearch} onChangeText={setServiceSearch} placeholder="Search services" placeholderTextColor={colors.muted} style={[s.searchInput, { color: colors.text }]} /></View>{visibleServices.map((service) => <Pressable key={service.id} onPress={() => router.push({ pathname: '/booking', params: { serviceId: String(service.id) } })} style={[s.service, isDark && s.darkService]}><View style={[s.serviceIcon, isDark && s.darkIcon]}><Ionicons name={serviceIcon(service.name)} size={21} color={colors.accent} /></View><View style={{ flex: 1 }}><Text style={[s.serviceTitle, { color: colors.text }]}>{service.name}</Text><Text style={[s.serviceDetail, { color: colors.muted }]}>Book this service with your barangay.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>)}</View>
     <View style={[s.section, isDark && s.darkCard]}><Title icon="time" label="Office Hours" /><Hours label="Monday – Friday" value="8:00 AM – 5:00 PM" /><Hours label="Saturday" value="8:00 AM – 12:00 PM" /><Hours label="Sunday & Holidays" value="Closed" closed /></View>
     <Pressable onPress={() => router.push('/queue')} style={[s.notice, { backgroundColor: colors.surfaceAlt }]}><Ionicons name="information-circle" size={21} color={colors.accent} /><View style={{ flex: 1 }}><Text style={[s.noticeTitle, { color: colors.text }]}>Make sure to arrive 5 minutes before your time slot.</Text><Text style={[s.noticeCopy, { color: colors.muted }]}>Late arrivals may forfeit your appointment.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>
   </Animated.ScrollView></SafeAreaView>;
+}
+
+function EventCarousel({ events }: { events: TemporaryService[] }) {
+  const { colors, isDark } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const cardWidth = Math.min(width - 60, 540);
+  const interval = cardWidth + 10;
+  const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => setActiveIndex(Math.max(0, Math.min(events.length - 1, Math.round(event.nativeEvent.contentOffset.x / interval))));
+  const formatRange = (item: TemporaryService) => {
+    const start = new Date(item.start_datetime); const end = new Date(item.end_datetime);
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+    const dateRange = start.toLocaleDateString('en-US', options) === end.toLocaleDateString('en-US', options) ? start.toLocaleDateString('en-US', options) : `${start.toLocaleDateString('en-US', options)} – ${end.toLocaleDateString('en-US', options)}`;
+    return `${dateRange} · ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  };
+  const open = (item: TemporaryService) => item.is_event && item.is_booked && item.event_booking_id
+    ? router.push({ pathname: '/event-pass' as never, params: { bookingId: String(item.event_booking_id) } })
+    : router.push({ pathname: '/event-details' as never, params: { event: JSON.stringify(item) } });
+  return <View style={[s.eventSection, { backgroundColor: colors.surface, borderColor: colors.border }, isDark && s.darkCard]}>
+    <View style={s.eventSectionHeader}><Title icon="sparkles" label="Special Services" /><Pressable onPress={() => router.push('/booking')} hitSlop={8}><Text style={[s.viewAll, { color: colors.accent }]}>View All  ›</Text></Pressable></View>
+    <Animated.ScrollView horizontal pagingEnabled={false} snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum showsHorizontalScrollIndicator={false} contentContainerStyle={s.eventList} onMomentumScrollEnd={onScrollEnd}>
+      {events.map((item) => <Pressable key={item.id} onPress={() => open(item)} style={[s.eventCard, { width: cardWidth }]}>
+        <ImageBackground source={servicesBackground} resizeMode="cover" imageStyle={s.eventBackgroundImage} style={s.eventBackground}>
+          <View style={[s.eventContentShade, isDark && s.eventContentShadeDark]}>
+            <View style={s.eventBadges}><Text numberOfLines={1} style={s.eventKind}>{item.type === 'Event' ? 'COMMUNITY EVENT' : 'SPECIAL SERVICE'}</Text><Text numberOfLines={1} style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding, item.is_booked && s.eventBooked]}>{item.is_booked ? 'BOOKED ✓' : item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text></View>
+            <Text numberOfLines={2} style={[s.eventTitle, isDark && s.eventTextDark]}>{item.name}</Text><Text numberOfLines={2} style={[s.eventDescription, isDark && s.eventMutedDark]}>{item.description}</Text>
+            <View style={s.eventDetails}><View style={s.eventMeta}><Ionicons name="calendar-outline" size={14} color={isDark ? '#8CBBF5' : '#0759D9'} /><Text numberOfLines={1} style={[s.eventMetaText, isDark && s.eventTextDark]}>{formatRange(item)}</Text></View>{Boolean(item.location) && <View style={s.eventMeta}><Ionicons name="location-outline" size={14} color={isDark ? '#8CBBF5' : '#0759D9'} /><Text numberOfLines={1} style={[s.eventMetaText, isDark && s.eventTextDark]}>{item.location}</Text></View>}</View>
+            <View style={s.eventAction}><Text style={s.eventActionText}>{item.is_booked ? 'VIEW QR PASS' : item.can_book ? 'BOOK NOW' : 'VIEW DETAILS'}</Text><Ionicons name={item.is_booked ? 'qr-code-outline' : 'arrow-forward'} size={14} color="#FFF" /></View>
+          </View>
+        </ImageBackground>
+      </Pressable>)}
+    </Animated.ScrollView>
+    {events.length > 1 && <View style={s.eventDots}>{events.map((item, index) => <View key={item.id} style={[s.eventDot, index === activeIndex && s.eventDotActive]} />)}</View>}
+  </View>;
 }
 
 function UpcomingAppointmentCard({ appointment, isDark }: { appointment: ActiveAppointment; isDark: boolean }) {
@@ -206,7 +241,24 @@ const readableStyles = {
 
 const s = StyleSheet.create({
   safe: { backgroundColor: '#FFFFFF', flex: 1 }, page: { backgroundColor: '#FFFFFF', flex: 1 }, content: { paddingBottom: 24 }, logos: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 13 }, avatar: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 22, height: 44, justifyContent: 'center', position: 'absolute', right: 20, top: 30, width: 44 }, notificationBadge: { alignItems: 'center', backgroundColor: '#EF3340', borderColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, height: 16, justifyContent: 'center', minWidth: 16, paddingHorizontal: 2, position: 'absolute', right: -2, top: -2 }, notificationBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' }, appointment: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C9D9F8', borderRadius: 22, borderWidth: 2, flexDirection: 'row', marginHorizontal: 18, marginTop: -22, padding: 18 }, circle: { alignItems: 'center', backgroundColor: '#F0F5FF', borderRadius: 34, height: 68, justifyContent: 'center', marginRight: 16, width: 68 }, book: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#0346A8', borderRadius: 5, flexDirection: 'row', gap: 7, justifyContent: 'center', marginTop: 9, paddingHorizontal: 8, paddingVertical: 8 }, section: { backgroundColor: '#FFFFFF', borderColor: '#EDF0F7', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }, titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, hours: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, closed: { color: '#E33636' }, ai: { alignItems: 'center', backgroundColor: '#F3EBFF', borderRadius: 11, flexDirection: 'row', gap: 10, marginHorizontal: 18, marginTop: 12, padding: 12 }, bubble: { alignItems: 'center', backgroundColor: '#2E75D4', borderRadius: 24, height: 46, justifyContent: 'center', width: 46 }, notice: { alignItems: 'center', backgroundColor: '#E8F2FF', borderRadius: 8, flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 10, padding: 11 },
-  eventSection: { backgroundColor: '#FFF9EF', borderColor: '#F1C77E', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, eventList: { gap: 10, paddingRight: 4, paddingTop: 10 }, eventCard: { backgroundColor: '#FFF', borderColor: '#F0C879', borderRadius: 14, borderWidth: 1, padding: 13, width: 270 }, eventTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, eventKind: { color: '#9A5600', flex: 1, fontSize: 9, fontWeight: '800', textTransform: 'uppercase' }, eventStatus: { backgroundColor: '#E4F6E9', borderRadius: 10, color: '#17713C', fontSize: 8, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 }, eventEnding: { backgroundColor: '#FFF0D4', color: '#A85A00' }, eventTitle: { fontSize: 15, fontWeight: '800', marginTop: 10 }, eventDescription: { fontSize: 10, lineHeight: 15, marginBottom: 7, marginTop: 3 }, eventMeta: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 4 }, eventMetaText: { flex: 1, fontSize: 10 }, eventAction: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#B65C00', borderRadius: 8, flexDirection: 'row', gap: 6, marginTop: 11, paddingHorizontal: 12, paddingVertical: 8 }, eventActionText: { color: '#FFF', fontSize: 10, fontWeight: '800' },
+  eventSection: { alignSelf: 'center', borderRadius: 14, borderWidth: 1, marginTop: 12, maxWidth: 600, overflow: 'hidden', paddingHorizontal: 12, paddingTop: 12, width: '92%' },
+  eventSectionHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 9 },
+  eventList: { gap: 10, paddingRight: 2 },
+  eventCard: { borderRadius: 14, minHeight: 224, overflow: 'hidden' },
+  eventBackground: { flex: 1, minHeight: 224 },
+  eventBackgroundImage: { borderRadius: 14 },
+  eventContentShade: { backgroundColor: 'rgba(255,255,255,0.42)', flex: 1, minHeight: 224, paddingBottom: 13, paddingHorizontal: 14, paddingTop: 12, width: '82%' },
+  eventContentShadeDark: { backgroundColor: 'rgba(9,20,38,0.76)' },
+  eventBadges: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  eventKind: { backgroundColor: '#E7F2FF', borderRadius: 10, color: '#0759D9', flexShrink: 1, fontSize: 7, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
+  eventStatus: { backgroundColor: '#E4F6E9', borderRadius: 10, color: '#17713C', flexShrink: 1, fontSize: 7, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4 },
+  eventEnding: { backgroundColor: '#FFF0D4', color: '#A85A00' }, eventBooked: { backgroundColor: '#E3EEFF', color: '#0759D9' },
+  eventTitle: { color: '#10336C', fontSize: 16, fontWeight: '900', lineHeight: 20, marginTop: 9 },
+  eventDescription: { color: '#405574', fontSize: 10, lineHeight: 14, marginTop: 3, minHeight: 28 },
+  eventTextDark: { color: '#F4F7FC' }, eventMutedDark: { color: '#CAD6E6' },
+  eventDetails: { gap: 3, marginTop: 7 }, eventMeta: { alignItems: 'center', flexDirection: 'row', gap: 6, minHeight: 17 }, eventMetaText: { color: '#254064', flex: 1, flexShrink: 1, fontSize: 9, fontWeight: '600' },
+  eventAction: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#0759D9', borderRadius: 16, flexDirection: 'row', gap: 6, marginTop: 9, minHeight: 31, paddingHorizontal: 13, paddingVertical: 7 }, eventActionText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
+  eventDots: { alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center', minHeight: 22 }, eventDot: { backgroundColor: '#C8D5E7', borderRadius: 3, height: 5, width: 5 }, eventDotActive: { backgroundColor: '#0759D9', width: 12 },
   headerProfile: { alignItems: 'center', backgroundColor: '#FFF', borderRadius: 19, height: 38, justifyContent: 'center', overflow: 'hidden', position: 'absolute', right: 72, top: 33, width: 38 }, headerProfileImage: { height: '100%', width: '100%' }, trackLabel: { fontSize: 12, fontWeight: '600', marginBottom: 3 }, search: { alignItems: 'center', backgroundColor: '#F3F6FD', borderRadius: 9, flexDirection: 'row', gap: 8, marginBottom: 5, minHeight: 40, paddingHorizontal: 11 }, searchInput: { flex: 1, fontSize: 14 },
   darkCard: { backgroundColor: '#131E30', borderColor: '#2A3A52' }, darkService: { borderColor: '#2A3A52' }, darkIcon: { backgroundColor: '#203553' },
   ...readableStyles,

@@ -29,7 +29,7 @@ from datetime import date
 from difflib import SequenceMatcher
 import re
 
-from qq.models import Appointment, BarangayStaff, DocumentTemplate, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, BarangayStaff, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment
 from qq.services.timeslot_service import ensure_default_time_slots
 from qq.gemini_service import GeminiUnavailable, ask_gemini
@@ -366,6 +366,9 @@ def appointments_api(request):
             service_status = service.computed_status(now, service.live_booking_count)
             if service_status in {"expired", "cancelled", "deactivated"}:
                 continue
+            resident_booking = EventBooking.objects.filter(
+                appointment__resident=resident, appointment__service=service
+            ).exclude(status=EventBooking.Status.CANCELLED).first() if service.temporary_type == Service.TemporaryType.EVENT else None
             temporary_choices.append({
                 "id": service.pk,
                 "name": service.name,
@@ -378,6 +381,9 @@ def appointments_api(request):
                 "capacity": service.capacity,
                 "remaining_capacity": max(service.capacity - service.live_booking_count, 0) if service.capacity else None,
                 "can_book": service_status in {"active", "ending_soon"},
+                "is_event": service.temporary_type == Service.TemporaryType.EVENT,
+                "is_booked": resident_booking is not None,
+                "event_booking_id": resident_booking.pk if resident_booking else None,
             })
         priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3}
         temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["start_datetime"]))
@@ -423,6 +429,7 @@ def appointments_api(request):
     except ValueError as error:
         return Response({"message": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
+    event_booking = getattr(appointment, "event_booking", None)
     return Response({
         "success": True,
         "message": "Appointment submitted successfully.",
@@ -433,6 +440,9 @@ def appointments_api(request):
         "appointment_date": appointment.appointment_date.strftime("%B %d, %Y"),
         "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
         "status": appointment.get_status_display(),
+        "is_event": event_booking is not None,
+        "event_booking_id": event_booking.pk if event_booking else None,
+        "booking_reference": event_booking.booking_reference if event_booking else None,
     }, status=status.HTTP_201_CREATED)
 
 
@@ -456,6 +466,9 @@ def queue_status_api(request):
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
                 QueueTicket.objects.filter(appointment=appointment).update(status=QueueTicket.Status.CANCELLED, updated_at=timezone.now())
+                EventBooking.objects.filter(appointment=appointment).update(
+                    status=EventBooking.Status.CANCELLED, cancelled_at=timezone.now(), updated_at=timezone.now()
+                )
                 Notification.objects.create(
                     resident=resident, appointment=appointment,
                     notification_type=Notification.NotificationType.APPOINTMENT_CANCELLED,
@@ -483,7 +496,9 @@ def queue_status_api(request):
 
         return Response({"message": "Invalid queue action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    appointment = resident.appointments.select_related("service", "barangay", "time_slot").filter(
+    appointment = resident.appointments.select_related("service", "barangay", "time_slot").exclude(
+        service__is_temporary=True, service__temporary_type=Service.TemporaryType.EVENT,
+    ).filter(
         appointment_date__gte=date.today(),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
     ).order_by("appointment_date", "time_slot__start_time").first()
@@ -551,6 +566,8 @@ def transactions_api(request):
             return Response({"success": True, "message": "Appointment cancelled."})
 
         if action == "delete":
+            if hasattr(appointment, "event_booking"):
+                return Response({"message": "Event registration records are retained as booking history."}, status=status.HTTP_400_BAD_REQUEST)
             if appointment.status not in (Appointment.Status.COMPLETED, Appointment.Status.CANCELLED, Appointment.Status.MISSED):
                 return Response({"message": "Only completed, cancelled, or expired appointments can be deleted."}, status=status.HTTP_400_BAD_REQUEST)
             try:
@@ -573,13 +590,22 @@ def transactions_api(request):
 
         return Response({"message": "Invalid transaction action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    appointments = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket").order_by("-appointment_date", "-created_at")
+    appointments = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket", "event_booking").order_by("-appointment_date", "-created_at")
     records = []
+    now = timezone.now()
     for appointment in appointments:
         try:
             ticket = appointment.queue_ticket
         except QueueTicket.DoesNotExist:
             ticket = None
+        event_booking = getattr(appointment, "event_booking", None)
+        event_status = None
+        if event_booking:
+            event_status = event_booking.status
+            if appointment.service.end_datetime and now >= appointment.service.end_datetime and event_status == EventBooking.Status.CONFIRMED:
+                event_status = "event_ended"
+            if appointment.service.lifecycle == Service.Lifecycle.CANCELLED:
+                event_status = EventBooking.Status.CANCELLED
         records.append({
             "id": appointment.pk,
             "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
@@ -592,8 +618,48 @@ def transactions_api(request):
             "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
             "barangay": appointment.barangay.name,
             "queue_number": appointment.queue_number,
+            "is_event": event_booking is not None,
+            "event_booking_id": event_booking.pk if event_booking else None,
+            "booking_reference": event_booking.booking_reference if event_booking else None,
+            "event_booking_status": event_status,
         })
     return Response({"transactions": records})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def event_booking_pass_api(request, pk):
+    resident = request.user.resident_profile
+    try:
+        booking = EventBooking.objects.select_related(
+            "appointment__service", "appointment__resident", "appointment__time_slot"
+        ).get(pk=pk, appointment__resident=resident)
+    except EventBooking.DoesNotExist:
+        return Response({"message": "Event booking not found."}, status=status.HTTP_404_NOT_FOUND)
+    appointment, event = booking.appointment, booking.appointment.service
+    now = timezone.now()
+    if booking.status == EventBooking.Status.CANCELLED or event.lifecycle == Service.Lifecycle.CANCELLED or appointment.status == Appointment.Status.CANCELLED:
+        display_status, can_check_in = "cancelled", False
+    elif event.end_datetime and now >= event.end_datetime:
+        display_status, can_check_in = "event_ended", False
+    elif booking.status == EventBooking.Status.CHECKED_IN:
+        display_status, can_check_in = "checked_in", False
+    else:
+        display_status, can_check_in = "confirmed", True
+    resident_name = " ".join(filter(None, [appointment.resident.first_name, appointment.resident.middle_name, appointment.resident.last_name, appointment.resident.suffix]))
+    return Response({
+        "id": booking.pk,
+        "booking_reference": booking.booking_reference,
+        "qr_token": booking.qr_token(),
+        "status": display_status,
+        "can_check_in": can_check_in,
+        "checked_in_at": booking.checked_in_at.isoformat() if booking.checked_in_at else None,
+        "resident_name": resident_name,
+        "event_name": event.name,
+        "event_date": appointment.appointment_date.strftime("%B %d, %Y"),
+        "event_time": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
+        "location": event.location,
+    })
 
 
 @api_view(["GET", "POST"])

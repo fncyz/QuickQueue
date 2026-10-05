@@ -1,5 +1,5 @@
 from .dashboard import staff_dashboard
-from .temporary_services import staff_temporary_services, staff_temporary_service_form, staff_temporary_service_action
+from .temporary_services import staff_temporary_services, staff_temporary_service_form, staff_temporary_service_action, staff_event_scanner
 from .appointments import staff_appointments, staff_review_appointment
 from .live_queue import staff_live_queue
 from .documents import staff_document_action, staff_document_processing
@@ -16,4 +16,5 @@ __all__ = [
     "staff_settings",
     "staff_document_notifications",
     "staff_temporary_services", "staff_temporary_service_form", "staff_temporary_service_action",
+    "staff_event_scanner",
 ]

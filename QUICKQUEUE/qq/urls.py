@@ -10,7 +10,7 @@ from qq.views.barangay_staff_portal import (
     staff_resident_logbook,
     staff_settings,
     staff_document_notifications,
-    staff_temporary_services, staff_temporary_service_form, staff_temporary_service_action,
+    staff_temporary_services, staff_temporary_service_form, staff_temporary_service_action, staff_event_scanner,
 )
 from qq.views.barangay_appointments import (
     barangay_appointments,
@@ -65,6 +65,7 @@ urlpatterns = [
     path("barangay/staff/events/add/", staff_temporary_service_form, name="staff_temporary_service_add"),
     path("barangay/staff/events/<int:pk>/edit/", staff_temporary_service_form, name="staff_temporary_service_edit"),
     path("barangay/staff/events/<int:pk>/action/", staff_temporary_service_action, name="staff_temporary_service_action"),
+    path("barangay/staff/events/scanner/", staff_event_scanner, name="staff_event_scanner"),
     path("barangay/appointments/", barangay_appointments, name="barangay_appointments"),
     path(
         "barangay/appointments/<int:pk>/confirm/",

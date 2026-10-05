@@ -22,6 +22,7 @@ from .views import (
     notifications_api,
     push_devices_api,
     chat_api,
+    event_booking_pass_api,
 )
 
 urlpatterns = [
@@ -39,6 +40,7 @@ urlpatterns = [
     path("advance-security-setup/", advance_security_setup_api, name="api_advance_security_setup"),
     path("barangays/",barangay_list_api,name="barangay_list"),
     path("appointments/", appointments_api, name="api_appointments"),
+    path("event-bookings/<int:pk>/pass/", event_booking_pass_api, name="api_event_booking_pass"),
     path("queue-status/", queue_status_api, name="api_queue_status"),
     path("transactions/", transactions_api, name="api_transactions"),
     path("notifications/", notifications_api, name="api_notifications"),

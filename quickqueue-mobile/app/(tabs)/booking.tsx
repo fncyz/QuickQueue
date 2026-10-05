@@ -33,7 +33,7 @@ type BookingProfile = {
 };
 type BookingFormData = { resident: BookingProfile; services: Choice[]; time_slots: Choice[] };
 type BookingDraft = { date: string; purpose: string; service: number | ''; sitio: string; timeSlot: number | '' };
-type BookingResponse = { success: boolean; id?: number; appointment_id: string; queue_number: string; service: string; appointment_date: string; time_slot: string };
+type BookingResponse = { success: boolean; id?: number; appointment_id: string; queue_number: string; service: string; appointment_date: string; time_slot: string; is_event?: boolean; event_booking_id?: number; booking_reference?: string };
 
 const apiErrorMessage = (error: any, fallback: string) => {
   const data = error?.response?.data;
@@ -185,6 +185,9 @@ export default function BookingScreen() {
           service: String(response.data.service),
           appointmentDate: String(response.data.appointment_date),
           timeSlot: String(response.data.time_slot),
+          isEvent: String(Boolean(response.data.is_event)),
+          eventBookingId: response.data.event_booking_id ? String(response.data.event_booking_id) : '',
+          bookingReference: response.data.booking_reference || '',
         },
       });
       removeOfflineCache('bookingDraft').catch(() => undefined);
