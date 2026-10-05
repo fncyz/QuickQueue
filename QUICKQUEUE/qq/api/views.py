@@ -23,6 +23,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
+from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import date
 from difflib import SequenceMatcher
@@ -340,16 +341,48 @@ def appointments_api(request):
     """Return mobile booking choices or create an appointment."""
     resident = request.user.resident_profile
     ensure_default_time_slots(resident.barangay)
-    services = Service.objects.filter(is_active=True).order_by("name")
+    now = timezone.now()
+    services = Service.objects.filter(is_active=True).filter(
+        Q(is_temporary=False) |
+        Q(is_temporary=True, barangay=resident.barangay, lifecycle=Service.Lifecycle.SCHEDULED,
+          end_datetime__gt=now)
+    ).annotate(
+        live_booking_count=Count(
+            "appointments",
+            filter=~Q(appointments__status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]),
+        )
+    ).order_by("name")
     time_slots = TimeSlot.objects.filter(
         barangay=resident.barangay,
         is_active=True,
     ).order_by("start_time")
 
     if request.method == "GET":
-        service_choices = [{"id": service.pk, "name": service.name} for service in services]
+        service_choices = [{"id": service.pk, "name": service.name} for service in services if not service.is_temporary or service.accepts_bookings(now, service.live_booking_count)]
+        temporary_choices = []
+        for service in services:
+            if not service.is_temporary:
+                continue
+            service_status = service.computed_status(now, service.live_booking_count)
+            if service_status in {"expired", "cancelled", "deactivated"}:
+                continue
+            temporary_choices.append({
+                "id": service.pk,
+                "name": service.name,
+                "description": service.description,
+                "type": service.get_temporary_type_display(),
+                "location": service.location,
+                "start_datetime": service.start_datetime.isoformat(),
+                "end_datetime": service.end_datetime.isoformat(),
+                "status": service_status,
+                "capacity": service.capacity,
+                "remaining_capacity": max(service.capacity - service.live_booking_count, 0) if service.capacity else None,
+                "can_book": service_status in {"active", "ending_soon"},
+            })
+        priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3}
+        temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["start_datetime"]))
         if request.query_params.get("summary") == "1":
-            return Response({"services": service_choices})
+            return Response({"services": service_choices, "temporary_services": temporary_choices, "server_time": now.isoformat()})
         return Response({
             "resident": {
                 "first_name": resident.first_name,
@@ -363,6 +396,8 @@ def appointments_api(request):
                 "barangay": resident.barangay.name,
             },
             "services": service_choices,
+            "temporary_services": temporary_choices,
+            "server_time": now.isoformat(),
             "time_slots": [{
                 "id": slot.pk,
                 "label": f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}",

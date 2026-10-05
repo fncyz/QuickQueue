@@ -37,6 +37,7 @@ function AppNavigator() {
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
         <Stack.Screen name="booking-success" options={{ headerShown: false }} />
+        <Stack.Screen name="event-details" options={{ headerShown: false }} />
         <Stack.Screen name="personal-information" options={{ headerShown: false }} />
         <Stack.Screen name="security-login" options={{ headerShown: false }} />
         <Stack.Screen
