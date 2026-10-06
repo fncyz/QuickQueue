@@ -1,4 +1,4 @@
-import { createContext, PropsWithChildren, useContext, useMemo, useState } from 'react';
+import { createContext, PropsWithChildren, useCallback, useContext, useMemo, useState } from 'react';
 
 type AuthSessionValue = { isUnlocked: boolean; lock: () => void; unlock: () => void };
 const AuthSessionContext = createContext<AuthSessionValue>({ isUnlocked: false, lock: () => undefined, unlock: () => undefined });
@@ -9,7 +9,9 @@ const AuthSessionContext = createContext<AuthSessionValue>({ isUnlocked: false, 
  */
 export function AuthSessionProvider({ children }: PropsWithChildren) {
   const [isUnlocked, setUnlocked] = useState(false);
-  const value = useMemo(() => ({ isUnlocked, lock: () => setUnlocked(false), unlock: () => setUnlocked(true) }), [isUnlocked]);
+  const lock = useCallback(() => setUnlocked(false), []);
+  const unlock = useCallback(() => setUnlocked(true), []);
+  const value = useMemo(() => ({ isUnlocked, lock, unlock }), [isUnlocked, lock, unlock]);
   return <AuthSessionContext.Provider value={value}>{children}</AuthSessionContext.Provider>;
 }
 

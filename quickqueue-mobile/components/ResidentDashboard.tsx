@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Animated, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { HeaderNotificationBell } from '@/components/HeaderNotificationBell';
 import { SavedInformationBanner } from '@/components/SavedInformationBanner';
+import { SpecialServicesIcon } from '@/components/SpecialServicesIcon';
 import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useAppTheme } from '@/contexts/app-theme';
 import { residentLayout } from '@/constants/resident-layout';
@@ -121,11 +122,43 @@ function EventCarousel({ events }: { events: TemporaryService[] }) {
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [timerRevision, setTimerRevision] = useState(0);
+  const carouselRef = useRef<ScrollView>(null);
+  const autoSlideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardWidth = Math.min(width * 0.92 - 24, 576);
   const interval = cardWidth + 10;
-  const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => setActiveIndex(Math.max(0, Math.min(events.length - 1, Math.round(event.nativeEvent.contentOffset.x / interval))));
-  const formatRange = (item: TemporaryService) => {
-    const start = new Date(`${item.event_start_date}T00:00:00`); const end = new Date(`${item.event_end_date}T00:00:00`);
+  const carouselEvents = events.length > 1 ? [...events, events[0]] : events;
+  const dotWindowStart = events.length <= 5 ? 0 : Math.min(Math.max(activeIndex - 2, 0), events.length - 5);
+  const visibleDots = events.slice(dotWindowStart, dotWindowStart + 5);
+  useEffect(() => {
+    if (events.length <= 1) return;
+    autoSlideTimer.current = setTimeout(() => {
+      carouselRef.current?.scrollTo({ animated: true, x: (activeIndex + 1) * interval, y: 0 });
+    }, 7000);
+    return () => {
+      if (autoSlideTimer.current) clearTimeout(autoSlideTimer.current);
+    };
+  }, [activeIndex, events.length, interval, timerRevision]);
+  useEffect(() => {
+    if (activeIndex < events.length) return;
+    setActiveIndex(0);
+    carouselRef.current?.scrollTo({ animated: false, x: 0, y: 0 });
+  }, [activeIndex, events.length]);
+  const onScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setTimerRevision((value) => value + 1);
+    const displayIndex = Math.max(0, Math.round(event.nativeEvent.contentOffset.x / interval));
+    if (events.length > 1 && displayIndex >= events.length) {
+      setActiveIndex(0);
+      requestAnimationFrame(() => carouselRef.current?.scrollTo({ animated: false, x: 0, y: 0 }));
+      return;
+    }
+    setActiveIndex(Math.min(events.length - 1, displayIndex));
+  };
+  const onScrollBegin = () => {
+    if (autoSlideTimer.current) clearTimeout(autoSlideTimer.current);
+  };
+  const formatRange = (startDate: string, endDate: string) => {
+    const start = new Date(`${startDate}T00:00:00`); const end = new Date(`${endDate}T00:00:00`);
     const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
     const dateRange = start.toLocaleDateString('en-US', options) === end.toLocaleDateString('en-US', options) ? start.toLocaleDateString('en-US', options) : `${start.toLocaleDateString('en-US', options)} – ${end.toLocaleDateString('en-US', options)}`;
     return dateRange;
@@ -135,19 +168,19 @@ function EventCarousel({ events }: { events: TemporaryService[] }) {
     : router.push({ pathname: '/event-details' as never, params: { event: JSON.stringify(item) } });
   return <View style={[s.eventSection, { backgroundColor: colors.surface, borderColor: colors.border }, isDark && s.darkCard]}>
     <View style={s.eventSectionHeader}><SpecialServicesTitle /><Pressable onPress={() => router.push('/booking')} hitSlop={8}><Text style={[s.viewAll, { color: colors.accent }]}>View All  ›</Text></Pressable></View>
-    <Animated.ScrollView horizontal pagingEnabled={false} snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum showsHorizontalScrollIndicator={false} contentContainerStyle={s.eventList} onMomentumScrollEnd={onScrollEnd}>
-      {events.map((item) => <Pressable accessibilityRole="button" key={item.id} onPress={() => open(item)} style={[s.eventCard, { width: cardWidth }]}>
+    <Animated.ScrollView ref={carouselRef} horizontal pagingEnabled={false} snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum showsHorizontalScrollIndicator={false} contentContainerStyle={s.eventList} onScrollBeginDrag={onScrollBegin} onMomentumScrollEnd={onScrollEnd}>
+      {carouselEvents.map((item, displayIndex) => <Pressable accessibilityRole="button" key={`${item.id}-${displayIndex}`} onPress={() => open(item)} style={[s.eventCard, { width: cardWidth }]}>
         <ImageBackground source={servicesBackground} resizeMode="cover" imageStyle={s.eventBackgroundImage} style={s.eventBackground}>
           <View style={[s.eventContentShade, isDark && s.eventContentShadeDark]}>
-            <View style={s.eventBadges}><Text style={s.eventKind}>{item.type === 'Event' ? 'COMMUNITY EVENT' : 'COMMUNITY SERVICE'}</Text><Text style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding, item.is_booked && s.eventBooked]}>{item.is_booked ? 'BOOKED ✓' : item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text>{item.remaining_capacity !== null && <Text style={s.eventCapacity}>{item.remaining_capacity} {item.remaining_capacity === 1 ? 'SLOT' : 'SLOTS'} LEFT</Text>}</View>
-            <Text numberOfLines={2} style={[s.eventTitle, isDark && s.eventTextDark]}>{item.name}</Text><Text numberOfLines={2} style={[s.eventDescription, isDark && s.eventMutedDark]}>{item.description}</Text>
-            <View style={s.eventDetails}><View style={s.eventMeta}><Ionicons name="calendar-outline" size={15} color={isDark ? '#8CBBF5' : '#0759D9'} /><View style={s.eventMetaCopy}><Text style={[s.eventMetaLabel, isDark && s.eventMutedDark]}>Schedule</Text><Text numberOfLines={2} style={[s.eventMetaText, isDark && s.eventTextDark]}>{formatRange(item)}</Text></View></View>{Boolean(item.location) && <View style={s.eventMeta}><Ionicons name="location-outline" size={15} color={isDark ? '#8CBBF5' : '#0759D9'} /><View style={s.eventMetaCopy}><Text style={[s.eventMetaLabel, isDark && s.eventMutedDark]}>Location</Text><Text numberOfLines={2} style={[s.eventMetaText, isDark && s.eventTextDark]}>{item.location}</Text></View></View>}</View>
+            <View style={s.eventBadges}><Text style={s.eventKind}>{item.type === 'Event' ? 'COMMUNITY EVENT' : 'COMMUNITY SERVICE'}</Text><Text style={[s.eventStatus, item.status === 'ending_soon' && s.eventEnding, item.is_booked && s.eventBooked]}>{item.is_booked ? 'BOOKED' : item.status === 'active' ? 'AVAILABLE NOW' : item.status.replace('_', ' ').toUpperCase()}</Text>{item.remaining_capacity !== null && <Text style={s.eventCapacity}>{item.remaining_capacity} {item.remaining_capacity === 1 ? 'SLOT' : 'SLOTS'} LEFT</Text>}</View>
+            <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={2} style={[s.eventTitle, isDark && s.eventTextDark]}>{item.name}</Text><View style={s.eventFlexibleSpace} /><Text numberOfLines={2} style={[s.eventDescription, isDark && s.eventMutedDark]}>{item.description}</Text>
+            <View style={s.eventDetails}><View style={s.eventMeta}><Ionicons name="calendar-outline" size={15} color={isDark ? '#8CBBF5' : '#0759D9'} /><View style={s.eventMetaCopy}><Text style={[s.eventMetaLabel, isDark && s.eventMutedDark]}>Booking Period</Text><Text numberOfLines={2} style={[s.eventMetaText, isDark && s.eventTextDark]}>{formatRange(item.booking_start_date, item.booking_end_date)}</Text></View></View><View style={s.eventMeta}><Ionicons name="calendar-number-outline" size={15} color={isDark ? '#8CBBF5' : '#0759D9'} /><View style={s.eventMetaCopy}><Text style={[s.eventMetaLabel, isDark && s.eventMutedDark]}>Event Date</Text><Text numberOfLines={2} style={[s.eventMetaText, isDark && s.eventTextDark]}>{formatRange(item.event_start_date, item.event_end_date)}</Text></View></View>{Boolean(item.location) && <View style={s.eventMeta}><Ionicons name="location-outline" size={15} color={isDark ? '#8CBBF5' : '#0759D9'} /><View style={s.eventMetaCopy}><Text style={[s.eventMetaLabel, isDark && s.eventMutedDark]}>Location</Text><Text numberOfLines={2} style={[s.eventMetaText, isDark && s.eventTextDark]}>{item.location}</Text></View></View>}</View>
             <LinearGradient colors={["#003B91", "#075BCF", "#0784FF"]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={s.eventAction}><Text style={s.eventActionText}>{item.is_booked ? 'VIEW QR PASS' : item.can_book ? 'BOOK NOW' : 'VIEW DETAILS'}</Text><Ionicons name={item.is_booked ? 'qr-code-outline' : 'arrow-forward'} size={14} color="#FFF" /></LinearGradient>
           </View>
         </ImageBackground>
       </Pressable>)}
     </Animated.ScrollView>
-    {events.length > 1 && <View style={s.eventDots}>{events.map((item, index) => <View key={item.id} style={[s.eventDot, index === activeIndex && s.eventDotActive]} />)}</View>}
+    <View style={s.eventDots}>{visibleDots.map((item, index) => { const eventIndex = dotWindowStart + index; return <View key={item.id} style={[s.eventDot, eventIndex === activeIndex && s.eventDotActive]} />; })}</View>
   </View>;
 }
 
@@ -191,7 +224,7 @@ function EmptyAppointmentCard({ isDark }: { isDark: boolean }) {
 }
 
 function Title({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) { const { colors } = useAppTheme(); return <View style={s.titleRow}><Ionicons name={icon} size={21} color={colors.accent} /><Text style={[s.sectionTitle, { color: colors.text }]}>{label}</Text></View>; }
-function SpecialServicesTitle() { const { colors } = useAppTheme(); return <View style={s.titleRow}><View style={[s.specialServicesIcon, { backgroundColor: colors.accent }]}><MaterialCommunityIcons name="hand-heart" size={17} color="#FFF" /></View><Text style={[s.sectionTitle, { color: colors.text }]}>Special Services</Text></View>; }
+function SpecialServicesTitle() { const { colors } = useAppTheme(); return <View style={s.titleRow}><SpecialServicesIcon /><Text style={[s.sectionTitle, { color: colors.text }]}>Special Services</Text></View>; }
 function Hours({ label, value, closed = false }: { label: string; value: string; closed?: boolean }) { const { colors } = useAppTheme(); return <View style={s.hours}><Text style={[s.hourLabel, { color: colors.text }]}>{label}</Text><Text style={[s.hourValue, { color: colors.text }, closed && s.closed]}>{value}</Text></View>; }
 
 const readableStyles = {
@@ -242,7 +275,7 @@ const readableStyles = {
 } as const;
 
 const s = StyleSheet.create({
-  safe: { backgroundColor: '#FFFFFF', flex: 1 }, page: { backgroundColor: '#FFFFFF', flex: 1 }, content: { paddingBottom: 24 }, logos: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 13 }, avatar: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 22, height: 44, justifyContent: 'center', position: 'absolute', right: 20, top: 30, width: 44 }, notificationBadge: { alignItems: 'center', backgroundColor: '#EF3340', borderColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, height: 16, justifyContent: 'center', minWidth: 16, paddingHorizontal: 2, position: 'absolute', right: -2, top: -2 }, notificationBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' }, appointment: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C9D9F8', borderRadius: 22, borderWidth: 2, flexDirection: 'row', marginHorizontal: 18, marginTop: -22, padding: 18 }, circle: { alignItems: 'center', backgroundColor: '#F0F5FF', borderRadius: 34, height: 68, justifyContent: 'center', marginRight: 16, width: 68 }, book: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#0346A8', borderRadius: 5, flexDirection: 'row', gap: 7, justifyContent: 'center', marginTop: 9, paddingHorizontal: 8, paddingVertical: 8 }, section: { backgroundColor: '#FFFFFF', borderColor: '#EDF0F7', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }, titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, specialServicesIcon: { alignItems: 'center', borderRadius: 12, height: 24, justifyContent: 'center', width: 24 }, hours: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, closed: { color: '#E33636' }, ai: { alignItems: 'center', backgroundColor: '#F3EBFF', borderRadius: 11, flexDirection: 'row', gap: 10, marginHorizontal: 18, marginTop: 12, padding: 12 }, bubble: { alignItems: 'center', backgroundColor: '#2E75D4', borderRadius: 24, height: 46, justifyContent: 'center', width: 46 }, notice: { alignItems: 'center', backgroundColor: '#E8F2FF', borderRadius: 8, flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 10, padding: 11 },
+  safe: { backgroundColor: '#FFFFFF', flex: 1 }, page: { backgroundColor: '#FFFFFF', flex: 1 }, content: { paddingBottom: 24 }, logos: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 13 }, avatar: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 22, height: 44, justifyContent: 'center', position: 'absolute', right: 20, top: 30, width: 44 }, notificationBadge: { alignItems: 'center', backgroundColor: '#EF3340', borderColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, height: 16, justifyContent: 'center', minWidth: 16, paddingHorizontal: 2, position: 'absolute', right: -2, top: -2 }, notificationBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '800' }, appointment: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C9D9F8', borderRadius: 22, borderWidth: 2, flexDirection: 'row', marginHorizontal: 18, marginTop: -22, padding: 18 }, circle: { alignItems: 'center', backgroundColor: '#F0F5FF', borderRadius: 34, height: 68, justifyContent: 'center', marginRight: 16, width: 68 }, book: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#0346A8', borderRadius: 5, flexDirection: 'row', gap: 7, justifyContent: 'center', marginTop: 9, paddingHorizontal: 8, paddingVertical: 8 }, section: { backgroundColor: '#FFFFFF', borderColor: '#EDF0F7', borderRadius: 14, borderWidth: 1, marginHorizontal: 18, marginTop: 12, padding: 12 }, header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }, titleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 }, hours: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, closed: { color: '#E33636' }, ai: { alignItems: 'center', backgroundColor: '#F3EBFF', borderRadius: 11, flexDirection: 'row', gap: 10, marginHorizontal: 18, marginTop: 12, padding: 12 }, bubble: { alignItems: 'center', backgroundColor: '#2E75D4', borderRadius: 24, height: 46, justifyContent: 'center', width: 46 }, notice: { alignItems: 'center', backgroundColor: '#E8F2FF', borderRadius: 8, flexDirection: 'row', gap: 8, marginHorizontal: 18, marginTop: 10, padding: 11 },
   eventSection: { alignSelf: 'center', borderRadius: 18, borderWidth: 1, marginTop: 12, maxWidth: 600, overflow: 'hidden', paddingHorizontal: 12, paddingTop: 12, width: '92%' },
   eventSectionHeader: { alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginBottom: 10 },
   eventList: { gap: 10, paddingRight: 2 },
@@ -255,12 +288,13 @@ const s = StyleSheet.create({
   eventKind: { backgroundColor: '#C9E4FF', borderRadius: 8, color: '#0759D9', flexShrink: 0, fontSize: 5, fontWeight: '500', paddingHorizontal: 5, paddingVertical: 3 },
   eventStatus: { backgroundColor: '#C8F0D5', borderRadius: 8, color: '#17713C', flexShrink: 0, fontSize: 5, fontWeight: '500', paddingHorizontal: 5, paddingVertical: 3 },
   eventCapacity: { backgroundColor: '#FFD5C3', borderRadius: 8, color: '#B84421', flexShrink: 0, fontSize: 5, fontWeight: '500', paddingHorizontal: 5, paddingVertical: 3 },
-  eventEnding: { backgroundColor: '#FFF0D4', color: '#A85A00' }, eventBooked: { backgroundColor: '#E3EEFF', color: '#0759D9' },
-  eventTitle: { color: '#10336C', fontSize: 20, fontWeight: '900', lineHeight: 25, marginTop: 8, textAlign: 'center' },
-  eventDescription: { alignSelf: 'center', color: '#405574', fontSize: 11, lineHeight: 16, marginTop: 2, maxWidth: '94%', minHeight: 32, textAlign: 'center' },
+  eventEnding: { backgroundColor: '#FFF0D4', color: '#A85A00' }, eventBooked: { backgroundColor: '#E4F6E9', color: '#17713C' },
+  eventTitle: { color: '#10336C', fontSize: 25, fontWeight: '900', lineHeight: 30, marginTop: 12, textAlign: 'center' },
+  eventFlexibleSpace: { flexGrow: 1, minHeight: 10 },
+  eventDescription: { alignSelf: 'center', color: '#405574', fontSize: 11, lineHeight: 16, maxWidth: '94%', minHeight: 32, textAlign: 'center' },
   eventTextDark: { color: '#F4F7FC' }, eventMutedDark: { color: '#CAD6E6' },
-  eventDetails: { alignSelf: 'center', gap: 4, marginTop: 6, width: '94%' }, eventMeta: { alignItems: 'flex-start', flexDirection: 'row', gap: 7, minHeight: 18 }, eventMetaCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4, minWidth: 0 }, eventMetaLabel: { color: '#607493', fontSize: 9, fontWeight: '600' }, eventMetaText: { color: '#254064', flexShrink: 1, fontSize: 9, fontWeight: '800', minWidth: 0 },
-  eventAction: { alignItems: 'center', alignSelf: 'stretch', borderRadius: 10, flexDirection: 'row', gap: 6, justifyContent: 'center', marginTop: 'auto', minHeight: 38, paddingHorizontal: 13, paddingVertical: 8 }, eventActionText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
+  eventDetails: { alignSelf: 'center', gap: 4, marginTop: 5, width: '94%' }, eventMeta: { alignItems: 'flex-start', flexDirection: 'row', gap: 7, minHeight: 18 }, eventMetaCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4, minWidth: 0 }, eventMetaLabel: { color: '#607493', fontSize: 9, fontWeight: '600' }, eventMetaText: { color: '#254064', flexShrink: 1, fontSize: 9, fontWeight: '800', minWidth: 0 },
+  eventAction: { alignItems: 'center', alignSelf: 'stretch', borderRadius: 10, flexDirection: 'row', gap: 6, justifyContent: 'center', marginTop: 12, minHeight: 38, paddingHorizontal: 13, paddingVertical: 8 }, eventActionText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
   eventDots: { alignItems: 'center', flexDirection: 'row', gap: 5, justifyContent: 'center', minHeight: 24 }, eventDot: { backgroundColor: '#C8D5E7', borderRadius: 4, height: 7, width: 7 }, eventDotActive: { backgroundColor: '#0759D9', width: 13 },
   headerProfile: { alignItems: 'center', backgroundColor: '#FFF', borderRadius: 19, height: 38, justifyContent: 'center', overflow: 'hidden', position: 'absolute', right: 72, top: 33, width: 38 }, headerProfileImage: { height: '100%', width: '100%' }, trackLabel: { fontSize: 12, fontWeight: '600', marginBottom: 3 }, search: { alignItems: 'center', backgroundColor: '#F3F6FD', borderRadius: 9, flexDirection: 'row', gap: 8, marginBottom: 5, minHeight: 40, paddingHorizontal: 11 }, searchInput: { flex: 1, fontSize: 14 },
   darkCard: { backgroundColor: '#131E30', borderColor: '#2A3A52' }, darkService: { borderColor: '#2A3A52' }, darkIcon: { backgroundColor: '#203553' },

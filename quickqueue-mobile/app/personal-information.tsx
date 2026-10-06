@@ -29,36 +29,42 @@ export default function PersonalInformationScreen() {
   const [contact, setContact] = useState('');
   const [saving, setSaving] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const saveInFlight = useRef(false);
 
   useEffect(() => {
+    mounted.current = true;
     const load = async () => {
       const saved = await readOfflineCache<Profile>('profile');
-      if (saved) { const savedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`); setProfile(saved.value); setEmail(saved.value.email || ''); setContact(saved.value.contact_number); setPhoto(savedPhoto); }
+      if (saved) { const savedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`); if (mounted.current) { setProfile(saved.value); setEmail(saved.value.email || ''); setContact(saved.value.contact_number); setPhoto(savedPhoto); } }
       if (!isOnline) return;
       try {
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return router.replace('/login');
-        setToken(accessToken);
+        if (mounted.current) setToken(accessToken);
         const response = await api.get<Profile>('profile/', { headers: { Authorization: `Bearer ${accessToken}` } });
         const savedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${response.data.username}`);
         await writeOfflineCache('profile', response.data);
-        setProfile(response.data); setEmail(response.data.email || ''); setContact(response.data.contact_number); setPhoto(savedPhoto);
-      } catch (error: any) { if (!saved) Alert.alert('Unable to load profile', error?.response?.data?.message || 'Please check your connection.'); }
+        if (mounted.current) { setProfile(response.data); setEmail(response.data.email || ''); setContact(response.data.contact_number); setPhoto(savedPhoto); }
+      } catch (error: any) { if (mounted.current && !saved) Alert.alert('Unable to load profile', error?.response?.data?.message || 'Please check your connection.'); }
     };
     load();
+    return () => { mounted.current = false; };
   }, [isOnline]);
 
   const save = async () => {
+    if (saveInFlight.current) return;
     if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect before changing your profile.');
     if (!contact.trim()) return Alert.alert('Contact number required', 'Enter your contact number.');
     try {
+      saveInFlight.current = true;
       setSaving(true);
       const response = await api.patch<Profile>('profile/', { email, contact_number: contact }, { headers: { Authorization: `Bearer ${token}` } });
       if (photo) await AsyncStorage.setItem(`quickqueue.profilePhoto.${response.data.username}`, photo);
       await writeOfflineCache('profile', response.data);
       setProfile(response.data); setEditing(false); Alert.alert('Profile updated', 'Your contact information has been saved.');
     } catch (error: any) { Alert.alert('Profile not updated', error?.response?.data?.message || 'Please try again.'); }
-    finally { setSaving(false); }
+    finally { saveInFlight.current = false; if (mounted.current) setSaving(false); }
   };
 
   const pickPhoto = async () => {

@@ -30,35 +30,42 @@ export default function QueueScreen() {
   const [acting, setActing] = useState(false);
   const loadInFlight = useRef(false);
   const actionInFlight = useRef(false);
+  const screenActive = useRef(false);
 
   const loadQueue = useCallback(async (showLoader = true) => {
     if (loadInFlight.current) return;
     loadInFlight.current = true;
     let hasCachedAppointment = false;
-    if (showLoader) setLoading(true);
+    if (showLoader && screenActive.current) setLoading(true);
     try {
-      const saved = await readOfflineCache<Appointment | null>('appointment');
-      hasCachedAppointment = Boolean(saved);
-      if (saved) { setAppointment(saved.value); if (showLoader) setLoading(false); }
+      if (showLoader) {
+        const saved = await readOfflineCache<Appointment | null>('appointment');
+        hasCachedAppointment = Boolean(saved);
+        if (saved && screenActive.current) { setAppointment(saved.value); setLoading(false); }
+      }
       if (!isOnline) return;
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
-      setToken(accessToken);
+      if (screenActive.current) setToken(accessToken);
       const response = await api.get('queue-status/', { headers: { Authorization: `Bearer ${accessToken}` } });
-      setAppointment(response.data.appointment);
+      if (screenActive.current) setAppointment(response.data.appointment);
       await writeOfflineCache('appointment', response.data.appointment);
     } catch (error: any) {
-      if (showLoader && !hasCachedAppointment) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
+      if (screenActive.current && showLoader && !hasCachedAppointment) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
     } finally {
       loadInFlight.current = false;
-      if (showLoader) setLoading(false);
+      if (screenActive.current && showLoader) setLoading(false);
     }
   }, [isOnline]);
 
   useFocusEffect(useCallback(() => {
+    screenActive.current = true;
     loadQueue();
     const timer = isOnline ? setInterval(() => loadQueue(false), 15000) : undefined;
-    return () => clearInterval(timer);
+    return () => {
+      screenActive.current = false;
+      if (timer) clearInterval(timer);
+    };
   }, [isOnline, loadQueue]));
 
   const performAction = async (action: 'check_in' | 'cancel') => {

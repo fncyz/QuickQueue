@@ -5,6 +5,7 @@ import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/contexts/app-theme';
 import { SuccessAnimation } from '@/components/SuccessAnimation';
+import { SpecialServicesIcon } from '@/components/SpecialServicesIcon';
 
 export default function BookingSuccessScreen() {
   const { colors, isDark } = useAppTheme();
@@ -12,7 +13,7 @@ export default function BookingSuccessScreen() {
   const currentStatus = params.statusCode === 'P' ? 'Under Review' : (params.status || 'Under Review');
   const approved = ['C', 'O', 'D'].includes(params.statusCode || '');
 
-  if (params.isEvent === 'true' && params.eventBookingId) return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}><ScrollView contentContainerStyle={s.content}><View style={s.successArea}><SuccessAnimation /><Text style={[s.heading, isDark && s.darkHeading]}>Special Service Booked!</Text><Text style={[s.subheading, isDark && s.darkSecondary]}>Your secure QR booking pass is ready.</Text></View><View style={[s.referenceCard, isDark && s.darkCard]}><View style={[s.referenceIcon, isDark && s.darkBlueTint]}><Ionicons name="qr-code-outline" size={27} color={isDark ? '#79AEEF' : '#0875FF'} /></View><View style={s.referenceCopy}><Text style={[s.referenceLabel, isDark && s.darkSecondary]}>Booking Reference</Text><Text style={[s.referenceNumber, isDark && s.darkPrimaryText]}>{params.bookingReference}</Text><Text style={[s.queueNumber, isDark && s.darkSecondary]}>Present your QR pass at the event venue.</Text></View><View style={[s.submitted, isDark && s.darkGreenTint]}><Text style={[s.submittedText, isDark && s.darkGreenText]}>Confirmed</Text></View></View><View style={[s.details, isDark && s.darkCard]}><Detail icon="sparkles-outline" label="Special Service" value={params.service} /><Detail icon="calendar-outline" label="Event Date" value={params.appointmentDate} /></View><Pressable onPress={() => router.replace({ pathname: '/event-pass' as never, params: { bookingId: params.eventBookingId } })} style={[s.primary, isDark && s.darkPrimaryButton]}><Text style={[s.primaryText, isDark && s.darkPrimaryText]}>View QR Pass</Text><Ionicons name="qr-code-outline" size={20} color="#FFF" /></Pressable><Pressable onPress={() => router.replace('/(tabs)')} style={[s.secondary, isDark && s.darkSecondaryButton]}><Text style={[s.secondaryText, isDark && s.darkSectionHeading]}>Back to Home</Text></Pressable></ScrollView></SafeAreaView>;
+  if (params.isEvent === 'true' && params.eventBookingId) return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}><ScrollView contentContainerStyle={s.content}><View style={s.successArea}><SuccessAnimation /><Text style={[s.heading, isDark && s.darkHeading]}>Special Service Booked!</Text><Text style={[s.subheading, isDark && s.darkSecondary]}>Your secure QR booking pass is ready.</Text></View><View style={[s.referenceCard, isDark && s.darkCard]}><View style={[s.referenceIcon, isDark && s.darkBlueTint]}><Ionicons name="qr-code-outline" size={27} color={isDark ? '#79AEEF' : '#0875FF'} /></View><View style={s.referenceCopy}><Text style={[s.referenceLabel, isDark && s.darkSecondary]}>Booking Reference</Text><Text style={[s.referenceNumber, isDark && s.darkPrimaryText]}>{params.bookingReference}</Text><Text style={[s.queueNumber, isDark && s.darkSecondary]}>Present your QR pass at the event venue.</Text></View><View style={[s.submitted, isDark && s.darkGreenTint]}><Text style={[s.submittedText, isDark && s.darkGreenText]}>Confirmed</Text></View></View><View style={[s.details, isDark && s.darkCard]}><SpecialServiceDetail label="Special Service" value={params.service} /><Detail icon="calendar-outline" label="Event Date" value={params.appointmentDate} /></View><Pressable onPress={() => router.replace({ pathname: '/event-pass' as never, params: { bookingId: params.eventBookingId } })} style={[s.primary, isDark && s.darkPrimaryButton]}><Text style={[s.primaryText, isDark && s.darkPrimaryText]}>View QR Pass</Text><Ionicons name="qr-code-outline" size={20} color="#FFF" /></Pressable><Pressable onPress={() => router.replace('/(tabs)')} style={[s.secondary, isDark && s.darkSecondaryButton]}><Text style={[s.secondaryText, isDark && s.darkSectionHeading]}>Back to Home</Text></Pressable></ScrollView></SafeAreaView>;
 
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -49,6 +50,11 @@ export default function BookingSuccessScreen() {
 function Detail({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string }) {
   const { isDark } = useAppTheme();
   return <View style={s.detail}><Ionicons name={icon} size={17} color={isDark ? '#79AEEF' : '#1978EC'} /><View><Text style={[s.detailLabel, isDark && s.darkSecondary]}>{label}</Text><Text style={[s.detailValue, isDark && s.darkPrimaryText]}>{value || '—'}</Text></View></View>;
+}
+
+function SpecialServiceDetail({ label, value }: { label: string; value?: string }) {
+  const { isDark } = useAppTheme();
+  return <View style={s.detail}><SpecialServicesIcon size={24} /><View><Text style={[s.detailLabel, isDark && s.darkSecondary]}>{label}</Text><Text style={[s.detailValue, isDark && s.darkPrimaryText]}>{value || '—'}</Text></View></View>;
 }
 
 function ProgressItem({ icon, title, detail, active = false, color, badge }: { icon: keyof typeof Ionicons.glyphMap; title: string; detail: string; active?: boolean; color: string; badge?: string }) {

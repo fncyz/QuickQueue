@@ -68,6 +68,9 @@ def create_appointment(
         raise ValueError("Special Services must be reserved through the event booking flow.")
     time_slot = TimeSlot.objects.select_for_update().select_related("barangay").get(pk=time_slot.pk)
 
+    if appointment_date.weekday() >= 5:
+        raise ValueError("Regular appointments are available Monday through Friday only.")
+
     if check_duplicate_appointment(
         resident,
         appointment_date,

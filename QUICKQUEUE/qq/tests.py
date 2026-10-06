@@ -102,10 +102,13 @@ class ResidentAppointmentApiTests(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_booking_returns_database_and_display_ids_and_creates_once(self):
+        booking_date = date.today()
+        while booking_date.weekday() >= 5:
+            booking_date += timedelta(days=1)
         payload = {
             "service": self.service.pk,
             "time_slot": self.time_slot.pk,
-            "appointment_date": date.today().isoformat(),
+            "appointment_date": booking_date.isoformat(),
             "purpose": "API contract test",
             "sitio": "Test Sitio",
         }
@@ -121,6 +124,21 @@ class ResidentAppointmentApiTests(APITestCase):
         duplicate = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
+
+    def test_regular_booking_rejects_weekends(self):
+        saturday = date.today() + timedelta(days=(5 - date.today().weekday()) % 7)
+        if saturday < date.today():
+            saturday += timedelta(days=7)
+        response = self.client.post("/api/appointments/", {
+            "service": self.service.pk,
+            "time_slot": self.time_slot.pk,
+            "appointment_date": saturday.isoformat(),
+            "purpose": "Weekend booking attempt",
+            "sitio": "Test Sitio",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Monday through Friday", response.data["message"])
+        self.assertFalse(Appointment.objects.filter(resident=self.resident).exists())
 
     def test_mobile_summary_and_notification_pagination_contracts(self):
         appointment = Appointment.objects.create(

@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -49,7 +48,7 @@ export default function BookingScreen() {
   const purposeRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const submissionLock = useRef(false);
   const bookingCompleted = useRef(false);
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
   const { isOnline } = useConnectivity();
   const params = useLocalSearchParams<{ serviceId?: string }>();
   const coverHeader = useCoverHeaderScroll();
@@ -150,6 +149,10 @@ export default function BookingScreen() {
     let bookingWasCreated = false;
     if (!service || (!isSpecialService && (!sitio.trim() || !timeSlot || !date))) {
       Alert.alert('Incomplete booking', isSpecialService ? 'Select a Special Service to continue.' : 'Select a service, enter your sitio or purok, and choose a date and time slot.');
+      return;
+    }
+    if (!isSpecialService && date && date.getDay() % 6 === 0) {
+      Alert.alert('Weekday required', 'Regular appointments are available Monday through Friday only.');
       return;
     }
     if (!isOnline) {
@@ -282,8 +285,27 @@ export default function BookingScreen() {
 
       <View style={[s.beforeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={s.beforeTitle}><Ionicons name="information-circle" size={18} color={colors.accent} /><Text style={[s.beforeTitleText, { color: colors.accent }]}>Before You Book</Text></View><Tip icon="clipboard-outline" text="Ensure that all information provided is complete and accurate." />{isSpecialService ? <><Tip icon="qr-code-outline" text="Your confirmed reservation uses a QR pass as proof of booking." /><Tip icon="calendar-outline" text="Check the event date and venue before confirming your reservation." /></> : <><Tip icon="time-outline" text="Arrive at the barangay office at least 5 minutes before your scheduled appointment." /><Tip icon="checkmark-circle-outline" text="Once submitted, your appointment will be reviewed by barangay staff." /></>}<Tip icon="card-outline" text="Bring one (1) valid government-issued ID and any additional requirements for your selected service." /><Tip icon="close-circle-outline" text="If you are unable to attend, please cancel your appointment in advance." /></View>
     </Animated.ScrollView>
-    {showDatePicker && <DateTimePicker value={date ?? new Date()} mode="date" minimumDate={new Date()} display="default" themeVariant={isDark ? 'dark' : 'light'} accentColor={colors.accent} onChange={(_, selected) => { setShowDatePicker(Platform.OS === 'ios'); if (selected) setDate(selected); }} />}
+    <WeekdayDatePicker visible={showDatePicker} value={date} onClose={() => setShowDatePicker(false)} onSelect={(selected) => { setDate(selected); setShowDatePicker(false); }} />
   </SafeAreaView>;
+}
+
+function WeekdayDatePicker({ visible, value, onClose, onSelect }: { visible: boolean; value: Date | null; onClose: () => void; onSelect: (date: Date) => void }) {
+  const { colors } = useAppTheme();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const [month, setMonth] = useState(() => new Date((value ?? today).getFullYear(), (value ?? today).getMonth(), 1));
+  useEffect(() => { if (visible) { const baseDate = value ?? new Date(); setMonth(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)); } }, [visible, value]);
+  const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cells = [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
+  while (cells.length % 7) cells.push(null);
+  const previousDisabled = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
+  return <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}><View style={s.calendarBackdrop}><View style={[s.calendarCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={s.calendarHeader}><Pressable accessibilityLabel="Previous month" disabled={previousDisabled} onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} style={[s.calendarNav, previousDisabled && s.calendarNavDisabled]}><Ionicons name="chevron-back" size={20} color={colors.accent} /></Pressable><Text style={[s.calendarTitle, { color: colors.text }]}>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</Text><Pressable accessibilityLabel="Next month" onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} style={s.calendarNav}><Ionicons name="chevron-forward" size={20} color={colors.accent} /></Pressable></View><View style={s.calendarGrid}>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => <Text key={day} style={[s.calendarWeekday, { color: index % 6 === 0 ? colors.muted : colors.text }]}>{day}</Text>)}{cells.map((day, index) => {
+    if (!day) return <View key={`blank-${index}`} style={s.calendarDay} />;
+    const candidate = new Date(month.getFullYear(), month.getMonth(), day); candidate.setHours(0, 0, 0, 0);
+    const weekend = candidate.getDay() % 6 === 0; const past = candidate < today; const disabled = weekend || past;
+    const selected = Boolean(value && candidate.getFullYear() === value.getFullYear() && candidate.getMonth() === value.getMonth() && candidate.getDate() === value.getDate());
+    return <Pressable accessibilityLabel={candidate.toLocaleDateString()} accessibilityState={{ disabled, selected }} disabled={disabled} key={candidate.toISOString()} onPress={() => onSelect(candidate)} style={[s.calendarDay, selected && { backgroundColor: colors.accent }]}><Text style={[s.calendarDayText, { color: disabled ? colors.border : colors.text }, selected && s.calendarDaySelected]}>{day}</Text></Pressable>;
+  })}</View><Pressable onPress={onClose} style={[s.calendarClose, { borderColor: colors.border }]}><Text style={[s.calendarCloseText, { color: colors.accent }]}>Cancel</Text></Pressable></View></View></Modal>;
 }
 
 function Progress({ currentStep, isSpecialService }: { currentStep: number; isSpecialService: boolean }) { const { colors } = useAppTheme(); const steps = ['Personal Information', isSpecialService ? 'Special Service' : 'Service', isSpecialService ? 'Confirm' : 'Date & Time']; return <View style={s.progress}>{steps.map((label, index) => { const step = index + 1; const complete = step < currentStep; const active = step === currentStep; const isPersonalInformation = label === 'Personal Information'; return <View key={label} style={[s.step, isPersonalInformation && s.personalInformationStep]}><View style={[s.stepCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }, active && s.stepActive, complete && s.stepComplete]}><Text style={[s.stepNumber, { color: colors.text }, (active || complete) && s.stepNumberActive]}>{complete ? '✓' : step}</Text></View><Text fixedFontSize={11} numberOfLines={1} style={[s.stepLabel, { color: colors.muted }, active && s.stepLabelActive, complete && s.stepLabelComplete]}>{label}</Text>{index < steps.length - 1 && <View style={[s.stepLine, { backgroundColor: colors.border }, complete && s.stepLineComplete]} />}</View>; })}</View>; }
@@ -365,6 +387,19 @@ const s = StyleSheet.create({
   summaryCopy: { flex: 1, minWidth: 0 },
   summaryLabel: { fontSize: 9 },
   summaryValue: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  calendarBackdrop: { alignItems: 'center', backgroundColor: 'rgba(1,8,18,0.62)', flex: 1, justifyContent: 'center', padding: 18 },
+  calendarCard: { borderRadius: 18, borderWidth: 1, maxWidth: 420, padding: 16, width: '100%' },
+  calendarHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  calendarNav: { alignItems: 'center', height: 40, justifyContent: 'center', width: 40 },
+  calendarNavDisabled: { opacity: 0.3 },
+  calendarTitle: { fontSize: 16, fontWeight: '800' },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarWeekday: { fontSize: 10, fontWeight: '700', paddingVertical: 7, textAlign: 'center', width: '14.2857%' },
+  calendarDay: { alignItems: 'center', aspectRatio: 1, borderRadius: 20, justifyContent: 'center', width: '14.2857%' },
+  calendarDayText: { fontSize: 12, fontWeight: '600' },
+  calendarDaySelected: { color: '#FFF' },
+  calendarClose: { alignItems: 'center', borderRadius: 10, borderWidth: 1, marginTop: 12, minHeight: 42, justifyContent: 'center' },
+  calendarCloseText: { fontSize: 12, fontWeight: '800' },
   stepComplete: { backgroundColor: '#2FB879', borderColor: '#2FB879' },
   stepLabelComplete: { color: '#209864', fontWeight: '700' },
   stepSection: { alignItems: 'center', flexDirection: 'row', gap: 7, marginTop: 12 },

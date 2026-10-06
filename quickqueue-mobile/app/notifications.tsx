@@ -46,6 +46,7 @@ export default function NotificationsScreen() {
   const loadInFlight = useRef(false);
   const readInFlight = useRef(new Set<number>());
   const markAllInFlight = useRef(false);
+  const screenActive = useRef(false);
   const filterScrollX = useRef(new Animated.Value(0)).current;
   const [filterViewportWidth, setFilterViewportWidth] = useState(0);
   const [filterContentWidth, setFilterContentWidth] = useState(0);
@@ -63,26 +64,28 @@ export default function NotificationsScreen() {
     try {
       const saved = await readOfflineCache<NotificationItem[]>('notifications');
       hasCachedNotifications = Boolean(saved);
-      if (saved) { setItems(saved.value); setLoading(false); }
+      if (saved && screenActive.current) { setItems(saved.value); setLoading(false); }
       if (!isOnline) return;
       if (Date.now() - lastFreshLoad.current < 30000) return;
       const response = await request('get', undefined, 'notifications/?page=1&page_size=50');
       if (response) {
         const data = response.data as NotificationsResponse;
-        setItems(data.notifications); setPage(1); setHasMore(Boolean(data.pagination?.has_more));
+        if (screenActive.current) { setItems(data.notifications); setPage(1); setHasMore(Boolean(data.pagination?.has_more)); }
         lastFreshLoad.current = Date.now(); await writeOfflineCache('notifications', data.notifications);
       }
     } catch (error: any) {
-      if (!hasCachedNotifications) Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
+      if (screenActive.current && !hasCachedNotifications) Alert.alert('Unable to load notifications', error?.response?.data?.message || 'Please check your connection.');
     } finally {
       loadInFlight.current = false;
-      setLoading(false);
+      if (screenActive.current) setLoading(false);
     }
   }, [isOnline, request]);
 
   useFocusEffect(useCallback(() => {
+    screenActive.current = true;
     setLoading(true);
     load();
+    return () => { screenActive.current = false; };
   }, [load]));
 
   const loadMore = async () => {
@@ -138,6 +141,7 @@ export default function NotificationsScreen() {
   };
 
   const unread = items.filter((item) => !item.is_read).length;
+  const filterCounts = useMemo(() => Object.fromEntries((['All', 'Unread', 'Appointments', 'Queue', 'Transactions'] as Filter[]).map((value) => [value, items.reduce((count, item) => count + (!item.is_read && filterMatches(item, value) ? 1 : 0), 0)])) as Record<Filter, number>, [items]);
   const filtered = useMemo(() => items.filter((item) => filterMatches(item, filter)), [filter, items]);
   const visibleItems = filtered.slice(0, visibleLimit);
   const today = new Date().toDateString();
@@ -159,7 +163,7 @@ export default function NotificationsScreen() {
     <View style={{ backgroundColor: colors.background }}><ConnectionStatusBanner /></View>
     <View style={[s.header, { backgroundColor: colors.primary }]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={27} color="#FFFFFF" /></Pressable><Text style={[s.title, appTypography.pageTitle]}>Notifications</Text><View style={s.headerSpace} /></View>
     {loading ? <View style={[s.loading, { backgroundColor: colors.background }]}><QuickQueueLoadingIndicator /></View> : <ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content}>
-      <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters} onLayout={(event) => setFilterViewportWidth(event.nativeEvent.layout.width)} onContentSizeChange={(width) => setFilterContentWidth(width)} onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: filterScrollX } } }], { useNativeDriver: false })} scrollEventThrottle={16}>{filters.map((value) => { const count = items.filter((item) => !item.is_read && filterMatches(item, value)).length; return <Pressable key={value} onPress={() => { setFilter(value); setVisibleLimit(25); }} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</Animated.ScrollView>
+      <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterScroller} contentContainerStyle={s.filters} onLayout={(event) => setFilterViewportWidth(event.nativeEvent.layout.width)} onContentSizeChange={(width) => setFilterContentWidth(width)} onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: filterScrollX } } }], { useNativeDriver: false })} scrollEventThrottle={16}>{filters.map((value) => { const count = filterCounts[value]; return <Pressable key={value} onPress={() => { setFilter(value); setVisibleLimit(25); }} style={[s.filter, filter === value && s.filterActive]}><Text numberOfLines={1} style={[s.filterText, filter === value && s.filterTextActive]}>{value}</Text>{count > 0 && <View style={[s.count, filter === value && s.countActive]}><Text style={[s.countText, filter === value && s.countTextActive]}>{count}</Text></View>}</Pressable>; })}</Animated.ScrollView>
       {filterContentWidth > filterViewportWidth && <View style={s.scrollbarTrack}><Animated.View style={[s.scrollbarThumb, { width: scrollbarThumbWidth, transform: [{ translateX: scrollbarTranslateX }] }]} /></View>}
       {filtered.length === 0 ? <View style={s.empty}><Ionicons name="notifications-off-outline" size={52} color="#9DB1D3" /><Text style={s.emptyTitle}>No notifications here</Text><Text style={s.emptyText}>New appointment and queue updates will appear here.</Text></View> : <>{todayItems.length > 0 && <NotificationGroup title="Today" items={todayItems} onPress={markRead} unread={unread} onMarkAll={isOnline ? markAllRead : undefined} />}{earlierItems.length > 0 && <NotificationGroup title="Earlier" items={earlierItems} onPress={markRead} unread={todayItems.length ? undefined : unread} onMarkAll={isOnline && !todayItems.length ? markAllRead : undefined} />}</>}
       {(visibleLimit < filtered.length || hasMore) && <Pressable disabled={loadingMore} onPress={loadMore} style={[s.loadMore, { borderColor: colors.accent }]}><Text style={[s.loadMoreText, { color: colors.accent }]}>{loadingMore ? 'Loading...' : 'Load more'}</Text></Pressable>}

@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
-import { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -36,7 +36,10 @@ export function ConnectivityProvider({ children }: PropsWithChildren) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  return <ConnectivityContext.Provider value={{ dismissNotice: () => setNotice(null), isOnline, notice, reconnectVersion }}>{children}</ConnectivityContext.Provider>;
+  const dismissNotice = useCallback(() => setNotice(null), []);
+  const value = useMemo(() => ({ dismissNotice, isOnline, notice, reconnectVersion }), [dismissNotice, isOnline, notice, reconnectVersion]);
+
+  return <ConnectivityContext.Provider value={value}>{children}</ConnectivityContext.Provider>;
 }
 
 export const useConnectivity = () => useContext(ConnectivityContext);
