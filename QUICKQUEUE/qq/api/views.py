@@ -30,7 +30,7 @@ from difflib import SequenceMatcher
 import re
 
 from qq.models import Appointment, BarangayStaff, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
-from qq.services.appointment_service import create_appointment
+from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.timeslot_service import ensure_default_time_slots
 from qq.gemini_service import GeminiUnavailable, ask_gemini
 from .throttles import ChatRateThrottle
@@ -342,10 +342,11 @@ def appointments_api(request):
     resident = request.user.resident_profile
     ensure_default_time_slots(resident.barangay)
     now = timezone.now()
+    today = timezone.localdate()
     services = Service.objects.filter(is_active=True).filter(
         Q(is_temporary=False) |
         Q(is_temporary=True, barangay=resident.barangay, lifecycle=Service.Lifecycle.SCHEDULED,
-          end_datetime__gt=now)
+          booking_end_date__gte=today)
     ).annotate(
         live_booking_count=Count(
             "appointments",
@@ -358,7 +359,22 @@ def appointments_api(request):
     ).order_by("start_time")
 
     if request.method == "GET":
-        service_choices = [{"id": service.pk, "name": service.name} for service in services if not service.is_temporary or service.accepts_bookings(now, service.live_booking_count)]
+        service_choices = []
+        for service in services:
+            if service.is_temporary and not service.accepts_bookings(now, service.live_booking_count):
+                continue
+            choice = {"id": service.pk, "name": service.name}
+            if service.is_temporary:
+                choice.update({
+                    "is_temporary": True,
+                    "event_start_date": service.event_start_date.isoformat(),
+                    "event_end_date": service.event_end_date.isoformat(),
+                    "booking_start_date": service.booking_start_date.isoformat(),
+                    "booking_end_date": service.booking_end_date.isoformat(),
+                    "location": service.location,
+                    "remaining_capacity": max((service.capacity or 0) - service.live_booking_count, 0),
+                })
+            service_choices.append(choice)
         temporary_choices = []
         for service in services:
             if not service.is_temporary:
@@ -368,25 +384,28 @@ def appointments_api(request):
                 continue
             resident_booking = EventBooking.objects.filter(
                 appointment__resident=resident, appointment__service=service
-            ).exclude(status=EventBooking.Status.CANCELLED).first() if service.temporary_type == Service.TemporaryType.EVENT else None
+            ).exclude(status=EventBooking.Status.CANCELLED).first()
             temporary_choices.append({
                 "id": service.pk,
                 "name": service.name,
                 "description": service.description,
                 "type": service.get_temporary_type_display(),
                 "location": service.location,
-                "start_datetime": service.start_datetime.isoformat(),
-                "end_datetime": service.end_datetime.isoformat(),
+                "event_start_date": service.event_start_date.isoformat(),
+                "event_end_date": service.event_end_date.isoformat(),
+                "booking_start_date": service.booking_start_date.isoformat(),
+                "booking_end_date": service.booking_end_date.isoformat(),
                 "status": service_status,
                 "capacity": service.capacity,
                 "remaining_capacity": max(service.capacity - service.live_booking_count, 0) if service.capacity else None,
                 "can_book": service_status in {"active", "ending_soon"},
-                "is_event": service.temporary_type == Service.TemporaryType.EVENT,
+                "is_event": True,
+                "is_special_service": True,
                 "is_booked": resident_booking is not None,
                 "event_booking_id": resident_booking.pk if resident_booking else None,
             })
         priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3}
-        temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["start_datetime"]))
+        temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["event_start_date"]))
         if request.query_params.get("summary") == "1":
             return Response({"services": service_choices, "temporary_services": temporary_choices, "server_time": now.isoformat()})
         return Response({
@@ -412,24 +431,33 @@ def appointments_api(request):
 
     try:
         service = services.get(pk=request.data.get("service"))
-        time_slot = time_slots.get(pk=request.data.get("time_slot"))
-        appointment_date = date.fromisoformat(request.data.get("appointment_date", ""))
-        if appointment_date < date.today():
-            raise ValueError("Please choose today or a future appointment date.")
-        appointment = create_appointment(
-            resident,
-            service,
-            appointment_date,
-            time_slot,
-            request.data.get("purpose", "").strip(),
-            request.data.get("sitio", "").strip(),
-        )
+        if service.is_temporary:
+            appointment = create_special_service_booking(resident, service)
+        else:
+            time_slot = time_slots.get(pk=request.data.get("time_slot"))
+            appointment_date = date.fromisoformat(request.data.get("appointment_date", ""))
+            if appointment_date < date.today():
+                raise ValueError("Please choose today or a future appointment date.")
+            appointment = create_appointment(
+                resident,
+                service,
+                appointment_date,
+                time_slot,
+                request.data.get("purpose", "").strip(),
+                request.data.get("sitio", "").strip(),
+            )
     except (Service.DoesNotExist, TimeSlot.DoesNotExist, TypeError):
         return Response({"message": "Please select a valid service, date, and time slot."}, status=status.HTTP_400_BAD_REQUEST)
     except ValueError as error:
         return Response({"message": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
     event_booking = getattr(appointment, "event_booking", None)
+    appointment_date_display = appointment.appointment_date.strftime("%B %d, %Y") if appointment.appointment_date else ""
+    if event_booking and appointment.service.event_end_date != appointment.service.event_start_date:
+        appointment_date_display = (
+            f"{appointment.service.event_start_date.strftime('%B %d, %Y')} - "
+            f"{appointment.service.event_end_date.strftime('%B %d, %Y')}"
+        )
     return Response({
         "success": True,
         "message": "Appointment submitted successfully.",
@@ -437,8 +465,8 @@ def appointments_api(request):
         "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
         "queue_number": appointment.queue_number,
         "service": appointment.service.name,
-        "appointment_date": appointment.appointment_date.strftime("%B %d, %Y"),
-        "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
+        "appointment_date": appointment_date_display,
+        "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}" if appointment.time_slot else "",
         "status": appointment.get_status_display(),
         "is_event": event_booking is not None,
         "event_booking_id": event_booking.pk if event_booking else None,
@@ -497,7 +525,7 @@ def queue_status_api(request):
         return Response({"message": "Invalid queue action."}, status=status.HTTP_400_BAD_REQUEST)
 
     appointment = resident.appointments.select_related("service", "barangay", "time_slot").exclude(
-        service__is_temporary=True, service__temporary_type=Service.TemporaryType.EVENT,
+        service__is_temporary=True,
     ).filter(
         appointment_date__gte=date.today(),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
@@ -602,7 +630,7 @@ def transactions_api(request):
         event_status = None
         if event_booking:
             event_status = event_booking.status
-            if appointment.service.end_datetime and now >= appointment.service.end_datetime and event_status == EventBooking.Status.CONFIRMED:
+            if appointment.service.event_end_date and timezone.localdate(now) > appointment.service.event_end_date and event_status == EventBooking.Status.CONFIRMED:
                 event_status = "event_ended"
             if appointment.service.lifecycle == Service.Lifecycle.CANCELLED:
                 event_status = EventBooking.Status.CANCELLED
@@ -613,9 +641,9 @@ def transactions_api(request):
             "status": appointment.get_status_display(),
             "status_code": appointment.status,
             "date_booked": appointment.created_at.strftime("%B %d, %Y"),
-            "appointment_date": appointment.appointment_date.strftime("%B %d, %Y"),
+            "appointment_date": appointment.appointment_date.strftime("%B %d, %Y") if appointment.appointment_date else "",
             "date_claimed": ticket.claimed_at.strftime("%B %d, %Y") if ticket and ticket.claimed_at else None,
-            "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
+            "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}" if appointment.time_slot else "",
             "barangay": appointment.barangay.name,
             "queue_number": appointment.queue_number,
             "is_event": event_booking is not None,
@@ -640,7 +668,7 @@ def event_booking_pass_api(request, pk):
     now = timezone.now()
     if booking.status == EventBooking.Status.CANCELLED or event.lifecycle == Service.Lifecycle.CANCELLED or appointment.status == Appointment.Status.CANCELLED:
         display_status, can_check_in = "cancelled", False
-    elif event.end_datetime and now >= event.end_datetime:
+    elif event.event_end_date and timezone.localdate(now) > event.event_end_date:
         display_status, can_check_in = "event_ended", False
     elif booking.status == EventBooking.Status.CHECKED_IN:
         display_status, can_check_in = "checked_in", False
@@ -656,8 +684,11 @@ def event_booking_pass_api(request, pk):
         "checked_in_at": booking.checked_in_at.isoformat() if booking.checked_in_at else None,
         "resident_name": resident_name,
         "event_name": event.name,
-        "event_date": appointment.appointment_date.strftime("%B %d, %Y"),
-        "event_time": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
+        "event_date": (
+            event.event_start_date.strftime("%B %d, %Y")
+            if event.event_start_date == event.event_end_date
+            else f"{event.event_start_date.strftime('%B %d, %Y')} - {event.event_end_date.strftime('%B %d, %Y')}"
+        ),
         "location": event.location,
     })
 

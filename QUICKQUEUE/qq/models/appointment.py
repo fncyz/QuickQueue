@@ -43,12 +43,14 @@ class Appointment(models.Model):
         blank=True,
     )
 
-    appointment_date = models.DateField()
+    appointment_date = models.DateField(null=True, blank=True)
 
     time_slot = models.ForeignKey(
         TimeSlot,
         on_delete=models.PROTECT,
         related_name="appointments",
+        null=True,
+        blank=True,
     )
 
     queue_number = models.CharField(
@@ -84,6 +86,7 @@ class Appointment(models.Model):
                     "queue_number",
                 ],
                 name="unique_queue_per_day",
+                condition=models.Q(time_slot__isnull=False),
             )
         ]
 

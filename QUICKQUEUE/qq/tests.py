@@ -258,15 +258,15 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(appointment.status, Appointment.Status.PENDING)
 
     def test_temporary_service_statuses_and_server_side_booking_window(self):
-        now = timezone.now()
+        today = timezone.localdate()
         temporary = Service.objects.create(
             code="EVT", name="Medical Mission Test", description="Temporary care",
             estimated_duration=15, is_temporary=True,
             temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
-            start_datetime=now + timedelta(hours=1), end_datetime=now + timedelta(days=1),
+            event_start_date=today + timedelta(days=7), event_end_date=today + timedelta(days=7),
+            booking_start_date=today + timedelta(days=1), booking_end_date=today + timedelta(days=6),
             capacity=1,
         )
-        temporary.available_time_slots.add(self.time_slot)
 
         summary = self.client.get("/api/appointments/?summary=1")
         event = next(item for item in summary.data["temporary_services"] if item["id"] == temporary.pk)
@@ -274,21 +274,21 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertFalse(event["can_book"])
         self.assertNotIn(temporary.pk, [item["id"] for item in summary.data["services"]])
 
-        payload = {"service": temporary.pk, "time_slot": self.time_slot.pk,
-                   "appointment_date": date.today().isoformat(), "sitio": "Test Sitio"}
+        payload = {"service": temporary.pk}
         early = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(early.status_code, 400)
         self.assertIn("not yet", early.data["message"])
 
-        temporary.start_datetime = now - timedelta(days=1)
-        temporary.end_datetime = now + timedelta(days=1)
-        temporary.save(update_fields=["start_datetime", "end_datetime"])
+        temporary.booking_start_date = today - timedelta(days=1)
+        temporary.booking_end_date = today + timedelta(days=1)
+        temporary.save(update_fields=["booking_start_date", "booking_end_date"])
         booked = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(booked.status_code, 201)
         self.assertTrue(booked.data["is_event"])
         self.assertTrue(booked.data["booking_reference"].startswith("EVT-"))
         event_booking = EventBooking.objects.get(appointment_id=booked.data["id"])
         self.assertFalse(QueueTicket.objects.filter(appointment_id=booked.data["id"]).exists())
+        self.assertIsNone(event_booking.appointment.time_slot)
 
         duplicate = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(duplicate.status_code, 400)
@@ -305,16 +305,18 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertFalse(event["can_book"])
 
     def test_expired_and_cancelled_temporary_services_are_hidden(self):
-        now = timezone.now()
+        today = timezone.localdate()
         for suffix, lifecycle, end in (
-            ("Expired", Service.Lifecycle.SCHEDULED, now - timedelta(minutes=1)),
-            ("Cancelled", Service.Lifecycle.CANCELLED, now + timedelta(days=1)),
+            ("Expired", Service.Lifecycle.SCHEDULED, today - timedelta(days=1)),
+            ("Cancelled", Service.Lifecycle.CANCELLED, today + timedelta(days=1)),
         ):
             Service.objects.create(
                 code="EVT", name=f"Hidden Event {suffix}", description="Hidden",
                 estimated_duration=15, is_temporary=True,
                 temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
-                start_datetime=now - timedelta(days=1), end_datetime=end, lifecycle=lifecycle,
+                event_start_date=today + timedelta(days=2), event_end_date=today + timedelta(days=2),
+                booking_start_date=today - timedelta(days=2), booking_end_date=end,
+                capacity=10, lifecycle=lifecycle,
             )
         summary = self.client.get("/api/appointments/?summary=1")
         names = {item["name"] for item in summary.data["temporary_services"]}
@@ -322,15 +324,17 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertNotIn("Hidden Event Cancelled", names)
 
     def test_staff_event_qr_checkin_is_atomic_and_cannot_be_reused(self):
-        now = timezone.now()
+        today = timezone.localdate()
         event = Service.objects.create(
             code="SCAN", name="Scanner Event Test", description="Scan test", estimated_duration=15,
             is_temporary=True, temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
-            start_datetime=now - timedelta(days=1), end_datetime=now + timedelta(days=1), capacity=10,
+            event_start_date=today - timedelta(days=1), event_end_date=today + timedelta(days=1),
+            booking_start_date=today - timedelta(days=7), booking_end_date=today,
+            capacity=10,
         )
         appointment = Appointment.objects.create(
             resident=self.resident, barangay=self.barangay, service=event,
-            appointment_date=date.today(), time_slot=self.time_slot, queue_number="SCAN-001",
+            appointment_date=date.today(), time_slot=None, queue_number="",
         )
         booking = EventBooking.objects.create(appointment=appointment)
         staff_user = User.objects.create_user(username="event-scanner", password="secret")

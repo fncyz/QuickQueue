@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from django.db import transaction
 
 from qq.models import (
@@ -62,11 +60,12 @@ def create_appointment(
     queue ticket and notification.
     """
 
-    # Lock both records: temporary-event capacity and slot capacity must remain
-    # correct when residents submit concurrently.
+    # Lock both records so normal appointment slot capacity remains correct
+    # when residents submit concurrently.
     from qq.models import Service
     service = Service.objects.select_for_update().get(pk=service.pk)
-    # remain correct even when requests arrive at nearly the same time.
+    if service.is_temporary:
+        raise ValueError("Special Services must be reserved through the event booking flow.")
     time_slot = TimeSlot.objects.select_for_update().select_related("barangay").get(pk=time_slot.pk)
 
     if check_duplicate_appointment(
@@ -85,36 +84,6 @@ def create_appointment(
 
     if not service.is_active:
         raise ValueError("This service is no longer accepting appointments.")
-
-    if service.is_temporary:
-        if service.barangay_id != resident.barangay_id:
-            raise ValueError("This event is not available in your barangay.")
-        if service.lifecycle == Service.Lifecycle.CANCELLED:
-            raise ValueError("This event has been cancelled.")
-        now = timezone.now()
-        if service.end_datetime and now >= service.end_datetime:
-            raise ValueError("This event has already expired.")
-        if not service.start_datetime or now < service.start_datetime:
-            raise ValueError("This event is not yet accepting appointments.")
-        appointment_start = timezone.make_aware(
-            datetime.combine(appointment_date, time_slot.start_time),
-            timezone.get_current_timezone(),
-        )
-        if appointment_start < service.start_datetime or appointment_start >= service.end_datetime:
-            raise ValueError("The selected appointment time is outside this event's schedule.")
-        allowed_slots = service.available_time_slots.all()
-        if allowed_slots.exists() and not allowed_slots.filter(pk=time_slot.pk).exists():
-            raise ValueError("This appointment slot is no longer available.")
-        if service.capacity:
-            booked = Appointment.objects.filter(service=service).exclude(
-                status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
-            ).count()
-            if booked >= service.capacity:
-                raise ValueError("This event is fully booked.")
-        if service.temporary_type == service.TemporaryType.EVENT and Appointment.objects.filter(
-            resident=resident, service=service
-        ).exclude(status=Appointment.Status.CANCELLED).exists():
-            raise ValueError("You are already registered for this event.")
 
     if not check_timeslot_capacity(
         appointment_date,
@@ -141,31 +110,81 @@ def create_appointment(
         queue_number=queue_number,
     )
 
-    is_event = service.is_temporary and service.temporary_type == service.TemporaryType.EVENT
-    if is_event:
-        EventBooking.objects.create(appointment=appointment)
-    else:
-        QueueTicket.objects.create(
-            appointment=appointment,
-            queue_number=queue_number,
-        )
-
-    notification_intro = (
-        f"Your registration for {service.name} is confirmed. Open your QR Pass at the venue.\n"
-        if is_event else
-        "Your appointment request has been submitted and is awaiting staff confirmation.\n"
+    QueueTicket.objects.create(
+        appointment=appointment,
+        queue_number=queue_number,
     )
     Notification.objects.create(
         resident=resident,
         appointment=appointment,
         notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
-        title="Event Booking Confirmed" if is_event else "Appointment Submitted",
+        title="Appointment Submitted",
         message=(
-            notification_intro +
+            "Your appointment request has been submitted and is awaiting staff confirmation.\n" +
             f"Queue Number: {queue_number}\n"
             f"Date: {appointment_date}\n"
             f"Time: {time_slot.start_time} - {time_slot.end_time}"
         ),
     )
 
+    return appointment
+
+
+@transaction.atomic
+def create_special_service_booking(resident, service):
+    """Reserve one capacity slot without creating a queue or time-slot booking."""
+    from qq.models import Service
+
+    service = Service.objects.select_for_update().get(pk=service.pk)
+    if not service.is_temporary:
+        raise ValueError("This service uses the regular appointment booking flow.")
+    if service.barangay_id != resident.barangay_id:
+        raise ValueError("This Special Service is not available in your barangay.")
+    if not service.is_active or service.lifecycle == Service.Lifecycle.CANCELLED:
+        raise ValueError("This Special Service is no longer accepting bookings.")
+
+    today = timezone.localdate()
+    if not service.booking_start_date or today < service.booking_start_date:
+        raise ValueError("Booking for this Special Service is not yet open.")
+    if not service.booking_end_date or today > service.booking_end_date:
+        raise ValueError("Booking for this Special Service has closed.")
+
+    if Appointment.objects.filter(resident=resident, service=service).exclude(
+        status=Appointment.Status.CANCELLED
+    ).exists():
+        raise ValueError("You already have a booking for this Special Service.")
+
+    booked = Appointment.objects.filter(service=service).exclude(
+        status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
+    ).count()
+    if not service.capacity or booked >= service.capacity:
+        raise ValueError("This Special Service is fully booked.")
+
+    appointment = Appointment.objects.create(
+        resident=resident,
+        barangay=resident.barangay,
+        service=service,
+        appointment_date=service.event_start_date,
+        time_slot=None,
+        purpose="",
+        sitio="",
+        queue_number="",
+        status=Appointment.Status.CONFIRMED,
+    )
+    event_booking = EventBooking.objects.create(appointment=appointment)
+    event_date = service.event_start_date.strftime("%B %d, %Y")
+    if service.event_end_date and service.event_end_date != service.event_start_date:
+        event_date += f" - {service.event_end_date.strftime('%B %d, %Y')}"
+    Notification.objects.create(
+        resident=resident,
+        appointment=appointment,
+        notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
+        title="Special Service Booking Confirmed",
+        message=(
+            f"Your reservation for {service.name} is confirmed.\n"
+            f"Booking Reference: {event_booking.booking_reference}\n"
+            f"Event Date: {event_date}\n"
+            "Open your QR Pass and present it at the venue."
+        ),
+    )
     return appointment
