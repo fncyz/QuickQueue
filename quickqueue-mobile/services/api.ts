@@ -141,7 +141,7 @@ export const sendChatMessage = async (accessToken: string, message: string, hist
     history: history.slice(-6),
   }, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    timeout: 22000,
+    timeout: 25000,
   });
   return response.data;
 };

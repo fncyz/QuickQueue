@@ -57,12 +57,20 @@ export function FloatingAiAssistant() {
         time: timeNow(),
       }]);
     } catch (error) {
-      const status = isAxiosError(error) ? error.response?.status : undefined;
+      const axiosError = isAxiosError(error) ? error : undefined;
+      const status = axiosError?.response?.status;
+      const serverMessage = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'message' in axiosError.response.data
+        ? String(axiosError.response.data.message)
+        : undefined;
       const text = status === 429
         ? 'The QuickQueue Assistant is receiving many requests right now. Please wait a moment and try again.'
+        : status === 401
+          ? 'Your session has expired. Please sign in again, then reopen the QuickQueue Assistant.'
         : status === 502 || status === 503 || status === 504
           ? 'The QuickQueue Assistant is temporarily unavailable. Please try again shortly.'
-          : 'I couldn’t reach the QuickQueue Assistant. Please check your connection and try again.';
+          : axiosError?.code === 'ECONNABORTED'
+            ? 'The QuickQueue Assistant took too long to respond. Please try again.'
+            : serverMessage || 'I couldn’t reach the QuickQueue Assistant. Please check your connection and try again.';
       setMessages((current) => [...current, { id: `assistant-${nextId.current++}`, role: 'assistant', suggestions: ['Try again'], text, time: timeNow() }]);
     } finally {
       setIsSending(false);

@@ -80,9 +80,11 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
     client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
-            timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "15000")),
+            # Leave enough time for the API to return built-in guidance before
+            # the mobile and serverless request deadlines are reached.
+            timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "7000")),
             retry_options=types.HttpRetryOptions(
-                attempts=3,
+                attempts=int(os.getenv("GEMINI_RETRY_ATTEMPTS", "1")),
                 initial_delay=0.5,
                 max_delay=2.0,
                 exp_base=2.0,
