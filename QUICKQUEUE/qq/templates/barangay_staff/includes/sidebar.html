@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{% static 'barangay_staff/css/notification_menu.css' %}">
 <link rel="stylesheet" href="{% static 'barangay_staff/css/interactions.css' %}">
 <aside class="staff-sidebar">
-  <a class="staff-brand" href="{% url 'staff_dashboard' %}"><img src="{% static 'qq/images/logo.png' %}" alt=""><span><b>QuickQueue</b><small>Barangay Staff Portal</small></span></a>
+  <a class="staff-brand" href="{% url 'staff_dashboard' %}"><img src="{% static 'qq/images/qqlogo.png' %}" alt=""><span><b>QuickQueue</b><small>Barangay Staff Portal</small></span></a>
   <div class="staff-profile"><i>{% if staff.profile_photo %}<img src="{{ staff.profile_photo.url }}" alt="">{% else %}{{ staff.initials }}{% endif %}<em></em></i><span><b>{{ staff.full_name }}</b><small>{{ staff.get_role_display }}</small></span></div>
   <nav>
     <a class="{% if active_page == 'dashboard' %}active{% endif %}" href="{% url 'staff_dashboard' %}"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
