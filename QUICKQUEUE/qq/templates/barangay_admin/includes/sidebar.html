@@ -1,5 +1,5 @@
 {% load static %}<aside class="sidebar">
-<a class="brand" href="{% url 'barangay_dashboard' %}"><img src="{% static 'qq/images/qq_logo.png' %}" alt="QuickQueue" class="brand-logo"><b>QuickQueue<small>Barangay {{ barangay.name }}</small></b></a>
+<a class="brand" href="{% url 'barangay_dashboard' %}"><img src="{% static 'qq/images/qqlogo.png' %}" alt="QuickQueue" class="brand-logo"><b>QuickQueue<small>Barangay {{ barangay.name }}</small></b></a>
 <div class="profile"><i class="avatar">{% if request.user.staff_profile.profile_photo %}<img src="{{ request.user.staff_profile.profile_photo.url }}" alt="">{% else %}{{ request.user.username|first|upper }}{% endif %}</i><b>{{ request.user.get_full_name|default:request.user.username }}<small>{% if request.user.staff_profile %}{{ request.user.staff_profile.get_role_display }}{% else %}Barangay Admin{% endif %}</small><em><span class="online-dot"></span> Online</em></b></div>
 <nav aria-label="Barangay staff navigation">
 <a href="{% url 'barangay_dashboard' %}" class="nav-link{% if active_page == 'dashboard' %} active{% endif %}"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg><span>Dashboard</span></a>
