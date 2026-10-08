@@ -4,6 +4,11 @@ from django.shortcuts import redirect, render
 from qq.models import BarangayStaff
 
 
+def landing(request):
+    """Display the public QuickQueue landing page."""
+    return render(request, "qq/landing.html")
+
+
 def signin(request):
     """Authenticate a registered resident with Django's database-backed auth."""
     if request.method == "POST":

@@ -1,7 +1,6 @@
 from django.urls import path
 
-from django.views.generic import RedirectView
-from qq.views import signin, staff_logout, barangay_admin_registration
+from qq.views import landing, signin, staff_logout, barangay_admin_registration
 from qq.views.barangay_dashboard import barangay_dashboard
 from qq.views.barangay_staff_portal import (
     staff_appointments, staff_review_appointment, staff_dashboard, staff_document_action,
@@ -43,7 +42,7 @@ from qq.views.barangay_notifications import barangay_notifications
 from qq.views.barangay_document_templates import barangay_document_templates
 
 urlpatterns = [
-    path("", RedirectView.as_view(pattern_name="signin", permanent=False), name="index"),
+    path("", landing, name="index"),
     path("sign-in/", signin, name="signin"),
     path("staff/logout/", staff_logout, name="staff_logout"),
     path("barangay-admin-registration/", barangay_admin_registration, name="barangay_admin_registration"),
