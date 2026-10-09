@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, Service, TimeSlot
+from qq.services.timeslot_service import regular_slot_capacity
 
 
 ACTIVE_BOOKING_STATUSES = [
@@ -42,8 +43,8 @@ def _slot_availability(barangay, day):
         for row in Appointment.objects.filter(
             barangay=barangay,
             appointment_date=day,
-            status__in=ACTIVE_BOOKING_STATUSES,
         )
+        .exclude(status=Appointment.Status.CANCELLED)
         .values("time_slot_id")
         .annotate(count=Count("id"))
     }
@@ -51,7 +52,7 @@ def _slot_availability(barangay, day):
     availability = []
     for slot in slots:
         booked = booked_map.get(slot.id, 0)
-        capacity = slot.max_appointments
+        capacity = regular_slot_capacity(slot)
         remaining = max(capacity - booked, 0)
         percent = round((booked / capacity) * 100) if capacity else 0
 
@@ -191,6 +192,9 @@ def barangay_confirm_appointment(request, pk):
 
     if appointment.status != Appointment.Status.PENDING:
         messages.error(request, "Only pending appointments can be confirmed.")
+        return redirect("barangay_appointments")
+    if appointment.appointment_date < timezone.localdate():
+        messages.error(request, "Past appointments are closed and can no longer be modified.")
         return redirect("barangay_appointments")
 
     appointment.status = Appointment.Status.CONFIRMED

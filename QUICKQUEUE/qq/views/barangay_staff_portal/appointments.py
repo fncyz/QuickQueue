@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, Notification, Service, TimeSlot
+from qq.services.timeslot_service import REGULAR_DAILY_CAPACITY, regular_slot_capacity
 
 ACTIVE_STATUSES = [Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING]
 
@@ -46,12 +47,15 @@ def staff_appointments(request):
     confirmed_today = today_active.filter(status__in=[Appointment.Status.CONFIRMED, Appointment.Status.ONGOING])
     tomorrow_count = base.filter(appointment_date=today + timedelta(days=1), status__in=ACTIVE_STATUSES).count()
     slots = list(TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"))
-    daily_capacity = sum(slot.max_appointments for slot in slots)
+    daily_capacity = min(sum(regular_slot_capacity(slot) for slot in slots), REGULAR_DAILY_CAPACITY)
 
     month_start = selected_date.replace(day=1)
     month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-    month_counts = {row["appointment_date"]: row["count"] for row in base.filter(
-        appointment_date__gte=month_start, appointment_date__lt=month_end, status__in=ACTIVE_STATUSES
+    # Historical occupancy includes completed and missed appointments. Only a
+    # valid cancellation releases a slot.
+    occupied = base.filter(time_slot__isnull=False).exclude(status=Appointment.Status.CANCELLED)
+    month_counts = {row["appointment_date"]: row["count"] for row in occupied.filter(
+        appointment_date__gte=month_start, appointment_date__lt=month_end
     ).values("appointment_date").annotate(count=Count("id"))}
     calendar_weeks = []
     for week in calendar.Calendar(firstweekday=6).monthdatescalendar(selected_date.year, selected_date.month):
@@ -59,24 +63,25 @@ def staff_appointments(request):
             "date": day, "in_month": day.month == selected_date.month,
             "count": month_counts.get(day, 0),
             "remaining": max(daily_capacity - month_counts.get(day, 0), 0),
-            "level": "full" if daily_capacity and month_counts.get(day, 0) >= daily_capacity
+            "level": "closed" if day < today
+                     else "full" if daily_capacity and month_counts.get(day, 0) >= daily_capacity
                      else "almost" if daily_capacity and month_counts.get(day, 0) >= daily_capacity * .75
                      else "available" if month_counts.get(day, 0) else "empty",
             "selected": day == selected_date,
+            "is_past": day < today,
         } for day in week])
 
-    selected_qs = base.filter(appointment_date=selected_date).exclude(
-        status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
-    ).order_by("time_slot__start_time", "created_at")
-    slot_counts = {row["time_slot_id"]: row["count"] for row in selected_qs.filter(
-        status__in=ACTIVE_STATUSES
-    ).values("time_slot_id").annotate(count=Count("id"))}
+    selected_qs = occupied.filter(appointment_date=selected_date).order_by("time_slot__start_time", "created_at")
+    slot_counts = {row["time_slot_id"]: row["count"] for row in selected_qs.values(
+        "time_slot_id"
+    ).annotate(count=Count("id"))}
     selected_slots = []
     for slot in slots:
         booked = slot_counts.get(slot.pk, 0)
-        selected_slots.append({"slot": slot, "booked": booked, "capacity": slot.max_appointments,
-                               "remaining": max(slot.max_appointments - booked, 0),
-                               "percent": round(booked / slot.max_appointments * 100) if slot.max_appointments else 0})
+        capacity = regular_slot_capacity(slot)
+        selected_slots.append({"slot": slot, "booked": booked, "capacity": capacity,
+                               "remaining": max(capacity - booked, 0),
+                               "percent": round(booked / capacity * 100) if capacity else 0})
 
     tab = request.GET.get("tab", "pending")
     table_qs = pending
@@ -106,7 +111,9 @@ def staff_appointments(request):
         "calendar_weeks": calendar_weeks, "daily_capacity": daily_capacity,
         "month_label": selected_date.strftime("%B %Y"), "selected_date": selected_date,
         "selected_appointments": selected_qs, "selected_slots": selected_slots,
-        "selected_count": selected_qs.count(), "selected_remaining": max(daily_capacity - selected_qs.count(), 0),
+        "selected_count": selected_qs.count(),
+        "selected_remaining": 0 if selected_date < today else max(daily_capacity - selected_qs.count(), 0),
+        "selected_is_past": selected_date < today,
         "appointments": table_qs.order_by("appointment_date", "time_slot__start_time")[:50],
         "tab": tab, "services": Service.objects.filter(is_active=True).order_by("name"),
         "filters": {"q": search, "service": service, "filter_date": date_filter},
@@ -128,6 +135,9 @@ def staff_review_appointment(request, pk):
     )
     if appointment.status != Appointment.Status.PENDING:
         messages.error(request, "Only pending appointments can be reviewed.")
+        return redirect("staff_appointments")
+    if appointment.appointment_date < timezone.localdate():
+        messages.error(request, "Past appointments are closed and can no longer be modified.")
         return redirect("staff_appointments")
 
     decision = request.POST.get("decision")

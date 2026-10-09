@@ -31,7 +31,7 @@ import re
 
 from qq.models import Appointment, BarangayStaff, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
-from qq.services.timeslot_service import ensure_default_time_slots
+from qq.services.timeslot_service import REGULAR_DAILY_CAPACITY, ensure_default_time_slots, regular_slot_capacity
 from qq.gemini_service import GeminiUnavailable, ask_gemini
 from .throttles import ChatRateThrottle
 
@@ -350,13 +350,60 @@ def appointments_api(request):
     ).annotate(
         live_booking_count=Count(
             "appointments",
-            filter=~Q(appointments__status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]),
+            filter=~Q(appointments__status=Appointment.Status.CANCELLED),
         )
     ).order_by("name")
     time_slots = TimeSlot.objects.filter(
         barangay=resident.barangay,
         is_active=True,
     ).order_by("start_time")
+
+    availability_date = None
+    requested_date = request.query_params.get("appointment_date")
+    if requested_date:
+        try:
+            availability_date = date.fromisoformat(requested_date)
+        except ValueError:
+            return Response({"message": "Please provide a valid appointment date."}, status=status.HTTP_400_BAD_REQUEST)
+
+    occupied_by_slot = {}
+    if availability_date:
+        occupied_by_slot = {
+            row["time_slot_id"]: row["count"]
+            for row in Appointment.objects.filter(
+                barangay=resident.barangay,
+                appointment_date=availability_date,
+                time_slot__isnull=False,
+            ).exclude(status=Appointment.Status.CANCELLED)
+            .values("time_slot_id")
+            .annotate(count=Count("id"))
+        }
+
+    def serialize_time_slot(slot):
+        booked = occupied_by_slot.get(slot.pk, 0)
+        capacity = regular_slot_capacity(slot)
+        daily_booked = sum(occupied_by_slot.values())
+        is_past = availability_date is not None and availability_date < today
+        cutoff_passed = (
+            availability_date == today
+            and timezone.localtime(now).time() >= slot.start_time
+        )
+        is_full = booked >= capacity
+        day_is_full = daily_booked >= REGULAR_DAILY_CAPACITY
+        is_available = availability_date is None or not (is_past or cutoff_passed or is_full or day_is_full)
+        time_label = f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}"
+        if availability_date:
+            availability_label = "Fully Booked" if is_full or day_is_full else "Available"
+            time_label = f"{time_label} · {booked}/{capacity} – {availability_label}"
+        return {
+            "id": slot.pk,
+            "label": time_label,
+            "occupied": booked,
+            "capacity": capacity,
+            "remaining": 0 if day_is_full else max(capacity - booked, 0),
+            "is_fully_booked": is_full or day_is_full,
+            "is_available": is_available,
+        }
 
     if request.method == "GET":
         service_choices = []
@@ -423,10 +470,7 @@ def appointments_api(request):
             "services": service_choices,
             "temporary_services": temporary_choices,
             "server_time": now.isoformat(),
-            "time_slots": [{
-                "id": slot.pk,
-                "label": f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}",
-            } for slot in time_slots],
+            "time_slots": [serialize_time_slot(slot) for slot in time_slots],
         })
 
     try:
@@ -436,7 +480,7 @@ def appointments_api(request):
         else:
             time_slot = time_slots.get(pk=request.data.get("time_slot"))
             appointment_date = date.fromisoformat(request.data.get("appointment_date", ""))
-            if appointment_date < date.today():
+            if appointment_date < timezone.localdate():
                 raise ValueError("Please choose today or a future appointment date.")
             appointment = create_appointment(
                 resident,
@@ -490,6 +534,8 @@ def queue_status_api(request):
         if action == "cancel":
             if appointment.status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
                 return Response({"message": "This appointment can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+            if appointment.appointment_date < timezone.localdate():
+                return Response({"message": "Past appointments can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
             with transaction.atomic():
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
@@ -506,7 +552,7 @@ def queue_status_api(request):
             return Response({"success": True, "message": "Your appointment has been cancelled."})
 
         if action == "check_in":
-            if appointment.appointment_date != date.today():
+            if appointment.appointment_date != timezone.localdate():
                 return Response({"message": "Check-in is only available on your appointment date."}, status=status.HTTP_400_BAD_REQUEST)
             ticket = QueueTicket.objects.filter(appointment=appointment).first()
             if ticket:
@@ -527,7 +573,7 @@ def queue_status_api(request):
     appointment = resident.appointments.select_related("service", "barangay", "time_slot").exclude(
         service__is_temporary=True,
     ).filter(
-        appointment_date__gte=date.today(),
+        appointment_date__gte=timezone.localdate(),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
     ).order_by("appointment_date", "time_slot__start_time").first()
     if not appointment:
@@ -581,6 +627,8 @@ def transactions_api(request):
         if action == "cancel":
             if appointment.status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
                 return Response({"message": "This appointment can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+            if appointment.appointment_date < timezone.localdate():
+                return Response({"message": "Past appointments can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
             with transaction.atomic():
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
@@ -785,7 +833,7 @@ def _chat_database_context(resident):
     appointment = resident.appointments.select_related(
         "service", "barangay", "time_slot"
     ).filter(
-        appointment_date__gte=date.today(),
+        appointment_date__gte=timezone.localdate(),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
     ).order_by("appointment_date", "time_slot__start_time").first()
 
@@ -853,7 +901,7 @@ def _built_in_chat_reply(message, resident, appointment):
             "After booking, view it in Queue or Transactions."
         )
     if "check in" in text or "check-in" in text:
-        if appointment.appointment_date != date.today():
+        if appointment.appointment_date != timezone.localdate():
             return (
                 f"According to your QuickQueue record, check-in is available on "
                 f"{appointment.appointment_date.strftime('%B %d, %Y')}. On that date, open Queue, "
@@ -861,7 +909,8 @@ def _built_in_chat_reply(message, resident, appointment):
             )
         return "Open the Queue tab, find Appointment Actions, and tap Check In. Wait for QuickQueue to confirm that staff were notified."
     if "cancel" in text:
-        if appointment.status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
+        if (appointment.status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED)
+                and appointment.appointment_date >= timezone.localdate()):
             return "You can cancel this appointment from the Queue or Transactions tab. Open the appointment, tap Cancel Appointment, and confirm."
         return f"According to your QuickQueue record, this appointment is {appointment.get_status_display()} and can no longer be cancelled in the app. Contact barangay staff if you need help."
     if any(word in text for word in ("queue", "number", "wait", "status", "track")):

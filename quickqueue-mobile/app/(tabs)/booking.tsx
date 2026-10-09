@@ -18,7 +18,7 @@ import { readOfflineCache, removeOfflineCache, writeOfflineCache } from '@/servi
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
 
-type Choice = { id: number; name?: string; label?: string; is_temporary?: boolean; event_start_date?: string | null; event_end_date?: string | null; booking_start_date?: string | null; booking_end_date?: string | null; location?: string; remaining_capacity?: number | null };
+type Choice = { id: number; name?: string; label?: string; is_temporary?: boolean; event_start_date?: string | null; event_end_date?: string | null; booking_start_date?: string | null; booking_end_date?: string | null; location?: string; remaining_capacity?: number | null; occupied?: number; capacity?: number; remaining?: number; is_fully_booked?: boolean; is_available?: boolean };
 type BookingProfile = {
   first_name: string;
   last_name: string;
@@ -78,6 +78,31 @@ export default function BookingScreen() {
     setPurpose('');
   }, [isSpecialService]);
 
+  useEffect(() => {
+    if (!date || isSpecialService || !isOnline) return;
+    let active = true;
+    const refreshSharedAvailability = async () => {
+      try {
+        const accessToken = token || await AsyncStorage.getItem('quickqueue.accessToken');
+        if (!accessToken) return;
+        const response = await api.get<BookingFormData>('appointments/', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: { appointment_date: formatDate(date) },
+        });
+        if (!active) return;
+        setTimeSlots(response.data.time_slots);
+        setTimeSlot((current) => {
+          const selectedSlot = response.data.time_slots.find((item) => item.id === current);
+          return selectedSlot?.is_available === false ? '' : current;
+        });
+      } catch (error: any) {
+        if (active) Alert.alert('Unable to refresh slots', apiErrorMessage(error, 'Please try again before booking.'));
+      }
+    };
+    refreshSharedAvailability();
+    return () => { active = false; };
+  }, [date, isOnline, isSpecialService, service, token]);
+
   useFocusEffect(useCallback(() => {
     let isActive = true;
     const loadBookingForm = async () => {
@@ -96,7 +121,10 @@ export default function BookingScreen() {
       try {
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return router.replace('/login');
-        const response = await api.get('appointments/', { headers: { Authorization: `Bearer ${accessToken}` } });
+        const response = await api.get('appointments/', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: savedDraft?.value.date ? { appointment_date: savedDraft.value.date } : undefined,
+        });
         if (!isActive) return;
         setToken(accessToken);
         setProfile(response.data.resident);
@@ -168,11 +196,14 @@ export default function BookingScreen() {
         router.replace('/login');
         return;
       }
-      const latest = await api.get<BookingFormData>('appointments/', { headers: { Authorization: `Bearer ${accessToken}` } });
+      const latest = await api.get<BookingFormData>('appointments/', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: isSpecialService ? undefined : { appointment_date: formatDate(date) },
+      });
       const serviceAvailable = latest.data.services.some((item) => item.id === service);
       const latestService = latest.data.services.find((item) => item.id === service);
       const latestIsSpecialService = Boolean(latestService?.is_temporary);
-      const slotAvailable = latestIsSpecialService || latest.data.time_slots.some((item) => item.id === timeSlot);
+      const slotAvailable = latestIsSpecialService || latest.data.time_slots.some((item) => item.id === timeSlot && item.is_available !== false);
       if (!serviceAvailable || !slotAvailable) {
         if (!serviceAvailable) setService('');
         if (!slotAvailable) setTimeSlot('');
@@ -277,7 +308,7 @@ export default function BookingScreen() {
         <View style={s.stepSection}><Text style={s.stepSectionNumber}>3</Text><Text style={s.stepSectionTitle}>Date &amp; Time</Text></View>
         <View style={s.fieldStack}>
           <View style={s.column}><Text style={[s.label, { color: colors.text }]}>Date</Text><Pressable style={[s.inputShell, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]} onPress={() => setShowDatePicker(true)}><Text style={[date ? s.valueText : s.placeholder, { color: date ? colors.text : colors.muted }]}>{formatDate(date) || 'mm/dd/yyyy'}</Text><Ionicons name="calendar-outline" size={15} color={colors.muted} /></Pressable></View>
-          <View style={s.column}><SelectField label="Select Time" selectedValue={timeSlot} onValueChange={(value) => setTimeSlot(value)} placeholder="Select time..." items={timeSlots.map((item) => ({ id: item.id, label: item.label || '' }))} /></View>
+          <View style={s.column}><SelectField label="Select Time" selectedValue={timeSlot} onValueChange={(value) => setTimeSlot(value)} placeholder="Select time..." items={timeSlots.map((item) => ({ id: item.id, label: item.label || '', disabled: item.is_available === false }))} /></View>
         </View></>}
         {isSpecialService && selectedService && <><View style={s.stepSection}><Text style={s.stepSectionNumber}>3</Text><Text style={s.stepSectionTitle}>Confirm Details</Text></View><View style={[s.specialSummary, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}><SummaryRow icon="calendar-outline" label="Event Date" value={selectedService.event_start_date === selectedService.event_end_date ? displayDate(selectedService.event_start_date) : `${displayDate(selectedService.event_start_date)} – ${displayDate(selectedService.event_end_date)}`} /><SummaryRow icon="calendar-number-outline" label="Booking Period" value={`${displayDate(selectedService.booking_start_date)} – ${displayDate(selectedService.booking_end_date)}`} /><SummaryRow icon="location-outline" label="Location" value={selectedService.location || 'Not specified'} />{selectedService.remaining_capacity !== null && selectedService.remaining_capacity !== undefined && <SummaryRow icon="people-outline" label="Available Slots" value={`${selectedService.remaining_capacity} remaining`} />}</View></>}
         <Pressable style={[s.confirm, submitting && s.disabled, !isOnline && s.offlineConfirm]} onPress={isOnline ? confirmBooking : saveDraft} disabled={submitting}><Text style={s.confirmText}>{submitting ? 'Submitting...' : isOnline ? 'Confirm Booking' : 'Save as Draft'}</Text></Pressable>
@@ -285,7 +316,7 @@ export default function BookingScreen() {
 
       <View style={[s.beforeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={s.beforeTitle}><Ionicons name="information-circle" size={18} color={colors.accent} /><Text style={[s.beforeTitleText, { color: colors.accent }]}>Before You Book</Text></View><Tip icon="clipboard-outline" text="Ensure that all information provided is complete and accurate." />{isSpecialService ? <><Tip icon="qr-code-outline" text="Your confirmed reservation uses a QR pass as proof of booking." /><Tip icon="calendar-outline" text="Check the event date and venue before confirming your reservation." /></> : <><Tip icon="time-outline" text="Arrive at the barangay office at least 5 minutes before your scheduled appointment." /><Tip icon="checkmark-circle-outline" text="Once submitted, your appointment will be reviewed by barangay staff." /></>}<Tip icon="card-outline" text="Bring one (1) valid government-issued ID and any additional requirements for your selected service." /><Tip icon="close-circle-outline" text="If you are unable to attend, please cancel your appointment in advance." /></View>
     </Animated.ScrollView>
-    <WeekdayDatePicker visible={showDatePicker} value={date} onClose={() => setShowDatePicker(false)} onSelect={(selected) => { setDate(selected); setShowDatePicker(false); }} />
+    <WeekdayDatePicker visible={showDatePicker} value={date} onClose={() => setShowDatePicker(false)} onSelect={(selected) => { setDate(selected); setTimeSlot(''); setShowDatePicker(false); }} />
   </SafeAreaView>;
 }
 
@@ -310,7 +341,7 @@ function WeekdayDatePicker({ visible, value, onClose, onSelect }: { visible: boo
 
 function Progress({ currentStep, isSpecialService }: { currentStep: number; isSpecialService: boolean }) { const { colors } = useAppTheme(); const steps = ['Personal Information', isSpecialService ? 'Special Service' : 'Service', isSpecialService ? 'Confirm' : 'Date & Time']; return <View style={s.progress}>{steps.map((label, index) => { const step = index + 1; const complete = step < currentStep; const active = step === currentStep; const isPersonalInformation = label === 'Personal Information'; return <View key={label} style={[s.step, isPersonalInformation && s.personalInformationStep]}><View style={[s.stepCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }, active && s.stepActive, complete && s.stepComplete]}><Text style={[s.stepNumber, { color: colors.text }, (active || complete) && s.stepNumberActive]}>{complete ? '✓' : step}</Text></View><Text fixedFontSize={11} numberOfLines={1} style={[s.stepLabel, { color: colors.muted }, active && s.stepLabelActive, complete && s.stepLabelComplete]}>{label}</Text>{index < steps.length - 1 && <View style={[s.stepLine, { backgroundColor: colors.border }, complete && s.stepLineComplete]} />}</View>; })}</View>; }
 function ReadField({ label, value = '', icon }: { label: string; value?: string; icon?: keyof typeof Ionicons.glyphMap }) { const { colors } = useAppTheme(); return <View style={s.readField}><Text style={[s.label, { color: colors.text }]}>{label}</Text><View style={[s.inputShell, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}><Text numberOfLines={1} style={[value ? s.valueText : s.placeholder, { color: value ? colors.text : colors.muted }]}>{value || '—'}</Text>{icon && <Ionicons name={icon} size={14} color={colors.muted} />}</View></View>; }
-function SelectField({ label, selectedValue, onValueChange, placeholder, items }: { label: string; selectedValue: number | ''; onValueChange: (value: number | '') => void; placeholder: string; items: { id: number; label: string }[] }) {
+function SelectField({ label, selectedValue, onValueChange, placeholder, items }: { label: string; selectedValue: number | ''; onValueChange: (value: number | '') => void; placeholder: string; items: { id: number; label: string; disabled?: boolean }[] }) {
   const { colors } = useAppTheme();
   const [open, setOpen] = useState(false);
   const selectedLabel = items.find((item) => item.id === selectedValue)?.label;
@@ -324,7 +355,7 @@ function SelectField({ label, selectedValue, onValueChange, placeholder, items }
       <Pressable onPress={() => setOpen(false)} style={s.pickerBackdrop}>
         <Pressable onPress={(event) => event.stopPropagation()} style={[s.pickerMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={[s.pickerHeader, { borderBottomColor: colors.border }]}><Text style={[s.pickerTitle, { color: colors.text }]}>{label}</Text><Pressable accessibilityLabel="Close selector" onPress={() => setOpen(false)} style={s.pickerClose}><Ionicons name="close" size={22} color={colors.muted} /></Pressable></View>
-          <ScrollView contentContainerStyle={s.pickerOptions} showsVerticalScrollIndicator={false}>{items.map((item) => <Pressable key={item.id} onPress={() => { onValueChange(item.id); setOpen(false); }} style={[s.pickerOption, { borderBottomColor: colors.border }, selectedValue === item.id && { backgroundColor: colors.iconBackground }]}><Text numberOfLines={2} style={[s.pickerOptionText, { color: colors.text }]}>{item.label}</Text>{selectedValue === item.id && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}</Pressable>)}</ScrollView>
+          <ScrollView contentContainerStyle={s.pickerOptions} showsVerticalScrollIndicator={false}>{items.map((item) => <Pressable accessibilityState={{ disabled: item.disabled, selected: selectedValue === item.id }} disabled={item.disabled} key={item.id} onPress={() => { onValueChange(item.id); setOpen(false); }} style={[s.pickerOption, { borderBottomColor: colors.border }, item.disabled && s.pickerOptionDisabled, selectedValue === item.id && { backgroundColor: colors.iconBackground }]}><Text numberOfLines={2} style={[s.pickerOptionText, { color: item.disabled ? colors.muted : colors.text }]}>{item.label}</Text>{selectedValue === item.id && <Ionicons name="checkmark-circle" size={20} color={colors.accent} />}</Pressable>)}</ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -374,6 +405,7 @@ const s = StyleSheet.create({
   pickerClose: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   pickerOptions: { paddingBottom: 8 },
   pickerOption: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', minHeight: 52, paddingHorizontal: 18, paddingVertical: 10 },
+  pickerOptionDisabled: { backgroundColor: '#EEF1F5', opacity: 0.65 },
   pickerOptionText: { ...appTypography.body, flex: 1, flexShrink: 1, minWidth: 0, paddingRight: 12 },
   draftNotice: { alignItems: 'center', borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 9, marginBottom: 14, padding: 10 },
   draftCopy: { flex: 1 },

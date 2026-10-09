@@ -2,6 +2,14 @@ from datetime import time
 
 from qq.models import TimeSlot
 
+REGULAR_TIME_SLOT_CAPACITY = 5
+REGULAR_DAILY_CAPACITY = 30
+
+
+def regular_slot_capacity(time_slot):
+    """Return the enforced resident-booking capacity for a regular slot."""
+    return min(time_slot.max_appointments, REGULAR_TIME_SLOT_CAPACITY)
+
 
 DEFAULT_TIME_SLOTS = (
     (time(8, 0), time(9, 0)),
@@ -24,6 +32,6 @@ def ensure_default_time_slots(barangay):
             end_time=end_time,
             defaults={
                 "is_active": True,
-                "max_appointments": 5,
+                "max_appointments": REGULAR_TIME_SLOT_CAPACITY,
             },
         )

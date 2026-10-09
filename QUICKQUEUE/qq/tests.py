@@ -19,6 +19,7 @@ from qq.models import (
     Service,
     TimeSlot,
 )
+from qq.services.appointment_service import check_duplicate_appointment, check_timeslot_capacity
 
 
 class RegistrationSecurityFlowTests(APITestCase):
@@ -102,7 +103,7 @@ class ResidentAppointmentApiTests(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_booking_returns_database_and_display_ids_and_creates_once(self):
-        booking_date = date.today()
+        booking_date = timezone.localdate() + timedelta(days=1)
         while booking_date.weekday() >= 5:
             booking_date += timedelta(days=1)
         payload = {
@@ -124,6 +125,125 @@ class ResidentAppointmentApiTests(APITestCase):
         duplicate = self.client.post("/api/appointments/", payload, format="json")
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
+
+    def test_completed_and_missed_appointments_keep_occupying_slots(self):
+        booking_date = timezone.localdate() + timedelta(days=1)
+        completed = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=self.service,
+            appointment_date=booking_date, time_slot=self.time_slot,
+            queue_number="DOC-101", status=Appointment.Status.COMPLETED,
+        )
+        self.assertTrue(check_duplicate_appointment(self.resident, booking_date, self.time_slot))
+
+        completed.status = Appointment.Status.MISSED
+        completed.save(update_fields=["status", "updated_at"])
+        self.assertTrue(check_duplicate_appointment(self.resident, booking_date, self.time_slot))
+
+        self.time_slot.max_appointments = 1
+        self.time_slot.save(update_fields=["max_appointments", "updated_at"])
+        self.assertFalse(check_timeslot_capacity(booking_date, self.time_slot))
+
+    def test_cancelled_appointment_releases_its_slot(self):
+        booking_date = timezone.localdate() + timedelta(days=1)
+        Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=self.service,
+            appointment_date=booking_date, time_slot=self.time_slot,
+            queue_number="DOC-102", status=Appointment.Status.CANCELLED,
+        )
+        self.assertFalse(check_duplicate_appointment(self.resident, booking_date, self.time_slot))
+        self.assertTrue(check_timeslot_capacity(booking_date, self.time_slot))
+
+    def test_time_slot_capacity_is_shared_across_regular_services(self):
+        booking_date = timezone.localdate() + timedelta(days=1)
+        while booking_date.weekday() >= 5:
+            booking_date += timedelta(days=1)
+        other_service = Service.objects.create(
+            code="IND", name="Indigency Test Service", description="Test service",
+            estimated_duration=15,
+        )
+        self.time_slot.max_appointments = 10
+        self.time_slot.save(update_fields=["max_appointments", "updated_at"])
+        for index in range(5):
+            user = User.objects.create_user(username=f"shared-slot-{index}", password="secret")
+            resident = Resident.objects.create(
+                user=user, first_name="Shared", last_name=f"Resident {index}",
+                birthdate=date(2000, 1, 1), sex=Resident.Sex.MALE,
+                contact_number=f"0910000000{index}", barangay=self.barangay,
+            )
+            Appointment.objects.create(
+                resident=resident, barangay=self.barangay,
+                service=self.service if index % 2 == 0 else other_service,
+                appointment_date=booking_date, time_slot=self.time_slot,
+                queue_number=f"S{index + 1:02d}", status=Appointment.Status.CONFIRMED,
+            )
+
+        availability = self.client.get(
+            f"/api/appointments/?appointment_date={booking_date.isoformat()}"
+        )
+        slot = next(item for item in availability.data["time_slots"] if item["id"] == self.time_slot.pk)
+        self.assertEqual(slot["occupied"], 5)
+        self.assertEqual(slot["capacity"], 5)
+        self.assertEqual(slot["remaining"], 0)
+        self.assertTrue(slot["is_fully_booked"])
+        self.assertFalse(slot["is_available"])
+        self.assertIn("Fully Booked", slot["label"])
+
+        response = self.client.post("/api/appointments/", {
+            "service": other_service.pk,
+            "time_slot": self.time_slot.pk,
+            "appointment_date": booking_date.isoformat(),
+            "purpose": "Sixth shared booking",
+            "sitio": "Test Sitio",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already full", response.data["message"])
+        self.assertEqual(Appointment.objects.filter(
+            appointment_date=booking_date, time_slot=self.time_slot,
+        ).exclude(status=Appointment.Status.CANCELLED).count(), 5)
+
+    def test_past_date_booking_is_rejected_by_service(self):
+        response = self.client.post("/api/appointments/", {
+            "service": self.service.pk,
+            "time_slot": self.time_slot.pk,
+            "appointment_date": (timezone.localdate() - timedelta(days=1)).isoformat(),
+            "purpose": "Past booking attempt",
+            "sitio": "Test Sitio",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Appointment.objects.filter(resident=self.resident).exists())
+
+    def test_staff_calendar_closes_past_date_without_resetting_count(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        for index, status_value in enumerate((
+            Appointment.Status.COMPLETED,
+            Appointment.Status.MISSED,
+            Appointment.Status.CANCELLED,
+        ), start=1):
+            Appointment.objects.create(
+                resident=self.resident, barangay=self.barangay, service=self.service,
+                appointment_date=past_date, time_slot=self.time_slot,
+                queue_number=f"DOC-{index:03d}", status=status_value,
+            )
+
+        staff_user = User.objects.create_user(username="calendar-staff", password="secret")
+        BarangayStaff.objects.create(
+            user=staff_user, barangay=self.barangay, first_name="Calendar",
+            last_name="Staff", username="calendar-staff", role=BarangayStaff.Role.STAFF,
+        )
+        self.client.force_authenticate(user=None)
+        self.client.force_login(staff_user)
+
+        response = self.client.get(f"/barangay/staff/appointments/?date={past_date.isoformat()}")
+
+        self.assertEqual(response.status_code, 200)
+        day = next(
+            item for week in response.context["calendar_weeks"] for item in week
+            if item["date"] == past_date
+        )
+        self.assertEqual(day["count"], 2)
+        self.assertEqual(day["level"], "closed")
+        self.assertContains(response, "Closed")
+        self.assertContains(response, "2/5")
 
     def test_regular_booking_rejects_weekends(self):
         saturday = date.today() + timedelta(days=(5 - date.today().weekday()) % 7)

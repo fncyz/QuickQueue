@@ -10,6 +10,7 @@ from qq.models import (
 from django.utils import timezone
 
 from .queue_service import generate_queue_number
+from .timeslot_service import REGULAR_DAILY_CAPACITY, regular_slot_capacity
 
 
 def check_duplicate_appointment(
@@ -26,7 +27,7 @@ def check_duplicate_appointment(
         resident=resident,
         appointment_date=appointment_date,
         time_slot=time_slot,
-    ).exists()
+    ).exclude(status=Appointment.Status.CANCELLED).exists()
 
 
 def check_timeslot_capacity(
@@ -41,9 +42,9 @@ def check_timeslot_capacity(
     booked = Appointment.objects.filter(
         appointment_date=appointment_date,
         time_slot=time_slot,
-    ).count()
+    ).exclude(status=Appointment.Status.CANCELLED).count()
 
-    return booked < time_slot.max_appointments
+    return booked < regular_slot_capacity(time_slot)
 
 
 @transaction.atomic
@@ -60,13 +61,26 @@ def create_appointment(
     queue ticket and notification.
     """
 
-    # Lock both records so normal appointment slot capacity remains correct
-    # when residents submit concurrently.
+    # Lock every shared regular slot for this barangay so per-slot and daily
+    # capacity checks are serialized across all services.
     from qq.models import Service
     service = Service.objects.select_for_update().get(pk=service.pk)
     if service.is_temporary:
         raise ValueError("Special Services must be reserved through the event booking flow.")
-    time_slot = TimeSlot.objects.select_for_update().select_related("barangay").get(pk=time_slot.pk)
+    locked_slots = list(TimeSlot.objects.select_for_update().select_related("barangay").filter(
+        barangay=resident.barangay,
+        is_active=True,
+    ).order_by("pk"))
+    time_slot = next((slot for slot in locked_slots if slot.pk == time_slot.pk), None)
+    if time_slot is None:
+        raise ValueError("Invalid time slot selected.")
+
+    now = timezone.localtime()
+    today = timezone.localdate(now)
+    if appointment_date < today:
+        raise ValueError("Past appointment dates are closed.")
+    if appointment_date == today and now.time() >= time_slot.start_time:
+        raise ValueError("Booking for this time slot has closed.")
 
     if appointment_date.weekday() >= 5:
         raise ValueError("Regular appointments are available Monday through Friday only.")
@@ -93,8 +107,16 @@ def create_appointment(
         time_slot,
     ):
         raise ValueError(
-            "This time slot is already full."
+            "This time slot is already fully booked. Please select another available time."
         )
+
+    daily_booked = Appointment.objects.filter(
+        barangay=resident.barangay,
+        appointment_date=appointment_date,
+        time_slot__isnull=False,
+    ).exclude(status=Appointment.Status.CANCELLED).count()
+    if daily_booked >= REGULAR_DAILY_CAPACITY:
+        raise ValueError("This appointment date is already fully booked. Please select another available date.")
 
     queue_number = generate_queue_number(
         resident.barangay,
@@ -158,7 +180,7 @@ def create_special_service_booking(resident, service):
         raise ValueError("You already have a booking for this Special Service.")
 
     booked = Appointment.objects.filter(service=service).exclude(
-        status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
+        status=Appointment.Status.CANCELLED
     ).count()
     if not service.capacity or booked >= service.capacity:
         raise ValueError("This Special Service is fully booked.")

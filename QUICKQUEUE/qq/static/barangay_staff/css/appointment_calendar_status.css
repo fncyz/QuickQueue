@@ -1,0 +1,13 @@
+.day.closed {
+    background: #f4f6f9;
+    border-color: #e2e6ec;
+    color: #758197;
+}
+
+.day.closed > i {
+    background: #aab2bf;
+}
+
+.day.closed small {
+    color: #7d8796;
+}
