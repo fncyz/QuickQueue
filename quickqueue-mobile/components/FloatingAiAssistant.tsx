@@ -14,7 +14,7 @@ import { sendChatMessage } from '@/services/api';
 const assistantLogo = require('../assets/images/qq-ai.png');
 const assistantBlue = '#0759D9';
 const suggestions = ['Requirements for Clearance', 'Service Fees', 'Office Hours', 'Book an Appointment', 'Queue Status'] as const;
-type Message = { id: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
+type Message = { id: string; retryText?: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
 const timeNow = () => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
 
 export function FloatingAiAssistant() {
@@ -24,6 +24,7 @@ export function FloatingAiAssistant() {
   const { isOnline } = useConnectivity();
   const scrollRef = useRef<ScrollView>(null);
   const nextId = useRef(1);
+  const sendInFlight = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [draft, setDraft] = useState('');
@@ -36,13 +37,14 @@ export function FloatingAiAssistant() {
     if (isOpen) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   }, [isOpen, messages]);
 
-  const send = async (text = draft) => {
+  const send = async (text = draft, retryExisting = false) => {
     const trimmed = text.trim();
-    if (!trimmed || !isOnline || isSending) return;
+    if (!trimmed || !isOnline || sendInFlight.current) return;
+    sendInFlight.current = true;
     const timestamp = timeNow();
     const residentId = `resident-${nextId.current++}`;
     const history = messages.slice(-6).map(({ role, text: historyText }) => ({ role, text: historyText }));
-    setMessages((current) => [...current, { id: residentId, role: 'resident', text: trimmed, time: timestamp }]);
+    if (!retryExisting) setMessages((current) => [...current, { id: residentId, role: 'resident', text: trimmed, time: timestamp }]);
     setDraft('');
     setIsSending(true);
     try {
@@ -59,20 +61,33 @@ export function FloatingAiAssistant() {
     } catch (error) {
       const axiosError = isAxiosError(error) ? error : undefined;
       const status = axiosError?.response?.status;
+      const errorCode = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'error_code' in axiosError.response.data
+        ? String(axiosError.response.data.error_code)
+        : undefined;
+      const serverRetryable = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'retryable' in axiosError.response.data
+        ? Boolean(axiosError.response.data.retryable)
+        : undefined;
       const serverMessage = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'message' in axiosError.response.data
         ? String(axiosError.response.data.message)
         : undefined;
-      const text = status === 429
+      const text = !isOnline
+        ? "You're currently offline. Please connect to the internet to use the AI Assistant."
+        : status === 429 || errorCode === 'ai_rate_limited'
         ? 'The QuickQueue Assistant is receiving many requests right now. Please wait a moment and try again.'
         : status === 401
           ? 'Your session has expired. Please sign in again, then reopen the QuickQueue Assistant.'
+        : errorCode === 'ai_timeout' || axiosError?.code === 'ECONNABORTED' || axiosError?.code === 'ETIMEDOUT'
+          ? 'The response is taking longer than expected. Please try again.'
         : status === 502 || status === 503 || status === 504
           ? 'The QuickQueue Assistant is temporarily unavailable. Please try again shortly.'
-          : axiosError?.code === 'ECONNABORTED'
-            ? 'The QuickQueue Assistant took too long to respond. Please try again.'
-            : serverMessage || 'I couldn’t reach the QuickQueue Assistant. Please check your connection and try again.';
-      setMessages((current) => [...current, { id: `assistant-${nextId.current++}`, role: 'assistant', suggestions: ['Try again'], text, time: timeNow() }]);
+          : !axiosError?.response
+            ? 'Unable to connect to QuickQueue right now. Please check your connection and try again.'
+            : serverMessage || 'The QuickQueue Assistant encountered an unexpected error. Please try again.';
+      setDraft(trimmed);
+      const retryable = status !== 401 && serverRetryable !== false;
+      setMessages((current) => [...current, { id: `assistant-${nextId.current++}`, retryText: retryable ? trimmed : undefined, role: 'assistant', suggestions: retryable ? ['Retry'] : undefined, text, time: timeNow() }]);
     } finally {
+      sendInFlight.current = false;
       setIsSending(false);
     }
   };
@@ -97,7 +112,7 @@ export function FloatingAiAssistant() {
           <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.conversation} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })} ref={scrollRef} showsVerticalScrollIndicator={false}>
             {visibleMessages.map((message, index) => <View key={message.id}>
               <MessageBubble assistantBubble={assistantBubble} colors={colors} message={message} />
-              {message.role === 'assistant' && index === visibleMessages.length - 1 && message.suggestions?.length && <View onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} style={[styles.suggestionsCard, { backgroundColor: inputBackground, borderColor: colors.border }]}><Text style={[styles.suggestionsTitle, { color: colors.text }]}>Suggested Questions</Text><View style={styles.suggestionList}>{message.suggestions.map((suggestion) => <Pressable accessibilityRole="button" disabled={!isOnline || isSending} key={`${message.id}-${suggestion}`} onPress={() => send(suggestion)} style={({ pressed }) => [styles.suggestion, { backgroundColor: panel, borderColor: isOnline ? '#B8D3FA' : colors.border, opacity: !isOnline || isSending ? 0.45 : pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: isOnline ? colors.accent : colors.muted }]}>{suggestion}</Text></Pressable>)}</View></View>}
+              {message.role === 'assistant' && index === visibleMessages.length - 1 && message.suggestions?.length && <View onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} style={[styles.suggestionsCard, { backgroundColor: inputBackground, borderColor: colors.border }]}><Text style={[styles.suggestionsTitle, { color: colors.text }]}>{message.retryText ? 'Message not sent' : 'Suggested Questions'}</Text><View style={styles.suggestionList}>{message.suggestions.map((suggestion) => <Pressable accessibilityRole="button" disabled={!isOnline || isSending} key={`${message.id}-${suggestion}`} onPress={() => send(message.retryText || suggestion, Boolean(message.retryText))} style={({ pressed }) => [styles.suggestion, { backgroundColor: panel, borderColor: isOnline ? '#B8D3FA' : colors.border, opacity: !isOnline || isSending ? 0.45 : pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: isOnline ? colors.accent : colors.muted }]}>{suggestion}</Text></Pressable>)}</View></View>}
             </View>)}
             {isSending && <View accessibilityLabel="QuickQueue Assistant is typing" accessibilityLiveRegion="polite" style={styles.typingRow}><Image source={assistantLogo} style={styles.messageAvatar} /><View style={[styles.typingBubble, { backgroundColor: assistantBubble }]}><QuickQueueLoadingIndicator size={34} /></View></View>}
           </ScrollView>
