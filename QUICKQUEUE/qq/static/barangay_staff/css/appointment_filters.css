@@ -1,0 +1,5 @@
+.review-layout-full { grid-template-columns: minmax(0, 1fr); }
+.review-layout-full .filters > label { min-width: 260px; }
+.review-layout-full .filters select { width: 210px; min-width: 170px; }
+.review-layout-full .filters .date-filter { width: 170px; min-width: 150px; }
+@media (max-width: 780px) { .review-layout-full .filters > label, .review-layout-full .filters select, .review-layout-full .filters .date-filter { width: 100%; min-width: 0; } }

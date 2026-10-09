@@ -12,12 +12,8 @@ def regular_slot_capacity(time_slot):
 
 
 def regular_daily_capacity(barangay):
-    from qq.models import BarangayBookingConfiguration
-
-    configured = BarangayBookingConfiguration.objects.filter(barangay=barangay).values_list(
-        "daily_capacity", flat=True
-    ).first()
-    return configured or REGULAR_DAILY_CAPACITY
+    """Return the fixed regular daily capacity."""
+    return REGULAR_DAILY_CAPACITY
 
 
 DEFAULT_TIME_SLOTS = (

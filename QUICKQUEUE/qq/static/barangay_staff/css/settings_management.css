@@ -1,0 +1,15 @@
+.service-settings-list { padding: 10px 24px 24px; }
+.service-settings-row { display: grid; grid-template-columns: minmax(220px, 1fr) 160px 170px auto; align-items: end; gap: 16px; padding: 18px 0 !important; border-bottom: 1px solid var(--line); }
+.service-settings-row > span, .service-settings-row label { display: grid; gap: 6px; }
+.service-settings-row small, .closed-dates small { color: var(--muted); }
+.service-settings-row input { height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.service-settings-row button, .closed-dates button { height: 42px; padding: 0 18px; border: 0; border-radius: 8px; background: #1268e8; color: #fff; font-weight: 700; }
+.calendar-warning { display: flex; align-items: center; gap: 9px; margin-top: 18px; color: #52658a; }
+.calendar-settings .secondary { border: 1px solid #b9d1fa; background: #fff; color: #0864ec; }
+.closed-dates { padding: 0 24px 24px; }
+.closed-dates article { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-top: 1px solid var(--line); }
+.closed-dates article > span { display: grid; }
+.closed-dates form { padding: 0; }
+.settings-empty { padding: 18px 0; color: var(--muted); }
+@media (max-width: 1100px) { .service-settings-row { grid-template-columns: 1fr 1fr; } .service-settings-row > span { grid-column: 1 / -1; } }
+@media (max-width: 950px) { .settings-layout > nav { flex-wrap: wrap; } .service-settings-row { grid-template-columns: 1fr; } }

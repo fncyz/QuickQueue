@@ -1,4 +1,3 @@
-import datetime
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
@@ -15,17 +14,6 @@ class Migration(migrations.Migration):
             model_name="appointment",
             name="service_fee_snapshot",
             field=models.DecimalField(blank=True, decimal_places=2, help_text="Service fee at the time the appointment was booked.", max_digits=10, null=True),
-        ),
-        migrations.CreateModel(
-            name="BarangayBookingConfiguration",
-            fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("daily_capacity", models.PositiveIntegerField(default=30)),
-                ("office_start_time", models.TimeField(default=datetime.time(8, 0))),
-                ("office_end_time", models.TimeField(default=datetime.time(16, 0))),
-                ("updated_at", models.DateTimeField(auto_now=True)),
-                ("barangay", models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name="booking_configuration", to="qq.barangay")),
-            ],
         ),
         migrations.CreateModel(
             name="BarangayServiceConfiguration",

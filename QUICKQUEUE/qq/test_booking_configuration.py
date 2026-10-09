@@ -29,13 +29,14 @@ class BookingConfigurationTests(TestCase):
         self.admin_user = User.objects.create_user(username="configuration-admin", password="secret")
         self.barangay.user = self.admin_user
         self.barangay.save(update_fields=["user", "updated_at"])
+        self.staff_user = User.objects.create_user(username="configuration-staff", password="secret")
         BarangayStaff.objects.create(
             barangay=self.barangay,
-            user=self.admin_user,
+            user=self.staff_user,
             first_name="Configuration",
             last_name="Admin",
-            username="configuration-admin",
-            role=BarangayStaff.Role.ADMIN,
+            username="configuration-staff",
+            role=BarangayStaff.Role.STAFF,
         )
         resident_user = User.objects.create_user(username="configuration-resident", password="secret")
         self.resident = Resident.objects.create(
@@ -64,27 +65,26 @@ class BookingConfigurationTests(TestCase):
             candidate += timedelta(days=1)
         self.appointment_date = candidate
 
-    def test_admin_can_save_barangay_specific_service_configuration(self):
-        self.client.force_login(self.admin_user)
+    def test_staff_can_save_barangay_specific_service_configuration(self):
+        self.client.force_login(self.staff_user)
         response = self.client.post(
-            reverse("barangay_settings"),
+            reverse("staff_settings"),
             {
                 "action": "service",
                 "service_id": self.service.pk,
                 "fee": "75.50",
                 "estimated_duration": "25",
-                "is_active": "on",
             },
         )
 
-        self.assertRedirects(response, f"{reverse('barangay_settings')}?tab=services", fetch_redirect_response=False)
+        self.assertRedirects(response, f"{reverse('staff_settings')}?tab=services", fetch_redirect_response=False)
         configuration = BarangayServiceConfiguration.objects.get(
             barangay=self.barangay, service=self.service
         )
         self.assertEqual(configuration.fee, Decimal("75.50"))
         self.assertEqual(configuration.estimated_duration, 25)
         self.assertEqual(self.service.estimated_duration, 15)
-        page = self.client.get(f"{reverse('barangay_settings')}?tab=services")
+        page = self.client.get(f"{reverse('staff_settings')}?tab=services")
         self.assertContains(page, "Service Management")
         self.assertContains(page, "75.50")
 
@@ -112,7 +112,7 @@ class BookingConfigurationTests(TestCase):
             barangay=self.barangay,
             date=self.appointment_date,
             reason="Barangay holiday",
-            created_by=self.admin_user,
+            created_by=self.staff_user,
         )
 
         with self.assertRaisesMessage(ValueError, "Appointments are unavailable on this date"):

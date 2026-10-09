@@ -11,4 +11,4 @@ from .document_template import DocumentTemplate
 from .generated_document import GeneratedDocument
 from .push_device import PushDevice, PushDelivery
 from .event_booking import EventBooking
-from .booking_configuration import BarangayBookingConfiguration, BarangayServiceConfiguration, ClosedAppointmentDate
+from .booking_configuration import BarangayServiceConfiguration, ClosedAppointmentDate

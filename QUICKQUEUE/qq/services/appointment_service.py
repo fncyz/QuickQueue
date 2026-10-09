@@ -6,7 +6,6 @@ from qq.models import (
     Notification,
     TimeSlot,
     EventBooking,
-    BarangayBookingConfiguration,
     BarangayServiceConfiguration,
     ClosedAppointmentDate,
 )
@@ -75,9 +74,6 @@ def create_appointment(
         service=service,
         defaults={"estimated_duration": service.estimated_duration},
     )
-    booking_configuration, _ = BarangayBookingConfiguration.objects.select_for_update().get_or_create(
-        barangay=resident.barangay,
-    )
     locked_slots = list(TimeSlot.objects.select_for_update().select_related("barangay").filter(
         barangay=resident.barangay,
         is_active=True,
@@ -85,11 +81,6 @@ def create_appointment(
     time_slot = next((slot for slot in locked_slots if slot.pk == time_slot.pk), None)
     if time_slot is None:
         raise ValueError("Invalid time slot selected.")
-    if (
-        time_slot.start_time < booking_configuration.office_start_time
-        or time_slot.end_time > booking_configuration.office_end_time
-    ):
-        raise ValueError("This time slot is outside the configured office hours.")
 
     now = timezone.localtime()
     today = timezone.localdate(now)
@@ -138,7 +129,7 @@ def create_appointment(
         appointment_date=appointment_date,
         time_slot__isnull=False,
     ).exclude(status=Appointment.Status.CANCELLED).count()
-    if daily_booked >= booking_configuration.daily_capacity:
+    if daily_booked >= regular_daily_capacity(resident.barangay):
         raise ValueError("This appointment date is already fully booked. Please select another available date.")
 
     queue_number = generate_queue_number(

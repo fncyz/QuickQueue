@@ -1,5 +1,3 @@
-from datetime import time
-
 from django.conf import settings
 from django.db import models
 
@@ -20,14 +18,6 @@ class BarangayServiceConfiguration(models.Model):
             models.UniqueConstraint(fields=("barangay", "service"), name="unique_barangay_service_configuration")
         ]
         ordering = ("service__name",)
-
-
-class BarangayBookingConfiguration(models.Model):
-    barangay = models.OneToOneField(Barangay, on_delete=models.CASCADE, related_name="booking_configuration")
-    daily_capacity = models.PositiveIntegerField(default=30)
-    office_start_time = models.TimeField(default=time(8, 0))
-    office_end_time = models.TimeField(default=time(16, 0))
-    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ClosedAppointmentDate(models.Model):

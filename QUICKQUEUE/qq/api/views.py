@@ -29,10 +29,10 @@ from datetime import date
 from difflib import SequenceMatcher
 import re
 
-from qq.models import Appointment, BarangayBookingConfiguration, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
-from qq.services.timeslot_service import ensure_default_time_slots, regular_slot_capacity
+from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
 from qq.gemini_service import GeminiUnavailable, ask_gemini
 from .throttles import ChatRateThrottle
 
@@ -369,9 +369,6 @@ def appointments_api(request):
             service__is_temporary=False,
         )
     }
-    booking_configuration, _ = BarangayBookingConfiguration.objects.get_or_create(
-        barangay=resident.barangay
-    )
 
     availability_date = None
     requested_date = request.query_params.get("appointment_date")
@@ -408,20 +405,16 @@ def appointments_api(request):
             availability_date == today
             and timezone.localtime(now).time() >= slot.start_time
         )
-        outside_office_hours = (
-            slot.start_time < booking_configuration.office_start_time
-            or slot.end_time > booking_configuration.office_end_time
-        )
         is_full = booked >= capacity
-        day_is_full = daily_booked >= booking_configuration.daily_capacity
+        day_is_full = daily_booked >= regular_daily_capacity(resident.barangay)
         is_available = availability_date is None or not (
-            is_past or cutoff_passed or outside_office_hours or is_full or day_is_full or closed_date
+            is_past or cutoff_passed or is_full or day_is_full or closed_date
         )
         time_label = f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}"
         if availability_date:
             availability_label = (
                 "Unavailable"
-                if closed_date or is_past or cutoff_passed or outside_office_hours
+                if closed_date or is_past or cutoff_passed
                 else "Fully Booked"
                 if is_full or day_is_full
                 else "Available"
