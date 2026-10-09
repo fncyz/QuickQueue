@@ -72,6 +72,7 @@ class AdminStaffWorkflowTests(TestCase):
         response = self.client.get("/barangay/staff/dashboard/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Barangay Workflow Test Barangay Staff Portal")
         self.assertContains(response, 'href="/barangay/staff/appointments/"')
         self.assertContains(response, 'href="/barangay/staff/queue/live/"')
         self.assertContains(response, 'href="/barangay/staff/documents/"')
@@ -105,3 +106,51 @@ class AdminStaffWorkflowTests(TestCase):
             f"/barangay/staff/queue/live/?slot={self.slot.pk}",
             fetch_redirect_response=False,
         )
+
+    def test_staff_documents_are_consolidated_with_processing_and_completed_tabs(self):
+        response = self.client.get("/barangay/staff/documents/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, ">Documents</a>")
+        self.assertContains(response, "For Processing")
+        self.assertContains(response, "Completed")
+        self.assertNotContains(response, ">Document Processing</a>")
+        self.assertNotContains(response, ">Completed Documents</a>")
+        self.assertNotContains(response, ">Resident Logbook</a>")
+
+        completed = self.client.get("/barangay/staff/documents/?tab=completed")
+        self.assertEqual(completed.status_code, 200)
+        self.assertContains(completed, "Completed document archive")
+
+    def test_legacy_document_and_logbook_routes_redirect_to_unified_pages(self):
+        completed = self.client.get("/barangay/staff/documents/completed/")
+        self.assertRedirects(
+            completed,
+            "/barangay/staff/documents/?tab=completed",
+            fetch_redirect_response=False,
+        )
+        history = self.client.get("/barangay/staff/residents/")
+        self.assertRedirects(
+            history,
+            "/barangay/staff/appointments/?tab=history",
+            fetch_redirect_response=False,
+        )
+
+    def test_resident_history_is_available_inside_appointments(self):
+        response = self.client.get("/barangay/staff/appointments/?tab=history")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Resident History")
+        self.assertContains(response, "Completed resident service history")
+
+    def test_document_processing_action_still_updates_existing_ticket(self):
+        ticket = self._ticket("document-resident", "Document", self.service, "C09")
+
+        response = self.client.post(
+            f"/barangay/staff/documents/{ticket.pk}/action/",
+            {"action": "start"},
+        )
+
+        self.assertRedirects(response, "/barangay/staff/documents/", fetch_redirect_response=False)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)

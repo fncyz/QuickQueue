@@ -6,7 +6,13 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiUnavailable(Exception):
-    """Raised when Gemini is missing configuration or temporarily unavailable."""
+    """A safe, classified Gemini failure that can be returned by the API."""
+
+    def __init__(self, message, *, code="ai_unavailable", http_status=503, retryable=True):
+        super().__init__(message)
+        self.code = code
+        self.http_status = http_status
+        self.retryable = retryable
 
 
 SYSTEM_INSTRUCTION = """
@@ -71,20 +77,28 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
         from google import genai
         from google.genai import errors, types
     except ImportError as error:
-        raise GeminiUnavailable("Gemini SDK is unavailable.") from error
+        raise GeminiUnavailable(
+            "The AI service is not installed on the server.",
+            code="ai_configuration",
+            retryable=False,
+        ) from error
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise GeminiUnavailable("Gemini is not configured.")
+        raise GeminiUnavailable(
+            "The AI service is not configured on the server.",
+            code="ai_configuration",
+            retryable=False,
+        )
 
     client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
             # Leave enough time for the API to return built-in guidance before
             # the mobile and serverless request deadlines are reached.
-            timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "7000")),
+            timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "10000")),
             retry_options=types.HttpRetryOptions(
-                attempts=int(os.getenv("GEMINI_RETRY_ATTEMPTS", "1")),
+                attempts=int(os.getenv("GEMINI_RETRY_ATTEMPTS", "2")),
                 initial_delay=0.5,
                 max_delay=2.0,
                 exp_base=2.0,
@@ -125,15 +139,57 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
                     logger.info("Gemini fallback model succeeded: %s", model)
                 return text
             last_error = GeminiUnavailable("Gemini returned no response.")
-        except errors.ServerError as error:
+        except errors.APIError as error:
             last_error = error
-            logger.warning("Gemini model %s returned %s; trying fallback", model, error.code)
-            continue
-        except (errors.APIError, TimeoutError) as error:
-            logger.warning("Gemini request failed: %s", type(error).__name__)
-            raise GeminiUnavailable("Gemini request failed.") from error
+            code = int(getattr(error, "code", 500) or 500)
+            if code in (400, 404) and index + 1 < len(models):
+                logger.warning("Gemini rejected model %s with %s; trying fallback", model, code)
+                continue
+            if code == 429:
+                raise GeminiUnavailable(
+                    "The AI service rate limit was reached.",
+                    code="ai_rate_limited",
+                    http_status=429,
+                ) from error
+            if code in (401, 403):
+                raise GeminiUnavailable(
+                    "The AI service credentials were rejected.",
+                    code="ai_configuration",
+                    retryable=False,
+                ) from error
+            if code in (408, 504):
+                raise GeminiUnavailable(
+                    "The AI request timed out.", code="ai_timeout", http_status=504
+                ) from error
+            if code >= 500:
+                logger.warning("Gemini model %s returned %s; trying fallback", model, code)
+                continue
+            raise GeminiUnavailable(
+                "The AI request was rejected.",
+                code="ai_request_rejected",
+                http_status=502,
+                retryable=False,
+            ) from error
+        except TimeoutError as error:
+            logger.warning("Gemini request timed out")
+            raise GeminiUnavailable(
+                "The AI request timed out.", code="ai_timeout", http_status=504
+            ) from error
         except Exception as error:
-            logger.exception("Unexpected Gemini transport failure")
-            raise GeminiUnavailable("Gemini request failed.") from error
+            error_name = type(error).__name__
+            error_text = str(error).lower()
+            if "timeout" in error_name.lower() or "timed out" in error_text:
+                logger.warning("Gemini transport timed out: %s", error_name)
+                raise GeminiUnavailable(
+                    "The AI request timed out.", code="ai_timeout", http_status=504
+                ) from error
+            logger.warning("Gemini connection failed: %s", error_name)
+            raise GeminiUnavailable(
+                "The server could not connect to the AI provider.",
+                code="ai_connection",
+                http_status=503,
+            ) from error
 
-    raise GeminiUnavailable("All Gemini models are temporarily unavailable.") from last_error
+    raise GeminiUnavailable(
+        "The AI provider is temporarily unavailable.", code="ai_provider_unavailable"
+    ) from last_error

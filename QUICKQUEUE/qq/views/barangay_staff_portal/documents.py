@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, Notification, QueueTicket, Service
+from qq.views.barangay_staff_portal.completed_documents import completed_documents_context
 
 
 def _staff_for(user):
@@ -22,6 +23,9 @@ def staff_document_processing(request):
     staff = _staff_for(request.user)
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         return redirect("barangay_queue_history")
+    active_tab = request.GET.get("tab", "processing")
+    if active_tab not in {"processing", "completed"}:
+        active_tab = "processing"
     base = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
         appointment__status__in=[
@@ -53,8 +57,9 @@ def staff_document_processing(request):
             pass
     if status_filter and status_filter in dict(QueueTicket.ClaimStatus.choices):
         filtered = filtered.filter(claim_status=status_filter)
-    return render(request, "barangay_staff/document_processing.html", {
+    context = {
         "active_page": "documents", "staff": staff, "barangay": staff.barangay,
+        "document_tab": active_tab,
         "tickets": filtered.order_by("appointment__appointment_date", "appointment__time_slot__start_time"),
         "total_count": base.count(),
         "waiting_count": base.filter(claim_status=QueueTicket.ClaimStatus.NONE).count(),
@@ -65,7 +70,10 @@ def staff_document_processing(request):
         "unread_notifications": Notification.objects.filter(
             appointment__barangay=staff.barangay, admin_is_read=False
         ).count(),
-    })
+    }
+    if active_tab == "completed":
+        context.update(completed_documents_context(request, staff))
+    return render(request, "barangay_staff/document_processing.html", context)
 
 
 @login_required(login_url="signin")

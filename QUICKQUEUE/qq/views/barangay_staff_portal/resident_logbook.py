@@ -3,10 +3,10 @@ from collections import OrderedDict
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.utils import timezone
 
-from qq.models import BarangayStaff, Notification, QueueTicket, Service
+from qq.models import BarangayStaff, QueueTicket
 
 
 @login_required(login_url="signin")
@@ -18,6 +18,14 @@ def staff_resident_logbook(request):
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         return redirect("barangay_residents")
 
+    query = request.GET.urlencode()
+    destination = f"/barangay/staff/appointments/?tab=history"
+    if query:
+        destination += f"&{query}"
+    return redirect(destination)
+
+
+def resident_history_context(request, staff):
     tickets = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
         claim_status=QueueTicket.ClaimStatus.CLAIMED,
@@ -49,12 +57,7 @@ def staff_resident_logbook(request):
             grouped[resident.pk] = {"resident": resident, "latest": ticket, "transactions": []}
         grouped[resident.pk]["transactions"].append(ticket)
 
-    return render(request, "barangay_staff/resident_logbook.html", {
-        "active_page": "logbook", "staff": staff, "barangay": staff.barangay,
+    return {
         "resident_rows": list(grouped.values()), "resident_count": len(grouped),
-        "services": Service.objects.filter(is_active=True).order_by("name"),
-        "filters": {"q": search, "service": service, "date": date_filter},
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=staff.barangay, admin_is_read=False
-        ).count(),
-    })
+        "history_filters": {"q": search, "service": service, "date": date_filter},
+    }

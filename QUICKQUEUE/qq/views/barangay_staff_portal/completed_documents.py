@@ -4,7 +4,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from qq.models import BarangayStaff, Notification, QueueTicket, Service
+from qq.models import BarangayStaff, QueueTicket, Service
 
 
 def _regular_staff(user):
@@ -20,6 +20,14 @@ def staff_completed_documents(request):
     staff = _regular_staff(request.user)
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         return redirect("barangay_queue_history")
+    query = request.GET.urlencode()
+    destination = "/barangay/staff/documents/?tab=completed"
+    if query:
+        destination += f"&{query}"
+    return redirect(destination)
+
+
+def completed_documents_context(request, staff):
     base = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
         claim_status=QueueTicket.ClaimStatus.CLAIMED,
@@ -43,17 +51,13 @@ def staff_completed_documents(request):
         except ValueError:
             pass
     today = timezone.localdate()
-    return render(request, "barangay_staff/completed_documents.html", {
-        "active_page": "completed", "staff": staff, "barangay": staff.barangay,
+    return {
         "documents": filtered.order_by("-claimed_at", "-updated_at"),
         "total_archived": base.count(), "completed_today": base.filter(claimed_at__date=today).count(),
         "processed_by_you": 0,
         "services": Service.objects.filter(is_active=True).order_by("name"),
-        "filters": {"q": search, "service": service, "date": date_filter},
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=staff.barangay, admin_is_read=False
-        ).count(),
-    })
+        "completed_filters": {"q": search, "service": service, "date": date_filter},
+    }
 
 
 @login_required(login_url="signin")

@@ -1050,16 +1050,18 @@ def chat_api(request):
 
     resident = request.user.resident_profile
     database_context, appointment = _chat_database_context(resident)
-    used_ai = True
     try:
         reply = ask_gemini(message, database_context, history)
-    except GeminiUnavailable:
-        used_ai = False
-        reply = _built_in_chat_reply(message, resident, appointment)
+    except GeminiUnavailable as error:
+        return Response({
+            "message": str(error),
+            "error_code": error.code,
+            "retryable": error.retryable,
+        }, status=error.http_status)
     reply = _format_chat_instructions(reply)
 
     return Response({
         "reply": reply,
         "suggestions": _chat_suggestions(message, reply, appointment is not None),
-        "source": "QuickQueue records and AI guidance" if used_ai else "QuickQueue records and built-in guidance",
+        "source": "QuickQueue records and AI guidance",
     })

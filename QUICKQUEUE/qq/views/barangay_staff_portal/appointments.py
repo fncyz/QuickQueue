@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, ClosedAppointmentDate, Notification, Service, TimeSlot
 from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacity
+from qq.views.barangay_staff_portal.resident_logbook import resident_history_context
 
 ACTIVE_STATUSES = [Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING]
 
@@ -104,6 +105,8 @@ def staff_appointments(request):
         table_qs = base
     elif tab == "pending":
         table_qs = pending
+    elif tab == "history":
+        table_qs = base.none()
     else:
         tab = "all"
     search, service, date_filter = (request.GET.get("q", "").strip(),
@@ -119,7 +122,7 @@ def staff_appointments(request):
             table_qs = table_qs.filter(appointment_date=timezone.datetime.strptime(date_filter, "%Y-%m-%d").date())
     except ValueError:
         pass
-    return render(request, "barangay_staff/appointments.html", {
+    context = {
         "active_page": "appointments", "staff": staff, "barangay": barangay, "today": today,
         "today_total": today_active.count(), "pending_count": pending.count(),
         "confirmed_count": confirmed_today.count(), "tomorrow_count": tomorrow_count,
@@ -134,7 +137,10 @@ def staff_appointments(request):
         "tab": tab, "services": Service.objects.filter(is_active=True).order_by("name"),
         "filters": {"q": search, "service": service, "filter_date": date_filter},
         "unread_notifications": Notification.objects.filter(appointment__barangay=barangay, admin_is_read=False).count(),
-    })
+    }
+    if tab == "history":
+        context.update(resident_history_context(request, staff))
+    return render(request, "barangay_staff/appointments.html", context)
 
 
 @login_required(login_url="signin")
