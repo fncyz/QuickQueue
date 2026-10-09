@@ -618,6 +618,10 @@ def queue_status_api(request):
         status__in=[QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING],
         appointment__queue_number__lt=appointment.queue_number,
     ).count()
+    fee = appointment.service_fee_snapshot
+    if fee is None:
+        fee = effective_service_fee(appointment.barangay, appointment.service)
+    service_fee = "Free" if fee == 0 else f"₱{fee:,.2f}"
     middle_initial = f" {resident.middle_name[0].upper()}." if resident.middle_name else ""
     suffix = f" {resident.suffix}" if resident.suffix else ""
     return Response({

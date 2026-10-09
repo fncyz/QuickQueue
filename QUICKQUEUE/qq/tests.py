@@ -151,6 +151,27 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(Appointment.objects.filter(resident=self.resident).count(), 1)
 
+    def test_queue_status_returns_upcoming_appointment_with_service_fee(self):
+        booking_date = timezone.localdate() + timedelta(days=1)
+        appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=booking_date,
+            time_slot=self.time_slot,
+            purpose="Queue display test",
+            queue_number="DOC-QUEUE",
+            status=Appointment.Status.CONFIRMED,
+        )
+
+        response = self.client.get("/api/queue-status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["appointment"]["id"], appointment.pk)
+        self.assertEqual(response.data["appointment"]["service"], self.service.name)
+        self.assertEqual(response.data["appointment"]["service_fee"], "Free")
+        self.assertEqual(response.data["appointment"]["status_code"], Appointment.Status.CONFIRMED)
+
     def test_completed_and_missed_appointments_keep_occupying_slots(self):
         booking_date = timezone.localdate() + timedelta(days=1)
         completed = Appointment.objects.create(
