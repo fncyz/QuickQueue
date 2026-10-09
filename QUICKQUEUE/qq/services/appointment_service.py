@@ -6,11 +6,14 @@ from qq.models import (
     Notification,
     TimeSlot,
     EventBooking,
+    BarangayBookingConfiguration,
+    BarangayServiceConfiguration,
+    ClosedAppointmentDate,
 )
 from django.utils import timezone
 
 from .queue_service import generate_queue_number
-from .timeslot_service import REGULAR_DAILY_CAPACITY, regular_slot_capacity
+from .timeslot_service import regular_daily_capacity, regular_slot_capacity
 
 
 def check_duplicate_appointment(
@@ -67,6 +70,14 @@ def create_appointment(
     service = Service.objects.select_for_update().get(pk=service.pk)
     if service.is_temporary:
         raise ValueError("Special Services must be reserved through the event booking flow.")
+    service_configuration, _ = BarangayServiceConfiguration.objects.select_for_update().get_or_create(
+        barangay=resident.barangay,
+        service=service,
+        defaults={"estimated_duration": service.estimated_duration},
+    )
+    booking_configuration, _ = BarangayBookingConfiguration.objects.select_for_update().get_or_create(
+        barangay=resident.barangay,
+    )
     locked_slots = list(TimeSlot.objects.select_for_update().select_related("barangay").filter(
         barangay=resident.barangay,
         is_active=True,
@@ -74,11 +85,23 @@ def create_appointment(
     time_slot = next((slot for slot in locked_slots if slot.pk == time_slot.pk), None)
     if time_slot is None:
         raise ValueError("Invalid time slot selected.")
+    if (
+        time_slot.start_time < booking_configuration.office_start_time
+        or time_slot.end_time > booking_configuration.office_end_time
+    ):
+        raise ValueError("This time slot is outside the configured office hours.")
 
     now = timezone.localtime()
     today = timezone.localdate(now)
     if appointment_date < today:
         raise ValueError("Past appointment dates are closed.")
+    closed_date = ClosedAppointmentDate.objects.filter(
+        barangay=resident.barangay,
+        date=appointment_date,
+    ).first()
+    if closed_date:
+        reason = f" Reason: {closed_date.reason}" if closed_date.reason else ""
+        raise ValueError(f"Appointments are unavailable on this date.{reason}")
     if appointment_date == today and now.time() >= time_slot.start_time:
         raise ValueError("Booking for this time slot has closed.")
 
@@ -99,7 +122,7 @@ def create_appointment(
             "Invalid time slot selected."
         )
 
-    if not service.is_active:
+    if not service.is_active or not service_configuration.is_active:
         raise ValueError("This service is no longer accepting appointments.")
 
     if not check_timeslot_capacity(
@@ -115,7 +138,7 @@ def create_appointment(
         appointment_date=appointment_date,
         time_slot__isnull=False,
     ).exclude(status=Appointment.Status.CANCELLED).count()
-    if daily_booked >= REGULAR_DAILY_CAPACITY:
+    if daily_booked >= booking_configuration.daily_capacity:
         raise ValueError("This appointment date is already fully booked. Please select another available date.")
 
     queue_number = generate_queue_number(
@@ -133,6 +156,8 @@ def create_appointment(
         purpose=purpose,
         sitio=sitio,
         queue_number=queue_number,
+        status=Appointment.Status.CONFIRMED,
+        service_fee_snapshot=service_configuration.fee,
     )
 
     QueueTicket.objects.create(
@@ -143,9 +168,9 @@ def create_appointment(
         resident=resident,
         appointment=appointment,
         notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
-        title="Appointment Submitted",
+        title="Appointment Confirmed",
         message=(
-            "Your appointment request has been submitted and is awaiting staff confirmation.\n" +
+            "Your appointment has been confirmed.\n" +
             f"Queue Number: {queue_number}\n"
             f"Date: {appointment_date}\n"
             f"Time: {time_slot.start_time} - {time_slot.end_time}"

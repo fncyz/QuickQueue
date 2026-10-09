@@ -2,13 +2,13 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg
 from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Barangay, Notification, QueueTicket, Service
+from qq.services.configuration_service import service_configuration_map
 
 
 SERVICE_ICONS = {
@@ -56,16 +56,19 @@ def barangay_waiting_time(request):
     yesterday = today - timedelta(days=1)
 
     services = list(Service.objects.filter(is_active=True).order_by("name"))
+    configuration_map = service_configuration_map(barangay)
     for service in services:
         service.icon_key = SERVICE_ICONS.get(service.code, "default")
+        configuration = configuration_map.get(service.pk)
+        if configuration:
+            service.estimated_duration = configuration.estimated_duration
 
     avg_today = _avg_processing_minutes(barangay, today)
     avg_yesterday = _avg_processing_minutes(barangay, yesterday)
 
     if avg_today is None:
-        configured_avg = Service.objects.filter(is_active=True).aggregate(
-            avg=Avg("estimated_duration")
-        )["avg"]
+        configured_values = [service.estimated_duration for service in services]
+        configured_avg = sum(configured_values) / len(configured_values) if configured_values else None
         avg_today = round(float(configured_avg), 1) if configured_avg else 0.0
         using_fallback = True
     else:
@@ -115,29 +118,7 @@ def barangay_waiting_time(request):
 @login_required(login_url="signin")
 @require_POST
 def barangay_waiting_time_update(request, pk):
-    """Update one service estimated duration from the AI Waiting Time page."""
+    """Keep legacy links safe while service configuration lives in Settings."""
     _barangay_for(request.user)
-    service = get_object_or_404(Service, pk=pk, is_active=True)
-
-    raw = request.POST.get("estimated_duration", "").strip()
-    try:
-        minutes = int(raw)
-    except ValueError:
-        messages.error(request, "Enter a valid number of minutes.")
-        return redirect("barangay_waiting_time")
-
-    if minutes < 1:
-        messages.error(request, "Estimated time must be at least 1 minute.")
-        return redirect("barangay_waiting_time")
-
-    if service.estimated_duration != minutes:
-        service.estimated_duration = minutes
-        service.save(update_fields=["estimated_duration", "updated_at"])
-        messages.success(
-            request,
-            f"Updated {service.name} to {minutes} minute{'s' if minutes != 1 else ''}.",
-        )
-    else:
-        messages.info(request, f"{service.name} is already set to {minutes} mins.")
-
-    return redirect("barangay_waiting_time")
+    messages.info(request, "Service processing times are now managed in Settings.")
+    return redirect(f"{reverse('barangay_settings')}?tab=services")

@@ -63,6 +63,14 @@ class Appointment(models.Model):
         default=Status.PENDING
     )
 
+    service_fee_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Service fee at the time the appointment was booked.",
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )

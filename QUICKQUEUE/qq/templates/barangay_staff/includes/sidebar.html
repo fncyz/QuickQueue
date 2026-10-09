@@ -14,7 +14,7 @@
     <a class="{% if active_page == 'documents' %}active{% endif %}" href="{% url 'staff_document_processing' %}"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM15 3v5h5M9 12h7M9 16h7"/></svg>Document Processing</a>
     <a class="{% if active_page == 'completed' %}active{% endif %}" href="{% url 'staff_completed_documents' %}"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg>Completed Documents</a>
     <a class="{% if active_page == 'logbook' %}active{% endif %}" href="{% url 'staff_resident_logbook' %}"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 19c1-4 3-5 6-5s5 1 6 5M15 14c3 0 5 2 5 5"/></svg>Resident Logbook</a>
-    <a class="{% if active_page == 'settings' %}active{% endif %}" href="{% url 'staff_settings' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Account Settings</a>
+    <a class="{% if active_page == 'settings' %}active{% endif %}" href="{% url 'staff_settings' %}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Settings</a>
   </nav>
   <a class="staff-logout" href="{% url 'staff_logout' %}"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 16l4-4-4-4M18 12H9"/></svg>Logout</a>
 </aside>

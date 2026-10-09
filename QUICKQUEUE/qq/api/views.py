@@ -29,9 +29,10 @@ from datetime import date
 from difflib import SequenceMatcher
 import re
 
-from qq.models import Appointment, BarangayStaff, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, BarangayBookingConfiguration, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
-from qq.services.timeslot_service import REGULAR_DAILY_CAPACITY, ensure_default_time_slots, regular_slot_capacity
+from qq.services.configuration_service import effective_service_duration, effective_service_fee
+from qq.services.timeslot_service import ensure_default_time_slots, regular_slot_capacity
 from qq.gemini_service import GeminiUnavailable, ask_gemini
 from .throttles import ChatRateThrottle
 
@@ -144,6 +145,10 @@ def pin_login_api(request):
     if not resident.user.is_active or resident.security_setup_stage != Resident.SecuritySetupStage.COMPLETE or not resident.pin_hash or not check_password(pin, resident.pin_hash):
         return Response({"success": False, "message": "Invalid username or PIN."}, status=status.HTTP_401_UNAUTHORIZED)
     refresh = RefreshToken.for_user(resident.user)
+    fee = appointment.service_fee_snapshot
+    if fee is None:
+        fee = effective_service_fee(appointment.barangay, appointment.service)
+    service_fee = "Free" if fee == 0 else f"₱{fee:,.2f}"
     return Response({
         "success": True,
         "access": str(refresh.access_token),
@@ -357,6 +362,16 @@ def appointments_api(request):
         barangay=resident.barangay,
         is_active=True,
     ).order_by("start_time")
+    service_configurations = {
+        item.service_id: item
+        for item in BarangayServiceConfiguration.objects.filter(
+            barangay=resident.barangay,
+            service__is_temporary=False,
+        )
+    }
+    booking_configuration, _ = BarangayBookingConfiguration.objects.get_or_create(
+        barangay=resident.barangay
+    )
 
     availability_date = None
     requested_date = request.query_params.get("appointment_date")
@@ -367,7 +382,12 @@ def appointments_api(request):
             return Response({"message": "Please provide a valid appointment date."}, status=status.HTTP_400_BAD_REQUEST)
 
     occupied_by_slot = {}
+    closed_date = None
     if availability_date:
+        closed_date = ClosedAppointmentDate.objects.filter(
+            barangay=resident.barangay,
+            date=availability_date,
+        ).first()
         occupied_by_slot = {
             row["time_slot_id"]: row["count"]
             for row in Appointment.objects.filter(
@@ -388,12 +408,24 @@ def appointments_api(request):
             availability_date == today
             and timezone.localtime(now).time() >= slot.start_time
         )
+        outside_office_hours = (
+            slot.start_time < booking_configuration.office_start_time
+            or slot.end_time > booking_configuration.office_end_time
+        )
         is_full = booked >= capacity
-        day_is_full = daily_booked >= REGULAR_DAILY_CAPACITY
-        is_available = availability_date is None or not (is_past or cutoff_passed or is_full or day_is_full)
+        day_is_full = daily_booked >= booking_configuration.daily_capacity
+        is_available = availability_date is None or not (
+            is_past or cutoff_passed or outside_office_hours or is_full or day_is_full or closed_date
+        )
         time_label = f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}"
         if availability_date:
-            availability_label = "Fully Booked" if is_full or day_is_full else "Available"
+            availability_label = (
+                "Unavailable"
+                if closed_date or is_past or cutoff_passed or outside_office_hours
+                else "Fully Booked"
+                if is_full or day_is_full
+                else "Available"
+            )
             time_label = f"{time_label} · {booked}/{capacity} – {availability_label}"
         return {
             "id": slot.pk,
@@ -403,11 +435,15 @@ def appointments_api(request):
             "remaining": 0 if day_is_full else max(capacity - booked, 0),
             "is_fully_booked": is_full or day_is_full,
             "is_available": is_available,
+            "closure_reason": closed_date.reason if closed_date else None,
         }
 
     if request.method == "GET":
         service_choices = []
         for service in services:
+            configuration = service_configurations.get(service.pk)
+            if not service.is_temporary and configuration and not configuration.is_active:
+                continue
             if service.is_temporary and not service.accepts_bookings(now, service.live_booking_count):
                 continue
             choice = {"id": service.pk, "name": service.name}
@@ -597,7 +633,7 @@ def queue_status_api(request):
             "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
             "name": f"{resident.first_name}{middle_initial} {resident.last_name}{suffix}",
             "service": appointment.service.name,
-            "service_fee": "To be confirmed at barangay",
+            "service_fee": service_fee,
             "date": appointment.appointment_date.strftime("%B %d, %Y"),
             "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
             "barangay": appointment.barangay.name,
@@ -606,7 +642,9 @@ def queue_status_api(request):
             "status_code": appointment.status,
             "now_serving": now_serving.queue_number if now_serving else "—",
             "people_ahead": people_ahead,
-            "estimated_wait": people_ahead * appointment.service.estimated_duration,
+            "estimated_wait": people_ahead * effective_service_duration(
+                appointment.barangay, appointment.service
+            ),
         }
     })
 
@@ -686,6 +724,11 @@ def transactions_api(request):
             "id": appointment.pk,
             "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
             "service": appointment.service.name,
+            "service_fee": (
+                "Free"
+                if (appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)) == 0
+                else f"₱{(appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)):,.2f}"
+            ),
             "status": appointment.get_status_display(),
             "status_code": appointment.status,
             "date_booked": appointment.created_at.strftime("%B %d, %Y"),

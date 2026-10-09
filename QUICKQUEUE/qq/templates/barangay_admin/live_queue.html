@@ -265,25 +265,6 @@
                         </ul>
                     </section>
 
-                    <section class="panel service-times-panel">
-                        <h2>Service Time Settings</h2>
-                        <form method="post" action="{% url 'barangay_update_service_times' %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="slot" value="{{ current_slot.pk|default:'' }}">
-                            {% for service in services %}
-                            <label class="service-time-row">
-                                <span>{{ service.name }}</span>
-                                <input type="number" name="service_{{ service.pk }}" min="1" value="{{ service.estimated_duration }}">
-                                <small>mins</small>
-                            </label>
-                            {% empty %}
-                            <p class="empty">No services configured.</p>
-                            {% endfor %}
-                            {% if services %}
-                            <button class="btn-save-times" type="submit">Save Times</button>
-                            {% endif %}
-                        </form>
-                    </section>
                 </aside>
             </div>
 

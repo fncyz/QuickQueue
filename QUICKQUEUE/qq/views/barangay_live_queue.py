@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, TimeSlot
+from qq.services.configuration_service import service_configuration_map
 
 
 def _barangay_for(user):
@@ -64,7 +65,7 @@ def _resolve_slot(barangay, slot_id, today, now_time):
     return slots[0], slots
 
 
-def _annotate_wait_estimates(tickets):
+def _annotate_wait_estimates(tickets, duration_by_service=None):
     """Attach AI wait estimates using each service's estimated duration."""
     cumulative = 0
     previous_number = None
@@ -73,11 +74,15 @@ def _annotate_wait_estimates(tickets):
         None,
     )
     if serving:
-        cumulative = serving.appointment.service.estimated_duration
+        cumulative = (duration_by_service or {}).get(
+            serving.appointment.service_id, serving.appointment.service.estimated_duration
+        )
         previous_number = serving.queue_number
 
     for ticket in tickets:
-        duration = ticket.appointment.service.estimated_duration
+        duration = (duration_by_service or {}).get(
+            ticket.appointment.service_id, ticket.appointment.service.estimated_duration
+        )
         if ticket.status == QueueTicket.Status.COMPLETED:
             ticket.wait_label = "—"
             ticket.wait_minutes = None
@@ -142,6 +147,11 @@ def barangay_live_queue(request):
     current_slot, slots = _resolve_slot(
         barangay, request.GET.get("slot"), today, now.time()
     )
+    configuration_map = service_configuration_map(barangay)
+    duration_by_service = {
+        service_id: configuration.estimated_duration
+        for service_id, configuration in configuration_map.items()
+    }
 
     tickets = []
     now_serving = None
@@ -154,7 +164,9 @@ def barangay_live_queue(request):
 
     if current_slot:
         window = _window_label(slots, current_slot)
-        tickets = _annotate_wait_estimates(list(_ticket_queryset(barangay, today, current_slot)))
+        tickets = _annotate_wait_estimates(
+            list(_ticket_queryset(barangay, today, current_slot)), duration_by_service
+        )
         now_serving = next(
             (ticket for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING),
             None,
@@ -192,10 +204,12 @@ def barangay_live_queue(request):
     if avg_seconds:
         average_service_minutes = round(avg_seconds.total_seconds() / 60, 1)
     else:
-        service_avg = Service.objects.filter(is_active=True).aggregate(
-            avg=Avg("estimated_duration")
-        )["avg"]
-        average_service_minutes = round(service_avg, 1) if service_avg else 0
+        configured_durations = list(duration_by_service.values())
+        average_service_minutes = (
+            round(sum(configured_durations) / len(configured_durations), 1)
+            if configured_durations
+            else 0
+        )
 
     current_index = slots.index(current_slot) if current_slot in slots else -1
     next_slot = slots[current_index + 1] if 0 <= current_index < len(slots) - 1 else None
@@ -219,7 +233,6 @@ def barangay_live_queue(request):
             "next_in_line": next_in_line,
             "next_wait_minutes": next_wait_minutes,
             "next_slot": next_slot,
-            "services": Service.objects.filter(is_active=True).order_by("name"),
             "stats": {
                 "average_service_minutes": average_service_minutes,
                 "completed_today": completed_today.count(),

@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="{% static 'qq/css/barangay_dashboard.css' %}">
     <link rel="stylesheet" href="{% static 'qq/css/barangay_residents.css' %}">
     <link rel="stylesheet" href="{% static 'qq/css/barangay_settings.css' %}">
+    <link rel="stylesheet" href="{% static 'qq/css/barangay_settings_management.css' %}">
 </head>
 <body>
     <div class="shell">
@@ -52,6 +53,9 @@
             <div class="settings-layout">
                 <nav class="settings-nav" aria-label="Settings sections">
                     <small>SETTINGS</small>
+                    <a href="?tab=services" class="{% if active_tab == 'services' %}active{% endif %}"><b>Service Management</b><span>Fees, timing, and availability</span></a>
+                    <a href="?tab=slots" class="{% if active_tab == 'slots' %}active{% endif %}"><b>Appointment Slots</b><span>Capacity and office hours</span></a>
+                    <a href="?tab=calendar" class="{% if active_tab == 'calendar' %}active{% endif %}"><b>Calendar Availability</b><span>Disable or reopen dates</span></a>
                     <a href="?tab=profile" class="{% if active_tab == 'profile' %}active{% endif %}">
                         <b>Profile Settings</b>
                         <span>Update your personal information</span>
@@ -63,6 +67,7 @@
                 </nav>
 
                 <div class="settings-content">
+                    {% include 'barangay_admin/includes/settings_management.html' %}
                     <section class="settings-panel" id="profile-panel"{% if active_tab != 'profile' %} hidden{% endif %}>
                         <header class="settings-panel-head">
                             <h2>Profile Settings</h2>

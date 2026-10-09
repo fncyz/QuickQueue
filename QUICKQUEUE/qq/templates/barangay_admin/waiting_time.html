@@ -54,7 +54,7 @@
                     <header class="panel-head">
                         <div>
                             <h2>Service Processing Time</h2>
-                            <p>Set the starting estimate for each barangay service.</p>
+                            <p>Monitor the processing estimates configured in Settings.</p>
                         </div>
                     </header>
 
@@ -66,8 +66,7 @@
                         </div>
 
                         {% for service in services %}
-                        <form class="service-row" method="post" action="{% url 'barangay_waiting_time_update' service.pk %}">
-                            {% csrf_token %}
+                        <div class="service-row">
                             <div class="service-info">
                                 <i class="service-icon icon-{{ service.icon_key }}" aria-hidden="true">
                                     {% if service.icon_key == 'clearance' %}
@@ -90,14 +89,14 @@
                                 </div>
                             </div>
                             <label class="time-field">
-                                <input type="number" name="estimated_duration" min="1" value="{{ service.estimated_duration }}" required>
+                                <strong>{{ service.estimated_duration }}</strong>
                                 <span>mins</span>
                             </label>
-                            <button type="submit" class="btn-edit-service">
+                            <a href="{% url 'barangay_settings' %}?tab=services" class="btn-edit-service">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
                                 Edit
-                            </button>
-                        </form>
+                            </a>
+                        </div>
                         {% empty %}
                         <p class="empty-services">No active services found.</p>
                         {% endfor %}
@@ -105,7 +104,7 @@
 
                     <div class="info-note">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8.2v.01M11.2 11h1.6v5H11.2z"/></svg>
-                        <p>These are initial values. The AI will adjust waiting time estimates throughout the day based on actual completed transactions.</p>
+                        <p>Service estimates are managed centrally in Settings. Live estimates still adjust from completed transactions.</p>
                     </div>
                 </section>
 

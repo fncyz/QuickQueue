@@ -9,8 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from qq.models import Appointment, BarangayStaff, Notification, Service, TimeSlot
-from qq.services.timeslot_service import REGULAR_DAILY_CAPACITY, regular_slot_capacity
+from qq.models import Appointment, BarangayStaff, ClosedAppointmentDate, Notification, Service, TimeSlot
+from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacity
 
 ACTIVE_STATUSES = [Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING]
 
@@ -47,7 +47,10 @@ def staff_appointments(request):
     confirmed_today = today_active.filter(status__in=[Appointment.Status.CONFIRMED, Appointment.Status.ONGOING])
     tomorrow_count = base.filter(appointment_date=today + timedelta(days=1), status__in=ACTIVE_STATUSES).count()
     slots = list(TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"))
-    daily_capacity = min(sum(regular_slot_capacity(slot) for slot in slots), REGULAR_DAILY_CAPACITY)
+    daily_capacity = min(
+        sum(regular_slot_capacity(slot) for slot in slots),
+        regular_daily_capacity(barangay),
+    )
 
     month_start = selected_date.replace(day=1)
     month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -57,18 +60,28 @@ def staff_appointments(request):
     month_counts = {row["appointment_date"]: row["count"] for row in occupied.filter(
         appointment_date__gte=month_start, appointment_date__lt=month_end
     ).values("appointment_date").annotate(count=Count("id"))}
+    closed_dates = {
+        item.date: item.reason
+        for item in ClosedAppointmentDate.objects.filter(
+            barangay=barangay,
+            date__gte=month_start,
+            date__lt=month_end,
+        )
+    }
     calendar_weeks = []
     for week in calendar.Calendar(firstweekday=6).monthdatescalendar(selected_date.year, selected_date.month):
         calendar_weeks.append([{
             "date": day, "in_month": day.month == selected_date.month,
             "count": month_counts.get(day, 0),
             "remaining": max(daily_capacity - month_counts.get(day, 0), 0),
-            "level": "closed" if day < today
+            "level": "closed" if day < today or day in closed_dates
                      else "full" if daily_capacity and month_counts.get(day, 0) >= daily_capacity
                      else "almost" if daily_capacity and month_counts.get(day, 0) >= daily_capacity * .75
                      else "available" if month_counts.get(day, 0) else "empty",
             "selected": day == selected_date,
             "is_past": day < today,
+            "is_closed": day < today or day in closed_dates,
+            "closure_reason": closed_dates.get(day, ""),
         } for day in week])
 
     selected_qs = occupied.filter(appointment_date=selected_date).order_by("time_slot__start_time", "created_at")
@@ -83,14 +96,16 @@ def staff_appointments(request):
                                "remaining": max(capacity - booked, 0),
                                "percent": round(booked / capacity * 100) if capacity else 0})
 
-    tab = request.GET.get("tab", "pending")
-    table_qs = pending
+    tab = request.GET.get("tab", "all")
+    table_qs = base
     if tab == "rejected":
         table_qs = base.filter(status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED])
     elif tab == "all":
         table_qs = base
+    elif tab == "pending":
+        table_qs = pending
     else:
-        tab = "pending"
+        tab = "all"
     search, service, date_filter = (request.GET.get("q", "").strip(),
                                     request.GET.get("service", ""), request.GET.get("filter_date", ""))
     if search:
@@ -114,6 +129,7 @@ def staff_appointments(request):
         "selected_count": selected_qs.count(),
         "selected_remaining": 0 if selected_date < today else max(daily_capacity - selected_qs.count(), 0),
         "selected_is_past": selected_date < today,
+        "selected_is_closed": selected_date < today or selected_date in closed_dates,
         "appointments": table_qs.order_by("appointment_date", "time_slot__start_time")[:50],
         "tab": tab, "services": Service.objects.filter(is_active=True).order_by("name"),
         "filters": {"q": search, "service": service, "filter_date": date_filter},

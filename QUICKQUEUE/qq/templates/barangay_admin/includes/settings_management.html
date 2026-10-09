@@ -1,0 +1,42 @@
+<section class="settings-panel"{% if active_tab != 'services' %} hidden{% endif %}>
+  <header class="settings-panel-head"><h2>Service Management</h2><p>Configure fees, processing estimates, and booking availability for regular services.</p></header>
+  <div class="configuration-list">
+    {% for row in service_rows %}
+    <form method="post" class="configuration-row">{% csrf_token %}<input type="hidden" name="action" value="service"><input type="hidden" name="service_id" value="{{ row.service.pk }}">
+      <div class="configuration-name"><b>{{ row.service.name }}</b><small>{{ row.service.description|truncatechars:80 }}</small></div>
+      <label>Fee (₱)<input type="number" name="fee" value="{{ row.fee }}" min="0" step="0.01" required></label>
+      <label>Estimated minutes<input type="number" name="estimated_duration" value="{{ row.duration }}" min="1" max="480" required></label>
+      <label class="toggle"><input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %}> Available</label>
+      <button class="btn-primary" type="submit">Save</button>
+    </form>
+    {% empty %}<p>No regular services are configured.</p>{% endfor %}
+  </div>
+</section>
+
+<section class="settings-panel"{% if active_tab != 'slots' %} hidden{% endif %}>
+  <header class="settings-panel-head"><h2>Appointment Slot Management</h2><p>Manage daily capacity, office hours, shared slot limits, and active time windows.</p></header>
+  <form method="post" class="booking-settings-form">{% csrf_token %}<input type="hidden" name="action" value="booking">
+    <div class="form-grid"><div class="field"><label>Maximum appointments per day</label><input type="number" name="daily_capacity" min="1" max="300" value="{{ booking_configuration.daily_capacity }}" required></div><div class="field"><label>Office opening time</label><input type="time" name="office_start_time" value="{{ booking_configuration.office_start_time|time:'H:i' }}" required></div><div class="field"><label>Office closing time</label><input type="time" name="office_end_time" value="{{ booking_configuration.office_end_time|time:'H:i' }}" required></div></div>
+    <div class="form-actions"><button class="btn-primary">Save Booking Settings</button></div>
+  </form>
+  <h3 class="subsection-title">Shared Regular Appointment Windows</h3>
+  <div class="configuration-list">
+    {% for slot in time_slots %}
+    <form method="post" class="configuration-row slot-row">{% csrf_token %}<input type="hidden" name="action" value="slot"><input type="hidden" name="slot_id" value="{{ slot.pk }}">
+      <div class="configuration-name"><b>{{ slot.start_time|time:'g:i A' }} – {{ slot.end_time|time:'g:i A' }}</b><small>Capacity is shared by every regular service.</small></div>
+      <label>Starts<input type="time" name="start_time" value="{{ slot.start_time|time:'H:i' }}" required></label><label>Ends<input type="time" name="end_time" value="{{ slot.end_time|time:'H:i' }}" required></label><label>Capacity<input type="number" name="max_appointments" min="1" max="5" value="{{ slot.max_appointments }}" required></label><label class="toggle"><input type="checkbox" name="is_active" {% if slot.is_active %}checked{% endif %}> Active</label><button class="btn-primary">Save</button>
+    </form>
+    {% empty %}<p>No appointment time slots are configured.</p>{% endfor %}
+  </div>
+</section>
+
+<section class="settings-panel"{% if active_tab != 'calendar' %} hidden{% endif %}>
+  <header class="settings-panel-head"><h2>Calendar and Availability</h2><p>Close a date without cancelling or deleting appointments already booked for it.</p></header>
+  <form method="post" class="calendar-settings-form">{% csrf_token %}<input type="hidden" name="action" value="calendar">
+    <div class="form-grid"><div class="field"><label>Date</label><input type="date" name="date" min="{{ today|date:'Y-m-d' }}" required></div><div class="field"><label>Closure reason (optional)</label><input name="reason" maxlength="200" placeholder="Example: Barangay Anniversary"></div></div>
+    <label class="warning-check"><input type="checkbox" name="confirm_existing"> Keep existing appointments unchanged if this date already has bookings.</label>
+    <div class="calendar-actions"><button class="btn-primary" name="calendar_action" value="close">Disable Date</button><button class="btn-secondary-button" name="calendar_action" value="reopen">Re-enable Date</button></div>
+  </form>
+  <h3 class="subsection-title">Upcoming Closed Dates</h3>
+  <div class="closed-date-list">{% for item in closed_dates %}<article><span><b>{{ item.date|date:'F j, Y' }}</b><small>{{ item.reason|default:'No reason provided' }}</small></span><form method="post">{% csrf_token %}<input type="hidden" name="action" value="calendar"><input type="hidden" name="calendar_action" value="reopen"><input type="hidden" name="date" value="{{ item.date|date:'Y-m-d' }}"><button class="btn-secondary-button">Re-enable</button></form></article>{% empty %}<p>No future dates are closed.</p>{% endfor %}</div>
+</section>

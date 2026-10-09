@@ -5,6 +5,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from qq.models import BarangayStaff, Notification, QueueTicket, Service
+from qq.services.configuration_service import service_configuration_map
 from qq.views.barangay_live_queue import (
     _annotate_wait_estimates, _resolve_slot, _ticket_queryset, _window_label,
 )
@@ -22,6 +23,11 @@ def staff_live_queue(request):
     barangay = staff.barangay
     today, now = timezone.localdate(), timezone.localtime()
     current_slot, slots = _resolve_slot(barangay, request.GET.get("slot"), today, now.time())
+    configuration_map = service_configuration_map(barangay)
+    duration_by_service = {
+        service_id: configuration.estimated_duration
+        for service_id, configuration in configuration_map.items()
+    }
     tickets, now_serving, next_in_line = [], None, []
     waiting_count = completed_count = serving_count = 0
     next_wait_minutes, window = None, "A"
@@ -39,7 +45,7 @@ def staff_live_queue(request):
             )
         if service_id.isdigit():
             ticket_queryset = ticket_queryset.filter(appointment__service_id=int(service_id))
-        tickets = _annotate_wait_estimates(list(ticket_queryset))
+        tickets = _annotate_wait_estimates(list(ticket_queryset), duration_by_service)
         now_serving = next((t for t in tickets if t.status == QueueTicket.Status.NOW_SERVING), None)
         waiting_count = sum(t.status == QueueTicket.Status.WAITING for t in tickets)
         completed_count = sum(t.status == QueueTicket.Status.COMPLETED for t in tickets)
@@ -58,8 +64,12 @@ def staff_live_queue(request):
     if avg_duration:
         average_minutes = round(avg_duration.total_seconds() / 60, 1)
     else:
-        service_avg = Service.objects.filter(is_active=True).aggregate(avg=Avg("estimated_duration"))["avg"]
-        average_minutes = round(service_avg, 1) if service_avg else 0
+        configured_durations = list(duration_by_service.values())
+        average_minutes = (
+            round(sum(configured_durations) / len(configured_durations), 1)
+            if configured_durations
+            else 0
+        )
     current_index = slots.index(current_slot) if current_slot in slots else -1
     next_slot = slots[current_index + 1] if 0 <= current_index < len(slots) - 1 else None
     return render(request, "barangay_staff/live_queue.html", {
@@ -69,7 +79,7 @@ def staff_live_queue(request):
         "completed_count": completed_count, "serving_count": serving_count,
         "slot_capacity": current_slot.max_appointments if current_slot else 0,
         "next_in_line": next_in_line, "next_wait_minutes": next_wait_minutes, "next_slot": next_slot,
-        "services": Service.objects.filter(is_active=True).order_by("name"),
+        "services": _configured_services(Service.objects.filter(is_active=True).order_by("name"), configuration_map),
         "filters": {"q": search, "service": service_id},
         "stats": {"average_service_minutes": average_minutes, "completed_today": completed_today.count(),
                   "waiting_today": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
@@ -78,3 +88,12 @@ def staff_live_queue(request):
             appointment__barangay=barangay, admin_is_read=False
         ).count(),
     })
+
+
+def _configured_services(services, configuration_map):
+    services = list(services)
+    for service in services:
+        configuration = configuration_map.get(service.pk)
+        if configuration:
+            service.estimated_duration = configuration.estimated_duration
+    return services
