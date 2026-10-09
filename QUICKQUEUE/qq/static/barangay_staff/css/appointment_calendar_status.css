@@ -11,3 +11,11 @@
 .day.closed small {
     color: #7d8796;
 }
+
+.review-layout.review-layout-full {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.review-layout-full .review-panel {
+    min-width: 0;
+}
