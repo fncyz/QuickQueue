@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, DurationField, ExpressionWrapper, F
+from django.db.models import Avg, DurationField, ExpressionWrapper, F, Q
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -25,9 +25,21 @@ def staff_live_queue(request):
     tickets, now_serving, next_in_line = [], None, []
     waiting_count = completed_count = serving_count = 0
     next_wait_minutes, window = None, "A"
+    search = request.GET.get("q", "").strip()
+    service_id = request.GET.get("service", "").strip()
     if current_slot:
         window = _window_label(slots, current_slot)
-        tickets = _annotate_wait_estimates(list(_ticket_queryset(barangay, today, current_slot)))
+        ticket_queryset = _ticket_queryset(barangay, today, current_slot)
+        if search:
+            ticket_queryset = ticket_queryset.filter(
+                Q(queue_number__icontains=search)
+                | Q(appointment__resident__first_name__icontains=search)
+                | Q(appointment__resident__last_name__icontains=search)
+                | Q(appointment__service__name__icontains=search)
+            )
+        if service_id.isdigit():
+            ticket_queryset = ticket_queryset.filter(appointment__service_id=int(service_id))
+        tickets = _annotate_wait_estimates(list(ticket_queryset))
         now_serving = next((t for t in tickets if t.status == QueueTicket.Status.NOW_SERVING), None)
         waiting_count = sum(t.status == QueueTicket.Status.WAITING for t in tickets)
         completed_count = sum(t.status == QueueTicket.Status.COMPLETED for t in tickets)
@@ -58,6 +70,7 @@ def staff_live_queue(request):
         "slot_capacity": current_slot.max_appointments if current_slot else 0,
         "next_in_line": next_in_line, "next_wait_minutes": next_wait_minutes, "next_slot": next_slot,
         "services": Service.objects.filter(is_active=True).order_by("name"),
+        "filters": {"q": search, "service": service_id},
         "stats": {"average_service_minutes": average_minutes, "completed_today": completed_today.count(),
                   "waiting_today": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
                   "total_today": today_tickets.count()},

@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -27,13 +27,21 @@ def barangay_dashboard(request):
     tickets = QueueTicket.objects.filter(appointment__barangay=barangay, appointment__appointment_date=today).select_related(
         "appointment__resident", "appointment__service"
     )
-    completed = tickets.filter(status=QueueTicket.Status.COMPLETED).count()
-    waiting = tickets.filter(status=QueueTicket.Status.WAITING).count()
-    serving_count = tickets.filter(status=QueueTicket.Status.NOW_SERVING).count()
+    ticket_totals = tickets.aggregate(
+        total=Count("id"),
+        completed=Count("id", filter=Q(status=QueueTicket.Status.COMPLETED)),
+        waiting=Count("id", filter=Q(status=QueueTicket.Status.WAITING)),
+        serving=Count("id", filter=Q(status=QueueTicket.Status.NOW_SERVING)),
+        missed=Count("id", filter=Q(status=QueueTicket.Status.MISSED)),
+        cancelled=Count("id", filter=Q(status=QueueTicket.Status.CANCELLED)),
+    )
+    completed = ticket_totals["completed"]
+    waiting = ticket_totals["waiting"]
+    serving_count = ticket_totals["serving"]
     now_serving = tickets.filter(status=QueueTicket.Status.NOW_SERVING).first()
-    no_show = tickets.filter(status=QueueTicket.Status.MISSED).count()
-    cancelled = tickets.filter(status=QueueTicket.Status.CANCELLED).count()
-    total_tickets = tickets.count()
+    no_show = ticket_totals["missed"]
+    cancelled = ticket_totals["cancelled"]
+    total_tickets = ticket_totals["total"]
 
     month_start = today.replace(day=1)
     month_appointments = appointments.filter(appointment_date__gte=month_start, appointment_date__lte=today)
@@ -43,10 +51,15 @@ def barangay_dashboard(request):
         appointment__appointment_date__gte=month_start,
         appointment__appointment_date__lte=today,
     )
-    month_completed = month_tickets.filter(status=QueueTicket.Status.COMPLETED).count()
-    month_cancelled = month_tickets.filter(
-        status__in=[QueueTicket.Status.CANCELLED, QueueTicket.Status.MISSED]
-    ).count()
+    month_ticket_totals = month_tickets.aggregate(
+        completed=Count("id", filter=Q(status=QueueTicket.Status.COMPLETED)),
+        cancelled=Count(
+            "id",
+            filter=Q(status__in=[QueueTicket.Status.CANCELLED, QueueTicket.Status.MISSED]),
+        ),
+    )
+    month_completed = month_ticket_totals["completed"]
+    month_cancelled = month_ticket_totals["cancelled"]
 
     def service_breakdown(queryset):
         return list(queryset.values("service__name").annotate(count=Count("id")).order_by("-count", "service__name"))

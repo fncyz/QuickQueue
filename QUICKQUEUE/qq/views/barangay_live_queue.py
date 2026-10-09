@@ -115,8 +115,13 @@ def _ticket_queryset(barangay, today, slot):
     )
 
 
-def _redirect_live_queue(slot_id=None):
-    url = reverse("barangay_live_queue")
+def _redirect_live_queue(request, slot_id=None):
+    is_regular_staff = (
+        hasattr(request.user, "staff_profile")
+        and not hasattr(request.user, "barangay_profile")
+        and request.user.staff_profile.role != BarangayStaff.Role.ADMIN
+    )
+    url = reverse("staff_live_queue" if is_regular_staff else "barangay_live_queue")
     if slot_id:
         return redirect(f"{url}?slot={slot_id}")
     return redirect(url)
@@ -243,7 +248,7 @@ def barangay_queue_call_next(request):
     )
     if not current_slot:
         messages.error(request, "No active time slot is available.")
-        return _redirect_live_queue()
+        return _redirect_live_queue(request)
 
     with transaction.atomic():
         serving = (
@@ -261,7 +266,7 @@ def barangay_queue_call_next(request):
                 request,
                 f"{serving.queue_number} is still being served. Complete or skip first.",
             )
-            return _redirect_live_queue(current_slot.id)
+            return _redirect_live_queue(request, current_slot.id)
 
         nxt = (
             QueueTicket.objects.select_for_update()
@@ -276,7 +281,7 @@ def barangay_queue_call_next(request):
         )
         if not nxt:
             messages.info(request, "No residents are waiting in this time slot.")
-            return _redirect_live_queue(current_slot.id)
+            return _redirect_live_queue(request, current_slot.id)
 
         now = timezone.now()
         nxt.status = QueueTicket.Status.NOW_SERVING
@@ -296,7 +301,7 @@ def barangay_queue_call_next(request):
     messages.success(
         request, f"Now serving {nxt.queue_number} · {nxt.appointment.resident}."
     )
-    return _redirect_live_queue(current_slot.id)
+    return _redirect_live_queue(request, current_slot.id)
 
 
 @login_required(login_url="signin")
@@ -313,7 +318,7 @@ def barangay_queue_complete(request, pk):
     )
     if ticket.status != QueueTicket.Status.NOW_SERVING:
         messages.error(request, "Only a now-serving ticket can be completed.")
-        return _redirect_live_queue(ticket.appointment.time_slot_id)
+        return _redirect_live_queue(request, ticket.appointment.time_slot_id)
 
     now = timezone.now()
     ticket.status = QueueTicket.Status.COMPLETED
@@ -334,7 +339,7 @@ def barangay_queue_complete(request, pk):
     )
 
     messages.success(request, f"Completed {ticket.queue_number}.")
-    return _redirect_live_queue(ticket.appointment.time_slot_id)
+    return _redirect_live_queue(request, ticket.appointment.time_slot_id)
 
 
 @login_required(login_url="signin")
@@ -349,7 +354,7 @@ def barangay_queue_skip(request):
     )
     if not current_slot:
         messages.error(request, "No active time slot is available.")
-        return _redirect_live_queue()
+        return _redirect_live_queue(request)
 
     serving = (
         QueueTicket.objects.filter(
@@ -364,7 +369,7 @@ def barangay_queue_skip(request):
 
     if not serving:
         messages.info(request, "No resident is currently being served.")
-        return _redirect_live_queue(current_slot.id)
+        return _redirect_live_queue(request, current_slot.id)
 
     serving.status = QueueTicket.Status.MISSED
     serving.notes = serving.notes or "Resident did not show up"
@@ -384,7 +389,7 @@ def barangay_queue_skip(request):
     )
 
     messages.warning(request, f"Skipped {serving.queue_number}.")
-    return _redirect_live_queue(current_slot.id)
+    return _redirect_live_queue(request, current_slot.id)
 
 
 @login_required(login_url="signin")
@@ -413,4 +418,4 @@ def barangay_update_service_times(request):
     else:
         messages.info(request, "No service times were changed.")
 
-    return _redirect_live_queue(request.POST.get("slot"))
+    return _redirect_live_queue(request, request.POST.get("slot"))
