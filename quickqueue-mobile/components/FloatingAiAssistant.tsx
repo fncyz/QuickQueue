@@ -17,6 +17,20 @@ const suggestions = ['Requirements for Clearance', 'Service Fees', 'Office Hours
 type Message = { id: string; retryText?: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
 const timeNow = () => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
 
+const automatedGuidance = (message: string) => {
+  const text = message.toLowerCase();
+  const prefix = "I can still help with general QuickQueue steps, but I can't access live account details right now.\n\n";
+  if (text.includes('book') || text.includes('appointment')) return `${prefix}To book an appointment:\n\n1. Open the Book tab.\n\n2. Select a service.\n\n3. Choose an available date and time.\n\n4. Review your information and submit.`;
+  if (text.includes('cancel')) return `${prefix}To cancel an eligible appointment, open Queue or Transactions, select the appointment, tap Cancel Appointment, and confirm.`;
+  if (text.includes('check in') || text.includes('check-in')) return `${prefix}On your appointment date, open Queue, find Appointment Actions, and tap Check In. Wait for QuickQueue to confirm the action.`;
+  if (text.includes('queue') || text.includes('status') || text.includes('track')) return `${prefix}Open Queue to view your active queue number and status. Open Transactions for appointment details and history.`;
+  if (text.includes('requirement')) return `${prefix}Open the Book tab and select the service to review its listed requirements. Contact barangay staff if no requirements are shown.`;
+  if (text.includes('fee')) return `${prefix}Open the Book tab and select the service to view any fee recorded by the barangay. Confirm unlisted fees with barangay staff.`;
+  if (text.includes('service') || text.includes('available')) return `${prefix}Open the Book tab to see the services currently listed for your barangay.`;
+  if (text.includes('notification')) return `${prefix}Open Notifications for the latest update, Queue for active appointment actions, or Transactions for appointment history.`;
+  return `${prefix}You can ask me how to book or cancel an appointment, check in, view services and requirements, or navigate Queue and Transactions.`;
+};
+
 export function FloatingAiAssistant() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -70,6 +84,22 @@ export function FloatingAiAssistant() {
       const serverMessage = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'message' in axiosError.response.data
         ? String(axiosError.response.data.message)
         : undefined;
+      const useAutomatedGuidance = status !== 401 && (
+        !axiosError?.response ||
+        Boolean(status && status >= 500) ||
+        Boolean(errorCode?.startsWith('ai_'))
+      );
+      if (useAutomatedGuidance) {
+        setDraft('');
+        setMessages((current) => [...current, {
+          id: `assistant-${nextId.current++}`,
+          role: 'assistant',
+          suggestions,
+          text: automatedGuidance(trimmed),
+          time: timeNow(),
+        }]);
+        return;
+      }
       const text = !isOnline
         ? "You're currently offline. Please connect to the internet to use the AI Assistant."
         : status === 429 || errorCode === 'ai_rate_limited'
