@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from unittest.mock import patch
 
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -69,6 +69,31 @@ class RegistrationSecurityFlowTests(APITestCase):
             advanced = self.client.post("/api/advance-security-setup/", {"step": step}, format="json")
             self.assertEqual(advanced.status_code, 200)
             self.assertEqual(advanced.data["next_step"], next_step)
+
+    def test_completed_resident_can_sign_in_with_pin(self):
+        user = User.objects.create_user(username="pinresident", password="StrongPass1!")
+        Resident.objects.create(
+            user=user,
+            first_name="PIN",
+            last_name="Resident",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.MALE,
+            contact_number="09888888888",
+            barangay=self.barangay,
+            pin_hash=make_password("4826"),
+            security_setup_stage=Resident.SecuritySetupStage.COMPLETE,
+        )
+
+        response = self.client.post("/api/login/pin/", {
+            "username": "pinresident",
+            "pin": "4826",
+        }, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertEqual(response.data["security_setup_stage"], "complete")
 
 
 class ResidentAppointmentApiTests(APITestCase):

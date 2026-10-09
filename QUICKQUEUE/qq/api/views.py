@@ -23,10 +23,11 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from datetime import date
 from difflib import SequenceMatcher
+import logging
 import re
 
 from qq.models import Appointment, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
@@ -35,6 +36,9 @@ from qq.services.configuration_service import effective_service_duration, effect
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
 from qq.gemini_service import GeminiUnavailable, ask_gemini
 from .throttles import ChatRateThrottle
+
+
+logger = logging.getLogger(__name__)
 
 
 def _template_barangay(request):
@@ -145,10 +149,6 @@ def pin_login_api(request):
     if not resident.user.is_active or resident.security_setup_stage != Resident.SecuritySetupStage.COMPLETE or not resident.pin_hash or not check_password(pin, resident.pin_hash):
         return Response({"success": False, "message": "Invalid username or PIN."}, status=status.HTTP_401_UNAUTHORIZED)
     refresh = RefreshToken.for_user(resident.user)
-    fee = appointment.service_fee_snapshot
-    if fee is None:
-        fee = effective_service_fee(appointment.barangay, appointment.service)
-    service_fee = "Free" if fee == 0 else f"₱{fee:,.2f}"
     return Response({
         "success": True,
         "access": str(refresh.access_token),
@@ -869,9 +869,13 @@ def _chat_database_context(resident):
     appointment = resident.appointments.select_related(
         "service", "barangay", "time_slot"
     ).filter(
-        appointment_date__gte=timezone.localdate(),
+        Q(appointment_date__gte=timezone.localdate()) | Q(appointment_date__isnull=True),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
-    ).order_by("appointment_date", "time_slot__start_time").first()
+    ).order_by(
+        F("appointment_date").asc(nulls_last=True),
+        F("time_slot__start_time").asc(nulls_last=True),
+        "created_at",
+    ).first()
 
     if appointment:
         ticket = QueueTicket.objects.filter(appointment=appointment).first()
@@ -885,12 +889,23 @@ def _chat_database_context(resident):
             status__in=[QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING],
             appointment__queue_number__lt=appointment.queue_number,
         ).count()
+        appointment_date = (
+            appointment.appointment_date.isoformat()
+            if appointment.appointment_date
+            else "Date not assigned"
+        )
+        appointment_time = (
+            f"{appointment.time_slot.start_time.strftime('%I:%M %p')}-"
+            f"{appointment.time_slot.end_time.strftime('%I:%M %p')}"
+            if appointment.time_slot
+            else "Time not assigned"
+        )
         appointment_context = (
             f"Active appointment: ID QQ-{appointment.created_at.year}-{appointment.pk:05d}; "
-            f"service={appointment.service.name}; date={appointment.appointment_date.isoformat()}; "
-            f"time={appointment.time_slot.start_time.strftime('%I:%M %p')}-"
-            f"{appointment.time_slot.end_time.strftime('%I:%M %p')}; "
-            f"barangay={appointment.barangay.name}; queue number={appointment.queue_number}; "
+            f"service={appointment.service.name}; date={appointment_date}; "
+            f"time={appointment_time}; "
+            f"barangay={appointment.barangay.name}; "
+            f"queue number={appointment.queue_number or 'not assigned'}; "
             f"appointment status={appointment.get_status_display()}; "
             f"queue status={ticket.get_status_display() if ticket else 'not recorded'}; "
             f"now serving={now_serving.queue_number if now_serving else 'not recorded'}; "
@@ -937,6 +952,11 @@ def _built_in_chat_reply(message, resident, appointment):
             "After booking, view it in Queue or Transactions."
         )
     if "check in" in text or "check-in" in text:
+        if appointment.appointment_date is None:
+            return (
+                "According to your QuickQueue record, your appointment date and time have not "
+                "been assigned yet. Please check Queue or contact barangay staff before checking in."
+            )
         if appointment.appointment_date != timezone.localdate():
             return (
                 f"According to your QuickQueue record, check-in is available on "
@@ -1050,18 +1070,18 @@ def chat_api(request):
 
     resident = request.user.resident_profile
     database_context, appointment = _chat_database_context(resident)
+    used_ai = True
     try:
         reply = ask_gemini(message, database_context, history)
     except GeminiUnavailable as error:
-        return Response({
-            "message": str(error),
-            "error_code": error.code,
-            "retryable": error.retryable,
-        }, status=error.http_status)
+        used_ai = False
+        logger.warning("Gemini unavailable; using QuickQueue guidance fallback (%s)", error.code)
+        reply = _built_in_chat_reply(message, resident, appointment)
     reply = _format_chat_instructions(reply)
 
     return Response({
         "reply": reply,
         "suggestions": _chat_suggestions(message, reply, appointment is not None),
-        "source": "QuickQueue records and AI guidance",
+        "source": "QuickQueue records and AI guidance" if used_ai else "QuickQueue records and built-in guidance",
+        "fallback": not used_ai,
     })
