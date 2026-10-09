@@ -44,6 +44,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
 
 ALLOWED_HOSTS = [
     "quick-queue-virid.vercel.app",
+    ".vercel.app"
     "localhost",
     "127.0.0.1",
 ]
