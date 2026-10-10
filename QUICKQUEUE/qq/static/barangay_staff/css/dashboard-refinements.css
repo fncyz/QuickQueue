@@ -1,0 +1,103 @@
+/* Staff dashboard blue palette refinements. */
+:root {
+  --navy: #0b2454;
+  --blue: #155eef;
+  --ink: #0b2454;
+  --muted: #64748b;
+  --line: #dbe5f3;
+  --page: #f4f7fb;
+}
+
+.staff-sidebar {
+  background: #0b2454;
+}
+
+.staff-sidebar nav a.active {
+  background: #155eef;
+  border-left-color: #93c5fd;
+}
+
+.staff-profile em,
+.live header i {
+  background: #60a5fa;
+}
+
+.live header i {
+  box-shadow: 0 0 0 5px rgb(96 165 250 / 22%);
+}
+
+.bell i {
+  background: #2563eb;
+}
+
+.welcome em,
+.priority header > div > em {
+  color: #2563eb;
+}
+
+.live {
+  background: linear-gradient(125deg, #0b3f9b, #155eef);
+}
+
+.attention > a,
+.priority,
+.lower > article {
+  border-color: #dbe5f3;
+}
+
+.attention > a.warm {
+  border-color: #bfdbfe;
+}
+
+.attention > a > i,
+.attention > a > i.blue,
+.attention > a > i.purple {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.attention > a > strong {
+  background: #eff6ff;
+  color: #155eef;
+}
+
+.priority {
+  border-top-color: #155eef;
+}
+
+.count {
+  background: #eff6ff;
+  color: #155eef;
+}
+
+.days {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #0b2454;
+  font-weight: 600;
+}
+
+.ready {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.notified {
+  color: #155eef;
+  font-weight: 600;
+}
+
+.notify {
+  background: #155eef;
+}
+
+.row > em {
+  background: #dbeafe;
+  color: #155eef;
+}
