@@ -1,0 +1,82 @@
+.appointment-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 28px;
+  padding: 0 42px;
+  border-bottom: 1px solid #dbe5f3;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 3px 10px rgb(11 36 84 / 4%);
+}
+
+.appointment-section-nav button {
+  height: 52px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font: 600 14px Poppins, sans-serif;
+  cursor: pointer;
+}
+
+.appointment-section-nav button.active {
+  border-bottom-color: #155eef;
+  color: #155eef;
+}
+
+.appointment-scroll-target {
+  scroll-margin-top: 68px;
+}
+
+.view-date-appointments {
+  display: inline-block;
+  margin-top: 9px;
+  color: #155eef;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.slot-grid button {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.slot-grid button:not(:disabled) {
+  cursor: pointer;
+}
+
+.slot-grid button:not(:disabled):hover,
+.slot-grid button.active,
+.slot-grid span[role="button"]:hover,
+.slot-grid span[role="button"].active {
+  border-color: #155eef;
+  background: #eff6ff;
+}
+
+.slot-grid span[role="button"] {
+  cursor: pointer;
+}
+
+.slot-grid button:disabled {
+  opacity: 1;
+}
+
+.slot-grid button b {
+  float: right;
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .appointment-section-nav {
+    padding: 0 18px;
+  }
+}

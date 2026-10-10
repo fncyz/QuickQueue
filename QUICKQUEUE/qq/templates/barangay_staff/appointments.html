@@ -1,19 +1,20 @@
 {% load static %}
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Appointments | QuickQueue Staff</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'barangay_staff/css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointments.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_calendar_status.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_review.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_filters.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/resident_logbook.css' %}"></head><body>
+<link rel="stylesheet" href="{% static 'barangay_staff/css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointments.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_calendar_status.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_review.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointment_filters.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/resident_logbook.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/appointments-navigation.css' %}"></head><body>
 {% include 'barangay_staff/includes/sidebar.html' %}<main class="staff-main appointments">
 <header class="topbar"><div><h1>Appointments</h1><p>Review requests, confirm schedules, and prepare residents for today’s queue.</p></div><div class="user-tools"><a class="bell" href="{% url 'barangay_notifications' %}">♧{% if unread_notifications %}<i></i>{% endif %}</a><span class="avatar">{{ staff.initials }}</span><span><b>{{ staff.full_name }}</b><small>{{ staff.get_role_display }}</small></span></div></header>
+<nav class="appointment-section-nav" aria-label="Appointment page sections"><button class="active" type="button" data-section="calendar-section">Appointment Calendar</button><button type="button" data-section="appointment-list">Appointment List</button></nav>
 <div class="workspace"><section class="summary">
 <article><i class="blue"></i><span><small>Appointments Today</small><b>{{ today_total }}</b><em>Across {{ selected_slots|length }} service windows</em></span></article>
 <article><i class="orange"></i><span><small>Needs Attention</small><b>{{ pending_count }}</b><em>Legacy or exceptional requests</em></span></article>
 <article><i class="green"></i><span><small>Confirmed</small><b>{{ confirmed_count }}</b><em>Ready for service</em></span></article>
 <article><i class="purple"></i><span><small>Tomorrow</small><b>{{ tomorrow_count }}</b><em>Advance bookings</em></span></article></section>
-<section class="calendar-panel"><header><div><em>SCHEDULE OVERVIEW</em><h2>Appointment Calendar</h2><p>Daily capacity combines active service windows.</p></div><div class="legend"><span><i class="green"></i>Available</span><span><i class="orange"></i>Almost Full</span><span><i class="red"></i>Full</span></div></header>
+<section class="calendar-panel appointment-scroll-target" id="calendar-section"><header><div><em>SCHEDULE OVERVIEW</em><h2>Appointment Calendar</h2><p>Daily capacity combines active service windows.</p></div><div class="legend"><span><i class="green"></i>Available</span><span><i class="orange"></i>Almost Full</span><span><i class="red"></i>Full</span></div></header>
 <div class="calendar-body"><div class="month"><div class="month-head"><h3>{{ month_label }}</h3><b>{{ daily_capacity }} slots per day</b></div><div class="week names"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
 {% for week in calendar_weeks %}<div class="week">{% for day in week %}{% if day.in_month %}<a class="day {{ day.level }}{% if day.selected %} selected{% endif %}" href="?date={{ day.date|date:'Y-m-d' }}"{% if day.closure_reason %} title="{{ day.closure_reason }}"{% endif %}><strong>{{ day.date.day }}</strong><i></i><b>{{ day.count }}/{{ daily_capacity }}</b><small>{% if day.is_closed %}Closed{% elif day.level == 'full' %}Fully Booked{% else %}Open{% endif %}</small></a>{% else %}<span class="day blank"></span>{% endif %}{% endfor %}</div>{% endfor %}</div>
 <aside class="selected"><header><span><em>SELECTED DATE</em><h3>{{ selected_date|date:'F j, Y' }}</h3><p>{{ selected_remaining }} appointment slots still available.</p></span><b>{{ selected_count }}/{{ daily_capacity }}</b></header><div class="capacity"><i style="width:{% widthratio selected_count daily_capacity 100 %}%"></i></div><div class="slot-grid">{% for item in selected_slots %}<span>{{ item.slot.start_time|time:'g' }}–{{ item.slot.end_time|time:'g A' }} <b>{{ item.booked }}/{{ item.capacity }}</b></span>{% endfor %}</div><div class="selected-list">{% for item in selected_appointments %}<article><i>{{ item.resident.first_name|first }}{{ item.resident.last_name|first }}</i><span><b>{{ item.resident }}</b><small>{{ item.service.name }}</small></span><time><b>{{ item.time_slot.start_time|time:'g:i A' }}</b><small>{{ item.get_status_display }}</small></time></article>{% empty %}<p>No appointments on this date.</p>{% endfor %}</div></aside></div></section>
-<section class="review-layout review-layout-full"><div class="review-panel"><nav class="tabs"><a class="{% if tab == 'all' %}active{% endif %}" href="?tab=all">All Appointments</a><a class="{% if tab == 'pending' %}active{% endif %}" href="?tab=pending">Needs Attention <b>{{ pending_count }}</b></a><a class="{% if tab == 'rejected' %}active{% endif %}" href="?tab=rejected">Rejected / Cancelled</a><a class="{% if tab == 'history' %}active{% endif %}" href="?tab=history">Resident History</a></nav>
+<section class="review-layout review-layout-full appointment-scroll-target" id="appointment-list"><div class="review-panel"><nav class="tabs"><a class="{% if tab == 'today' %}active{% endif %}" href="?tab=today#appointment-list">Today</a><a class="{% if tab == 'all' %}active{% endif %}" href="?tab=all#appointment-list">All Appointments</a><a class="{% if tab == 'pending' %}active{% endif %}" href="?tab=pending#appointment-list">Needs Attention <b>{{ pending_count }}</b></a><a class="{% if tab == 'rejected' %}active{% endif %}" href="?tab=rejected#appointment-list">Rejected / Cancelled</a><a class="{% if tab == 'history' %}active{% endif %}" href="?tab=history#appointment-list">Resident History</a></nav>
 {% if tab == 'history' %}<section class="logbook-note embedded-history"><i>{{ resident_count }}</i><span><b>Completed resident service history</b><small>Residents appear here after a transaction is completed.</small></span></section><section class="logbook-table embedded-history-table"><form class="logbook-filters"><input type="hidden" name="tab" value="history"><label>&#8981;<input name="q" value="{{ history_filters.q }}" placeholder="Search resident, ID, or service"></label><select name="service"><option value="">All Services</option>{% for service in services %}<option value="{{ service.pk }}" {% if history_filters.service == service.pk|stringformat:'s' %}selected{% endif %}>{{ service.name }}</option>{% endfor %}</select><input type="date" name="date" value="{{ history_filters.date }}"><button>Apply</button><a href="?tab=history">Clear Filters</a></form><div class="table-scroll"><table><thead><tr><th>RESIDENT / CONTACT</th><th>PUROK / SITIO</th><th>COMPLETED SERVICE</th><th>COMPLETED DATE</th><th>DOCUMENT ID</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{% for row in resident_rows %}<tr><td><span class="resident"><i>{{ row.resident.first_name|first }}{{ row.resident.last_name|first }}</i><span><b>{{ row.resident }}</b><small>{{ row.resident.contact_number }}</small></span></span></td><td>{{ row.latest.appointment.sitio|default:'—' }}</td><td>{{ row.latest.appointment.service.name }}</td><td>{{ row.latest.claimed_at|date:'M j, Y' }}<small>{{ row.latest.claimed_at|time:'g:i A' }}</small></td><td>DOC-{{ row.latest.appointment.created_at|date:'Y' }}-{{ row.latest.pk|stringformat:'05d' }}</td><td><b class="complete">Completed</b></td><td><button class="history-btn" type="button" onclick="document.getElementById('history-{{ row.resident.pk }}').showModal()">View Completed History</button></td></tr>{% empty %}<tr><td class="empty" colspan="7">No completed resident transactions match the selected filters.</td></tr>{% endfor %}</tbody></table></div></section>{% for row in resident_rows %}<dialog class="history-modal" id="history-{{ row.resident.pk }}"><header><span><em>COMPLETED SERVICE HISTORY</em><h2>{{ row.resident }}</h2></span><button type="button" onclick="this.closest('dialog').close()">&times;</button></header><div class="modal-body"><section class="resident-card"><i>{{ row.resident.first_name|first }}{{ row.resident.last_name|first }}</i><span><b>{{ row.resident }}</b><small>{{ row.latest.appointment.sitio|default:'No sitio recorded' }} · {{ row.resident.contact_number }}</small></span></section><h3>Completed Transactions ({{ row.transactions|length }})</h3><ul>{% for ticket in row.transactions %}<li><i></i><span><b>{{ ticket.claimed_at|date:'M j, Y' }}</b> — {{ ticket.appointment.service.name }} · DOC-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.pk|stringformat:'05d' }}</span></li>{% endfor %}</ul></div><footer><button type="button" onclick="this.closest('dialog').close()">Close</button></footer></dialog>{% endfor %}
 </div></section>{% else %}
 <form class="filters"><input type="hidden" name="tab" value="{{ tab }}"><label>⌕<input name="q" value="{{ filters.q }}" placeholder="Search resident, ID, or service"></label><select name="service"><option value="">All Services</option>{% for service in services %}<option value="{{ service.pk }}" {% if filters.service == service.pk|stringformat:'s' %}selected{% endif %}>{{ service.name }}</option>{% endfor %}</select><input class="date-filter" type="date" name="filter_date" value="{{ filters.filter_date }}"><button>Apply</button><a href="?tab={{ tab }}">Clear Filters</a></form>
@@ -48,5 +49,71 @@ document.querySelectorAll('.appointment-review-modal').forEach(function (modal) 
     if (event.target === modal) modal.close();
   });
 });
+</script>
+<script>
+(function () {
+  var navButtons = Array.from(document.querySelectorAll('.appointment-section-nav button'));
+  var sections = navButtons.map(function (button) {
+    return document.getElementById(button.dataset.section);
+  }).filter(Boolean);
+
+  navButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var section = document.getElementById(button.dataset.section);
+      if (section) section.scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+  });
+
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        navButtons.forEach(function (button) {
+          button.classList.toggle('active', button.dataset.section === entry.target.id);
+        });
+      });
+    }, {rootMargin: '-70px 0px -55% 0px', threshold: 0.05});
+    sections.forEach(function (section) { observer.observe(section); });
+  }
+
+  var selectedHeader = document.querySelector('.selected header span');
+  if (selectedHeader) {
+    var viewLink = document.createElement('a');
+    viewLink.className = 'view-date-appointments';
+    viewLink.href = '?tab=all&filter_date={{ selected_date|date:"Y-m-d" }}#appointment-list';
+    viewLink.textContent = 'View Appointments';
+    selectedHeader.appendChild(viewLink);
+  }
+
+  var slotButtons = document.querySelectorAll('.slot-grid span');
+  var selectedRows = Array.from(document.querySelectorAll('.selected-list article'));
+  slotButtons.forEach(function (slot) {
+    var count = Number((slot.querySelector('b') || {}).textContent?.split('/')[0] || 0);
+    if (!count) return;
+    slot.setAttribute('role', 'button');
+    slot.setAttribute('tabindex', '0');
+    function showSlot() {
+      var startHour = slot.childNodes[0].textContent.trim().split(/[–â]/)[0].trim();
+      slotButtons.forEach(function (item) { item.classList.remove('active'); });
+      slot.classList.add('active');
+      selectedRows.forEach(function (row) {
+        var time = row.querySelector('time b').textContent.trim();
+        row.hidden = time.indexOf(startHour + ':') !== 0 && time.indexOf(startHour + ' ') !== 0;
+      });
+    }
+    slot.addEventListener('click', showSlot);
+    slot.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showSlot();
+      }
+    });
+  });
+
+  {% if tab == 'today' and not appointments %}
+  var emptyCell = document.querySelector('#appointment-list td.empty');
+  if (emptyCell) emptyCell.textContent = 'No appointments scheduled for today.';
+  {% endif %}
+})();
 </script>
 </body></html>

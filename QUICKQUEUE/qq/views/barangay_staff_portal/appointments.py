@@ -99,7 +99,9 @@ def staff_appointments(request):
 
     tab = request.GET.get("tab", "all")
     table_qs = base
-    if tab == "rejected":
+    if tab == "today":
+        table_qs = base.filter(appointment_date=today)
+    elif tab == "rejected":
         table_qs = base.filter(status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED])
     elif tab == "all":
         table_qs = base
@@ -111,6 +113,8 @@ def staff_appointments(request):
         tab = "all"
     search, service, date_filter = (request.GET.get("q", "").strip(),
                                     request.GET.get("service", ""), request.GET.get("filter_date", ""))
+    if tab == "today":
+        date_filter = today.isoformat()
     if search:
         table_qs = table_qs.filter(Q(resident__first_name__icontains=search)
                                    | Q(resident__last_name__icontains=search)
