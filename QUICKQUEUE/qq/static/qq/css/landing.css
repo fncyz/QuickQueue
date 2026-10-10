@@ -20,3 +20,40 @@
 .login-preview::before{position:absolute;z-index:-1;inset:0;background:url("../images/logincard_02.png") center/cover no-repeat;content:"";-webkit-mask-image:linear-gradient(90deg,#000 0 44%,transparent 44%),radial-gradient(ellipse 16% 52% at 44% 50%,#000 99%,transparent 100%);-webkit-mask-composite:source-over;mask-image:linear-gradient(90deg,#000 0 44%,transparent 44%),radial-gradient(ellipse 16% 52% at 44% 50%,#000 99%,transparent 100%);mask-composite:add}
 
 .curve-definitions{position:absolute;pointer-events:none}.login-preview::before{-webkit-clip-path:url(#loginCurve);clip-path:url(#loginCurve);-webkit-mask-image:none;mask-image:none}
+
+/* Keep the landing-to-login handoff on one compositor-friendly timeline. */
+@view-transition{navigation:none}
+.hero-card,.landing-page{view-transition-name:none}
+.login-preview{
+    opacity:0;
+    transform:translate3d(2.25%,0,0) scale(1.012);
+    transform-origin:center;
+    transition:opacity 820ms cubic-bezier(.22,1,.36,1),transform 820ms cubic-bezier(.22,1,.36,1);
+}
+.hero-copy{
+    transition:opacity 430ms cubic-bezier(.22,1,.36,1),transform 650ms cubic-bezier(.22,1,.36,1);
+}
+.hero-card.is-transitioning .login-preview{
+    opacity:1;
+    transform:translate3d(0,0,0) scale(1);
+    will-change:opacity,transform;
+}
+.hero-card.is-transitioning .hero-copy{
+    opacity:0;
+    transform:translate3d(-2%,0,0);
+    transition:opacity 430ms cubic-bezier(.22,1,.36,1),transform 650ms cubic-bezier(.22,1,.36,1);
+    will-change:opacity,transform;
+}
+.get-started[aria-disabled="true"]{cursor:default}
+
+@media(max-width:760px){
+    .login-preview{transform:translate3d(0,2%,0) scale(1.01)}
+    .hero-card.is-transitioning .login-preview{transform:translate3d(0,0,0) scale(1)}
+    .hero-card.is-transitioning .hero-copy{transform:translate3d(0,-1.5%,0)}
+}
+
+@media(prefers-reduced-motion:reduce){
+    .login-preview{transform:none;transition:opacity 160ms linear!important}
+    .hero-copy{transition:opacity 120ms linear!important}
+    .hero-card.is-transitioning .hero-copy{transform:none}
+}

@@ -30,3 +30,14 @@
 
 .curve-definitions{position:absolute;pointer-events:none}
 .signin-light-art{-webkit-clip-path:url(#loginCurve);clip-path:url(#loginCurve);-webkit-mask-image:none;mask-image:none}
+
+/* The landing page already performs the main slide; arrival only settles the card. */
+@view-transition{navigation:none}
+.signin-page,.signin-card{view-transition-name:none}
+.transition-arrival .signin-content>*{animation:none}
+.transition-arrival .signin-card{animation:signin-settle 240ms both cubic-bezier(.22,1,.36,1)}
+@keyframes signin-settle{
+    from{opacity:.94;transform:translate3d(0,5px,0)}
+    to{opacity:1;transform:translate3d(0,0,0)}
+}
+@media(prefers-reduced-motion:reduce){.transition-arrival .signin-card{animation:none}}

@@ -8,6 +8,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" as="image" href="{% static 'qq/images/bg01.png' %}">
+    <link rel="preload" as="image" href="{% static 'qq/images/card_bg.png' %}">
+    <link rel="preload" as="image" href="{% static 'qq/images/logincard_01.png' %}">
+    <link rel="preload" as="image" href="{% static 'qq/images/logincard_02.png' %}">
+    <link rel="preload" as="image" href="{% static 'qq/images/login_card.png' %}">
     <link rel="stylesheet" href="{% static 'qq/css/landing.css' %}">
 </head>
 <body>
@@ -32,7 +37,7 @@
                         <span>A Smart Appointment and Queue</span>
                         <span>Management System for Barangays</span>
                     </p>
-                    <a class="get-started" href="{% url 'signin' %}" data-login-card="{% static 'qq/images/logincard_02.png' %}">Get Started</a>
+                    <a class="get-started" href="{% url 'signin' %}">Get Started</a>
                 </div>
             </div>
         </section>
@@ -40,26 +45,61 @@
     <script>
         const startButton = document.querySelector(".get-started");
         const heroCard = document.querySelector(".hero-card");
-        if (startButton && heroCard) {
-            const loginImage = new Image();
-            loginImage.src = startButton.dataset.loginCard;
+        const loginPreview = document.querySelector(".login-preview");
+
+        if (startButton && heroCard && loginPreview) {
+            const imageUrls = [...document.querySelectorAll('link[rel="preload"][as="image"]')]
+                .map((link) => link.href);
+            const imageReady = Promise.allSettled(imageUrls.map((src) => {
+                const image = new Image();
+                image.decoding = "async";
+                image.src = src;
+                return image.decode ? image.decode() : Promise.resolve();
+            }));
+            let isNavigating = false;
+            let fallbackTimer;
+
+            const finishNavigation = () => {
+                if (!isNavigating) return;
+                window.clearTimeout(fallbackTimer);
+                sessionStorage.setItem("quickqueue.loginTransition", "1");
+                window.location.assign(startButton.href);
+            };
+
+            const onTransitionEnd = (event) => {
+                if (event.target === loginPreview && event.propertyName === "opacity") {
+                    loginPreview.removeEventListener("transitionend", onTransitionEnd);
+                    finishNavigation();
+                }
+            };
+
             startButton.addEventListener("click", async (event) => {
                 event.preventDefault();
-                if (heroCard.classList.contains("is-transitioning")) return;
+                if (isNavigating) return;
+
+                isNavigating = true;
                 startButton.setAttribute("aria-disabled", "true");
-                if (!loginImage.complete) {
-                    try { await loginImage.decode(); } catch (_) { /* The cached CSS image remains the fallback. */ }
-                }
+                startButton.style.pointerEvents = "none";
+
+                await Promise.race([
+                    imageReady,
+                    new Promise((resolve) => window.setTimeout(resolve, 180)),
+                ]);
+
+                loginPreview.addEventListener("transitionend", onTransitionEnd);
                 heroCard.classList.add("is-pressed");
-                window.setTimeout(() => {
+                requestAnimationFrame(() => requestAnimationFrame(() => {
                     heroCard.classList.remove("is-pressed");
                     heroCard.classList.add("is-transitioning");
-                }, 180);
-                window.setTimeout(() => {
-                    sessionStorage.setItem("quickqueue.loginTransition", "1");
-                    window.location.assign(startButton.href);
-                }, 850);
+                }));
+
+                fallbackTimer = window.setTimeout(finishNavigation, 1100);
             });
+
+            window.addEventListener("pagehide", () => {
+                window.clearTimeout(fallbackTimer);
+                loginPreview.removeEventListener("transitionend", onTransitionEnd);
+            }, { once: true });
         }
     </script>
 </body>
