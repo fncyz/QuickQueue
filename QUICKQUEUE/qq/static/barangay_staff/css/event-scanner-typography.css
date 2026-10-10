@@ -1,0 +1,29 @@
+.event-page,
+.event-page input,
+.event-page button,
+.event-page textarea,
+.event-page select {
+  font-family: Poppins, Arial, sans-serif;
+}
+
+.event-page {
+  font-weight: 400;
+}
+
+.event-page .topbar h1 {
+  font-weight: 700;
+}
+
+.event-page .scanner-card h2,
+.event-page .result-card h2 {
+  font-weight: 600;
+}
+
+.event-page input {
+  font-weight: 400;
+}
+
+.event-page button,
+.event-page .checkin {
+  font-weight: 600;
+}
