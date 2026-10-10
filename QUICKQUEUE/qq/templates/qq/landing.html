@@ -13,6 +13,7 @@
 <body>
     <main class="landing-page">
         <section class="hero-card" aria-labelledby="landing-title">
+            <div class="login-preview" aria-hidden="true"></div>
             <div class="artwork-space" aria-hidden="true"></div>
             <div class="content-panel">
                 <div class="hero-copy">
@@ -24,10 +25,35 @@
                         <span>A Smart Appointment and Queue</span>
                         <span>Management System for Barangays</span>
                     </p>
-                    <a class="get-started" href="{% url 'signin' %}">Get Started</a>
+                    <a class="get-started" href="{% url 'signin' %}" data-login-card="{% static 'qq/images/login_card.png' %}">Get Started</a>
                 </div>
             </div>
         </section>
     </main>
+    <script>
+        const startButton = document.querySelector(".get-started");
+        const heroCard = document.querySelector(".hero-card");
+        if (startButton && heroCard) {
+            const loginImage = new Image();
+            loginImage.src = startButton.dataset.loginCard;
+            startButton.addEventListener("click", async (event) => {
+                event.preventDefault();
+                if (heroCard.classList.contains("is-transitioning")) return;
+                startButton.setAttribute("aria-disabled", "true");
+                if (!loginImage.complete) {
+                    try { await loginImage.decode(); } catch (_) { /* The cached CSS image remains the fallback. */ }
+                }
+                heroCard.classList.add("is-pressed");
+                window.setTimeout(() => {
+                    heroCard.classList.remove("is-pressed");
+                    heroCard.classList.add("is-transitioning");
+                }, 180);
+                window.setTimeout(() => {
+                    sessionStorage.setItem("quickqueue.loginTransition", "1");
+                    window.location.assign(startButton.href);
+                }, 850);
+            });
+        }
+    </script>
 </body>
 </html>

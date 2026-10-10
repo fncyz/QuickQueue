@@ -9,3 +9,9 @@
 @media(max-height:650px) and (orientation:landscape){.landing-page{padding-block:24px;overflow-y:auto}.hero-card{height:86vh;min-height:450px}.quickqueue-logo{width:clamp(88px,10vw,125px)}.subtitle{margin-top:14px}.get-started{min-height:54px;margin-top:22px}}
 
 @media(prefers-reduced-motion:reduce){.get-started{transition:none}}
+
+.login-preview{position:absolute;z-index:2;inset:0;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent 0 53%,rgba(0,70,201,.96) 61%,#003ea8 100%),url("../images/login_card.png") left center/61% 100% no-repeat;transition:opacity 650ms cubic-bezier(.4,0,.2,1)}.hero-card.is-pressed .get-started{transform:scale(.97)}.hero-card.is-transitioning .login-preview{opacity:1}.hero-card.is-transitioning .hero-copy{opacity:0;transform:translateY(-8px);transition:opacity 360ms ease,transform 500ms ease}.hero-card.is-transitioning .get-started{pointer-events:none}@view-transition{navigation:auto}.hero-card{view-transition-name:quickqueue-card}.landing-page{view-transition-name:quickqueue-page}
+
+@media(prefers-reduced-motion:reduce){.login-preview,.hero-copy{transition:none!important}.hero-card.is-pressed .get-started{transform:none}}
+
+.login-preview{background-position:center,left bottom;background-size:auto,61% auto}

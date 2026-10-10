@@ -8,44 +8,50 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'qq/css/signin.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'qq/css/signin.css' %}?v=5">
 </head>
 <body>
     <main class="signin-page">
         <section class="signin-card" aria-labelledby="signin-heading">
-            <div class="signin-logo-wrap">
-                <img class="signin-logo" src="{% static 'qq/images/qqlogo.png' %}" alt="QuickQueue">
+            <div class="signin-visual" aria-label="QuickQueue, A Smart Appointment and Queue Management System for Barangays">
+                <div class="signin-brand">
+                    <img class="signin-logo" src="{% static 'qq/images/qqlogo.png' %}" alt="QuickQueue logo">
+                    <div class="signin-wordmark">
+                        <p aria-hidden="true"><span class="yellow">Q</span><span>uick</span><span class="red">Q</span><span>ueue</span></p>
+                        <span>A Smart Appointment and Queue<br>Management System for Barangays</span>
+                    </div>
+                </div>
             </div>
-
-            <h1 id="signin-heading">WELCOME!</h1>
-            <p class="signin-intro">Barangay admin and staff portal</p>
-
-            {% if signin_error %}<p class="signin-error">{{ signin_error }}</p>{% endif %}
-
-            <form class="signin-form" method="post" action="{% url 'signin' %}">
-                {% csrf_token %}
-                <label for="username">Username</label>
-                <div class="input-wrap">
-                    <svg class="field-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
-                    <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" required>
+            <div class="signin-panel">
+                <div class="signin-content">
+                    <h1 id="signin-heading"><span>Welcome</span> <span>Back</span></h1>
+                    <div class="heading-accent" aria-hidden="true"></div>
+                    <p class="signin-intro">Sign in to your account to continue<br>to QuickQueue</p>
+                    {% if signin_error %}<p class="signin-error">{{ signin_error }}</p>{% endif %}
+                    <form class="signin-form" method="post" action="{% url 'signin' %}">
+                        {% csrf_token %}
+                        <label for="username">Username</label>
+                        <div class="input-wrap">
+                            <svg class="field-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+                            <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" required>
+                        </div>
+                        <label for="password">Password</label>
+                        <div class="input-wrap">
+                            <svg class="field-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
+                            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+                            <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+                        </div>
+                        <button class="signin-submit" type="submit">Login to QuickQueue</button>
+                    </form>
                 </div>
-
-                <label for="password">Password</label>
-                <div class="input-wrap">
-                    <svg class="field-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
-                    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
-                    <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">
-                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
-                    </button>
-                </div>
-                <a class="forgot-password" href="#">Forgot Password?</a>
-
-                <button type="submit">Sign In</button>
-            </form>
-
+            </div>
         </section>
     </main>
     <script>
+        if (sessionStorage.getItem("quickqueue.loginTransition")) {
+            document.body.classList.add("transition-arrival");
+            sessionStorage.removeItem("quickqueue.loginTransition");
+        }
         const passwordInput = document.querySelector("#password");
         const passwordToggle = document.querySelector(".password-toggle");
         passwordToggle?.addEventListener("click", () => {
