@@ -2,11 +2,13 @@ from datetime import date, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.db import DatabaseError
 from django.urls import reverse
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from qq.gemini_service import GeminiUnavailable
-from qq.models import Appointment, Barangay, Resident, Service, TimeSlot
+from qq.models import Appointment, Barangay, QueueTicket, Resident, Service, TimeSlot
 
 
 class AiAssistantApiTests(APITestCase):
@@ -135,3 +137,72 @@ class AiAssistantApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("not been assigned", response.data["reply"])
         self.assertTrue(response.data["fallback"])
+
+    def test_queue_number_reply_uses_verified_ticket_value(self):
+        appointment = self._appointment()
+        QueueTicket.objects.create(appointment=appointment, queue_number="A-015")
+
+        response = self.client.post(self.url, {"message": "What is my queue number?"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("A-015", response.data["reply"])
+        self.assertIn("Waiting", response.data["reply"])
+
+    def test_queue_number_reply_handles_missing_value(self):
+        appointment = self._appointment()
+        appointment.queue_number = ""
+        appointment.save(update_fields=["queue_number"])
+
+        response = self.client.post(self.url, {"message": "What is my queue number?"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("hasn't been assigned yet", response.data["reply"])
+        self.assertNotIn("None", response.data["reply"])
+
+    def test_queue_question_disambiguates_multiple_active_appointments(self):
+        self._appointment(days=1)
+        self._appointment(days=2)
+
+        response = self.client.post(self.url, {"message": "What is my queue number?"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("multiple active appointments", response.data["reply"])
+        self.assertIn("Which appointment", response.data["reply"])
+
+    @patch.dict("os.environ", {"GEMINI_API_KEY": "configured-for-test"})
+    def test_authenticated_chat_health_checks_dependencies_without_calling_gemini(self):
+        with patch("qq.api.views.ask_gemini") as mocked_gemini:
+            response = self.client.get(reverse("api_chat_health"), HTTP_X_REQUEST_ID="health-test")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "ready")
+        mocked_gemini.assert_not_called()
+
+    @patch("qq.api.views._chat_database_context", side_effect=DatabaseError("stale connection"))
+    def test_chat_returns_retryable_database_failure_without_exposing_details(self, _mocked_context):
+        response = self.client.post(
+            self.url,
+            {"message": "What is my queue number?"},
+            format="json",
+            HTTP_X_REQUEST_ID="database-test",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["error_code"], "database_unavailable")
+        self.assertTrue(response.data["retryable"])
+        self.assertNotIn("stale connection", response.data["message"])
+
+    def test_chat_health_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse("api_chat_health"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_refresh_endpoint_rotates_session_credentials(self):
+        refresh = RefreshToken.for_user(self.user)
+        self.client.force_authenticate(user=None)
+
+        response = self.client.post(reverse("api_token_refresh"), {"refresh": str(refresh)}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)

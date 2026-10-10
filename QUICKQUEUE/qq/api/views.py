@@ -22,13 +22,16 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
+from django.db import close_old_connections, connection
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Q
 from django.utils import timezone
 from datetime import date
 from difflib import SequenceMatcher
 import logging
+import os
 import re
+import time
 
 from qq.models import Appointment, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
@@ -39,6 +42,11 @@ from .throttles import ChatRateThrottle
 
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_request_id(request):
+    value = request.headers.get("X-Request-ID", "")[:64]
+    return value if re.fullmatch(r"[A-Za-z0-9._-]+", value) else "not-provided"
 
 
 def _template_barangay(request):
@@ -479,6 +487,11 @@ def appointments_api(request):
                 "is_special_service": True,
                 "is_booked": resident_booking is not None,
                 "event_booking_id": resident_booking.pk if resident_booking else None,
+                "requirements": [
+                    line.strip().lstrip("-â€¢").strip()
+                    for line in service.requirements.splitlines()
+                    if line.strip().lstrip("-â€¢").strip()
+                ],
             })
         priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3}
         temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["event_start_date"]))
@@ -778,6 +791,11 @@ def event_booking_pass_api(request, pk):
             else f"{event.event_start_date.strftime('%B %d, %Y')} - {event.event_end_date.strftime('%B %d, %Y')}"
         ),
         "location": event.location,
+        "requirements": [
+            line.strip().lstrip("-â€¢").strip()
+            for line in event.requirements.splitlines()
+            if line.strip().lstrip("-â€¢").strip()
+        ],
     })
 
 
@@ -859,7 +877,9 @@ def push_devices_api(request):
 
 
 def _chat_database_context(resident):
-    services = Service.objects.filter(is_active=True).order_by("name")
+    services = Service.objects.filter(
+        Q(is_temporary=False) | Q(barangay=resident.barangay), is_active=True
+    ).order_by("name")
     service_lines = [
         f"- {service.name}: requirements={service.requirements.strip() or 'not recorded'}; "
         f"estimated processing duration={service.estimated_duration} minutes"
@@ -870,8 +890,8 @@ def _chat_database_context(resident):
         f"- {item.title}: {item.message} (read={'yes' if item.is_read else 'no'})"
         for item in recent_notifications
     ]
-    appointment = resident.appointments.select_related(
-        "service", "barangay", "time_slot"
+    active_appointments = list(resident.appointments.select_related(
+        "service", "barangay", "time_slot", "queue_ticket", "event_booking"
     ).filter(
         Q(appointment_date__gte=timezone.localdate()) | Q(appointment_date__isnull=True),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
@@ -879,10 +899,11 @@ def _chat_database_context(resident):
         F("appointment_date").asc(nulls_last=True),
         F("time_slot__start_time").asc(nulls_last=True),
         "created_at",
-    ).first()
+    )[:5])
+    appointment = active_appointments[0] if active_appointments else None
 
     if appointment:
-        ticket = QueueTicket.objects.filter(appointment=appointment).first()
+        ticket = getattr(appointment, "queue_ticket", None)
         queue = QueueTicket.objects.filter(
             appointment__appointment_date=appointment.appointment_date,
             appointment__barangay=appointment.barangay,
@@ -915,6 +936,14 @@ def _chat_database_context(resident):
             f"now serving={now_serving.queue_number if now_serving else 'not recorded'}; "
             f"people ahead={people_ahead}; estimated wait={people_ahead * appointment.service.estimated_duration} minutes"
         )
+        if len(active_appointments) > 1:
+            appointment_context += "\nOther active bookings (ask the resident which one before giving a specific answer):\n" + "\n".join(
+                f"- service={item.service.name}; "
+                f"kind={'event' if hasattr(item, 'event_booking') else 'regular appointment'}; "
+                f"date={item.appointment_date.isoformat() if item.appointment_date else 'not assigned'}; "
+                f"status={item.get_status_display()}"
+                for item in active_appointments[1:]
+            )
     else:
         appointment_context = "Active appointment: none in the resident's QuickQueue record."
 
@@ -928,7 +957,7 @@ def _chat_database_context(resident):
         f"QuickQueue office hours: {settings.QUICKQUEUE_OFFICE_HOURS}",
         "Exact fees and unlisted availability are not present in this context.",
     ])
-    return context, appointment
+    return context, appointment, active_appointments
 
 
 def _built_in_chat_reply(message, resident, appointment):
@@ -974,12 +1003,30 @@ def _built_in_chat_reply(message, resident, appointment):
             return "You can cancel this appointment from the Queue or Transactions tab. Open the appointment, tap Cancel Appointment, and confirm."
         return f"According to your QuickQueue record, this appointment is {appointment.get_status_display()} and can no longer be cancelled in the app. Contact barangay staff if you need help."
     if any(word in text for word in ("queue", "number", "wait", "status", "track")):
+        if hasattr(appointment, "event_booking"):
+            return (
+                f"According to your QuickQueue record, {appointment.service.name} is an event booking, "
+                f"so it uses booking reference {appointment.event_booking.booking_reference} and a QR pass "
+                "instead of the regular appointment queue."
+            )
         ticket = QueueTicket.objects.filter(appointment=appointment).first()
-        queue_status = ticket.get_status_display() if ticket else "not recorded"
+        queue_number = (ticket.queue_number if ticket else appointment.queue_number or "").strip()
+        date_text = appointment.appointment_date.strftime("%B %d, %Y") if appointment.appointment_date else None
+        subject = f"Your {appointment.service.name} appointment"
+        if date_text:
+            subject += f" on {date_text}"
+        if not queue_number:
+            return (
+                f"{subject} is {appointment.get_status_display().lower()}, but a queue number hasn't been assigned yet. "
+                "You can check the Queue tab for updates once it becomes available."
+            )
+        queue_status = ticket.get_status_display() if ticket else None
+        status_sentence = f" Your current queue status is {queue_status}." if queue_status else ""
         return (
-            f"According to your QuickQueue record, your queue number is {appointment.queue_number}, "
-            f"your appointment is {appointment.get_status_display()}, and your queue status is {queue_status}. "
-            "Open the Queue tab for live tracking or Transactions for appointment details."
+            f"Your queue number for your {appointment.service.name} appointment"
+            f"{f' on {date_text}' if date_text else ''} is {queue_number}. "
+            f"Your appointment is {appointment.get_status_display().lower()}.{status_sentence} "
+            "You can monitor updates through the Queue tab."
         )
     if "notification" in text:
         return "Open Notifications to read the latest update. Use Queue when the notification requires a queue action, or Transactions to review the appointment details."
@@ -1035,29 +1082,67 @@ def _format_chat_instructions(reply):
     return re.sub(r"\s+(?=\d+[.)]\s)", "\n\n", reply).strip()
 
 
-def _chat_suggestions(message, reply, has_appointment):
+def _chat_suggestions(message, reply, appointment):
     text = f"{message} {reply}".lower()
-    if has_appointment:
+    if appointment and hasattr(appointment, "event_booking"):
+        candidates = ["What are the event requirements?", "Where is the event?", "How do I use my QR pass?"]
+    elif appointment:
         if "called" in text or "now serving" in text:
-            return ["What should I do when my number is called?", "Where can I see my queue number?", "How do I track my appointment?"]
-        if "check in" in text:
-            return ["When can I check in?", "Where can I see my queue number?", "How do I track my appointment?"]
-        return ["How do I check in?", "Where can I see my queue number?", "How do I track my appointment?"]
-    if "queue" in text or "wait" in text:
-        return ["How do I book an appointment?", "What services are available?", "What are the requirements?"]
-    if "appointment" in text or "book" in text:
-        return ["What are the requirements?", "What services are available?", "Where can I see my queue?"]
-    if "requirement" in text or "clearance" in text:
-        return ["How do I book an appointment?", "What services are available?", "What is my queue status?"]
-    if "service" in text or "fee" in text:
-        return ["What are the requirements?", "How do I book an appointment?", "What is my queue status?"]
-    return ["What services are available?", "How do I book an appointment?", "What is my queue status?"]
+            candidates = ["What should I do when my number is called?", "What should I bring?", "When is my appointment?"]
+        else:
+            candidates = ["What is my queue number?", "What should I bring?", "When is my appointment?"]
+    else:
+        candidates = ["How do I book an appointment?", "What services are available?", "How do I check my booking status?"]
+    message_words = set(re.findall(r"[a-z0-9]+", message.lower()))
+    filtered = [item for item in candidates if set(re.findall(r"[a-z0-9]+", item.lower())) != message_words]
+    return filtered[:3]
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def chat_health_api(request):
+    """Check authenticated chat dependencies without calling or billing Gemini."""
+    started = time.monotonic()
+    request_id = _safe_request_id(request)
+    close_old_connections()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        logger.error(
+            "chat_health request_id=%s status=503 category=database duration_ms=%d",
+            request_id, int((time.monotonic() - started) * 1000),
+        )
+        close_old_connections()
+        return Response(
+            {"status": "unavailable", "category": "database", "retryable": True},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if not os.getenv("GEMINI_API_KEY"):
+        logger.error(
+            "chat_health request_id=%s status=503 category=ai_configuration duration_ms=%d",
+            request_id, int((time.monotonic() - started) * 1000),
+        )
+        return Response(
+            {"status": "unavailable", "category": "ai_configuration", "retryable": False},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    logger.info(
+        "chat_health request_id=%s status=200 category=ready duration_ms=%d",
+        request_id, int((time.monotonic() - started) * 1000),
+    )
+    return Response({"status": "ready"})
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ChatRateThrottle])
 def chat_api(request):
+    started = time.monotonic()
+    request_id = _safe_request_id(request)
     message = str(request.data.get("message", "")).strip()
     if not message:
         return Response({"message": "Please enter a message."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1072,20 +1157,58 @@ def chat_api(request):
         if text:
             history.append({"role": item["role"], "text": text})
 
+    close_old_connections()
     resident = request.user.resident_profile
-    database_context, appointment = _chat_database_context(resident)
-    used_ai = True
     try:
-        reply = ask_gemini(message, database_context, history)
-    except GeminiUnavailable as error:
+        database_context, appointment, active_appointments = _chat_database_context(resident)
+    except DatabaseError:
+        logger.error(
+            "chat_request request_id=%s status=503 category=database location=context duration_ms=%d",
+            request_id, int((time.monotonic() - started) * 1000),
+        )
+        close_old_connections()
+        return Response(
+            {"message": "QuickQueue is reconnecting to its records. Please retry in a moment.", "error_code": "database_unavailable", "retryable": True},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    personal_topic = any(word in message.lower() for word in ("my queue", "queue number", "queue status", "track my"))
+    regular_appointments = [item for item in active_appointments if not hasattr(item, "event_booking")]
+    used_ai = True
+    ai_error_code = None
+    if personal_topic and len(regular_appointments) > 1:
         used_ai = False
-        logger.warning("Gemini unavailable; using QuickQueue guidance fallback (%s)", error.code)
-        reply = _built_in_chat_reply(message, resident, appointment)
+        choices = ", ".join(
+            f"{item.service.name} on {item.appointment_date.strftime('%B %d, %Y') if item.appointment_date else 'a date not assigned yet'}"
+            for item in regular_appointments
+        )
+        reply = f"You have multiple active appointments: {choices}. Which appointment are you asking about?"
+    elif personal_topic and (regular_appointments or appointment):
+        used_ai = False
+        reply = _built_in_chat_reply(message, resident, regular_appointments[0] if regular_appointments else appointment)
+    else:
+        try:
+            reply = ask_gemini(message, database_context, history)
+        except GeminiUnavailable as error:
+            used_ai = False
+            ai_error_code = error.code
+            logger.warning("Gemini unavailable; using QuickQueue guidance fallback (%s)", error.code)
+            reply = _built_in_chat_reply(message, resident, appointment)
     reply = _format_chat_instructions(reply)
 
+    logger.info(
+        "chat_request request_id=%s status=200 category=%s location=%s duration_ms=%d",
+        request_id,
+        ai_error_code or "success",
+        "gemini" if used_ai or ai_error_code else "verified_backend",
+        int((time.monotonic() - started) * 1000),
+    )
+
+    provider_failed = ai_error_code is not None
     return Response({
         "reply": reply,
-        "suggestions": _chat_suggestions(message, reply, appointment is not None),
+        "suggestions": _chat_suggestions(message, reply, appointment),
         "source": "QuickQueue records and AI guidance" if used_ai else "QuickQueue records and built-in guidance",
-        "fallback": not used_ai,
+        "fallback": provider_failed,
+        "service_status": "degraded" if provider_failed else "online",
+        **({"error_code": ai_error_code} if ai_error_code else {}),
     })

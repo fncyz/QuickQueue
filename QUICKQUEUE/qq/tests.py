@@ -445,6 +445,7 @@ class ResidentAppointmentApiTests(APITestCase):
         today = timezone.localdate()
         temporary = Service.objects.create(
             code="EVT", name="Medical Mission Test", description="Temporary care",
+            requirements="Valid ID\nCompleted registration form",
             estimated_duration=15, is_temporary=True,
             temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
             event_start_date=today + timedelta(days=7), event_end_date=today + timedelta(days=7),
@@ -456,6 +457,7 @@ class ResidentAppointmentApiTests(APITestCase):
         event = next(item for item in summary.data["temporary_services"] if item["id"] == temporary.pk)
         self.assertEqual(event["status"], "upcoming")
         self.assertFalse(event["can_book"])
+        self.assertEqual(event["requirements"], ["Valid ID", "Completed registration form"])
         self.assertNotIn(temporary.pk, [item["id"] for item in summary.data["services"]])
 
         payload = {"service": temporary.pk}
@@ -481,6 +483,7 @@ class ResidentAppointmentApiTests(APITestCase):
         event_pass = self.client.get(f"/api/event-bookings/{event_booking.pk}/pass/")
         self.assertEqual(event_pass.status_code, 200)
         self.assertEqual(event_pass.data["booking_reference"], event_booking.booking_reference)
+        self.assertEqual(event_pass.data["requirements"], ["Valid ID", "Completed registration form"])
         self.assertEqual(EventBooking.booking_id_from_token(event_pass.data["qr_token"]), event_booking.booking_id)
 
         summary = self.client.get("/api/appointments/?summary=1")

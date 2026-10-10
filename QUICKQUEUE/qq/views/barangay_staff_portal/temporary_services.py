@@ -72,7 +72,8 @@ def staff_temporary_service_form(request, pk=None):
             instance.name = request.POST.get("name", "").strip()
             instance.temporary_type = request.POST.get("temporary_type", "")
             instance.description = request.POST.get("description", "").strip()
-            instance.requirements = request.POST.get("requirements", "").strip()
+            requirement_items = [item.strip() for item in request.POST.getlist("requirements") if item.strip()]
+            instance.requirements = "\n".join(requirement_items)
             instance.location = request.POST.get("location", "").strip()
             instance.event_start_date, instance.event_end_date = event_start_date, event_end_date
             instance.booking_start_date, instance.booking_end_date = booking_start_date, booking_end_date
@@ -86,8 +87,11 @@ def staff_temporary_service_form(request, pk=None):
         except (ValidationError, ValueError, KeyError) as error:
             message = "; ".join(error.messages) if isinstance(error, ValidationError) else "Enter a complete and valid schedule."
             messages.error(request, message)
+    saved_requirements = offering.requirements.splitlines() if offering and offering.requirements else []
+    posted_requirements = request.POST.getlist("requirements") if request.method == "POST" else None
     return render(request, "barangay_staff/temporary_service_form.html", {
         "active_page": "events", "staff": staff, "offering": offering,
+        "requirement_items": posted_requirements if posted_requirements is not None else (saved_requirements or [""]),
     })
 
 

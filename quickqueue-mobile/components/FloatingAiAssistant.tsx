@@ -2,14 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAxiosError } from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { AppState, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, TextInput } from '@/components/Typography';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
-import { sendChatMessage } from '@/services/api';
+import { getAssistantHealth, sendChatMessage } from '@/services/api';
 
 const assistantLogo = require('../assets/images/qq-ai.png');
 const assistantBlue = '#0759D9';
@@ -17,19 +17,7 @@ const suggestions = ['Requirements for Clearance', 'Service Fees', 'Office Hours
 type Message = { id: string; retryText?: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
 const timeNow = () => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
 
-const automatedGuidance = (message: string) => {
-  const text = message.toLowerCase();
-  const prefix = "I can still help with general QuickQueue steps, but I can't access live account details right now.\n\n";
-  if (text.includes('book') || text.includes('appointment')) return `${prefix}To book an appointment:\n\n1. Open the Book tab.\n\n2. Select a service.\n\n3. Choose an available date and time.\n\n4. Review your information and submit.`;
-  if (text.includes('cancel')) return `${prefix}To cancel an eligible appointment, open Queue or Transactions, select the appointment, tap Cancel Appointment, and confirm.`;
-  if (text.includes('check in') || text.includes('check-in')) return `${prefix}On your appointment date, open Queue, find Appointment Actions, and tap Check In. Wait for QuickQueue to confirm the action.`;
-  if (text.includes('queue') || text.includes('status') || text.includes('track')) return `${prefix}Open Queue to view your active queue number and status. Open Transactions for appointment details and history.`;
-  if (text.includes('requirement')) return `${prefix}Open the Book tab and select the service to review its listed requirements. Contact barangay staff if no requirements are shown.`;
-  if (text.includes('fee')) return `${prefix}Open the Book tab and select the service to view any fee recorded by the barangay. Confirm unlisted fees with barangay staff.`;
-  if (text.includes('service') || text.includes('available')) return `${prefix}Open the Book tab to see the services currently listed for your barangay.`;
-  if (text.includes('notification')) return `${prefix}Open Notifications for the latest update, Queue for active appointment actions, or Transactions for appointment history.`;
-  return `${prefix}You can ask me how to book or cancel an appointment, check in, view services and requirements, or navigate Queue and Transactions.`;
-};
+type Availability = 'checking' | 'online' | 'degraded' | 'unavailable' | 'session';
 
 export function FloatingAiAssistant() {
   const { width, height } = useWindowDimensions();
@@ -41,6 +29,7 @@ export function FloatingAiAssistant() {
   const sendInFlight = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [availability, setAvailability] = useState<Availability>('checking');
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<Message[]>(() => [{ id: 'assistant-welcome', role: 'assistant', suggestions, text: 'Hello! I’m the QuickQueue AI Assistant. How can I help you today?', time: timeNow() }]);
   const size = Math.max(56, Math.min(62, width * 0.15));
@@ -50,6 +39,29 @@ export function FloatingAiAssistant() {
   useEffect(() => {
     if (isOpen) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   }, [isOpen, messages]);
+
+  useEffect(() => {
+    let active = true;
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    const checkAvailability = async () => {
+      if (recoveryTimer) { clearTimeout(recoveryTimer); recoveryTimer = undefined; }
+      if (!isOpen || !isOnline) { if (active) setAvailability('unavailable'); return; }
+      setAvailability('checking');
+      try {
+        const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
+        if (!accessToken) { if (active) setAvailability('session'); return; }
+        await getAssistantHealth(accessToken);
+        if (active) setAvailability('online');
+      } catch (error) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        if (active) setAvailability(status === 401 ? 'session' : 'unavailable');
+        if (active && status !== 401) recoveryTimer = setTimeout(checkAvailability, 10000);
+      }
+    };
+    checkAvailability();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') checkAvailability(); });
+    return () => { active = false; if (recoveryTimer) clearTimeout(recoveryTimer); subscription.remove(); };
+  }, [isOpen, isOnline]);
 
   const send = async (text = draft, retryExisting = false) => {
     const trimmed = text.trim();
@@ -65,6 +77,7 @@ export function FloatingAiAssistant() {
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) throw new Error('Missing resident session');
       const result = await sendChatMessage(accessToken, trimmed, history);
+      setAvailability(result.service_status === 'degraded' || result.fallback ? 'degraded' : 'online');
       setMessages((current) => [...current, {
         id: `assistant-${nextId.current++}`,
         role: 'assistant',
@@ -84,34 +97,20 @@ export function FloatingAiAssistant() {
       const serverMessage = axiosError?.response?.data && typeof axiosError.response.data === 'object' && 'message' in axiosError.response.data
         ? String(axiosError.response.data.message)
         : undefined;
-      const useAutomatedGuidance = status !== 401 && (
-        !axiosError?.response ||
-        Boolean(status && status >= 500) ||
-        Boolean(errorCode?.startsWith('ai_'))
-      );
-      if (useAutomatedGuidance) {
-        setDraft('');
-        setMessages((current) => [...current, {
-          id: `assistant-${nextId.current++}`,
-          role: 'assistant',
-          suggestions,
-          text: automatedGuidance(trimmed),
-          time: timeNow(),
-        }]);
-        return;
-      }
+      const missingSession = error instanceof Error && error.message === 'Missing resident session';
+      setAvailability(status === 401 || missingSession ? 'session' : 'unavailable');
       const text = !isOnline
         ? "You're currently offline. Please connect to the internet to use the AI Assistant."
         : status === 429 || errorCode === 'ai_rate_limited'
         ? 'The QuickQueue Assistant is receiving many requests right now. Please wait a moment and try again.'
-        : status === 401
+        : status === 401 || missingSession
           ? 'Your session has expired. Please sign in again, then reopen the QuickQueue Assistant.'
         : errorCode === 'ai_timeout' || axiosError?.code === 'ECONNABORTED' || axiosError?.code === 'ETIMEDOUT'
           ? 'The response is taking longer than expected. Please try again.'
         : status === 502 || status === 503 || status === 504
           ? 'The QuickQueue Assistant is temporarily unavailable. Please try again shortly.'
           : !axiosError?.response
-            ? 'Unable to connect to QuickQueue right now. Please check your connection and try again.'
+            ? "I'm having trouble connecting right now. Please check your connection and try again in a moment."
             : serverMessage || 'The QuickQueue Assistant encountered an unexpected error. Please try again.';
       setDraft(trimmed);
       const retryable = status !== 401 && serverRetryable !== false;
@@ -129,13 +128,15 @@ export function FloatingAiAssistant() {
   const panel = isDark ? '#131E30' : '#FFFFFF';
   const assistantBubble = isDark ? '#1C2B42' : '#F0F5FC';
   const inputBackground = isDark ? '#19263A' : '#F8FAFD';
+  const availabilityLabel = !isOnline ? 'Offline' : availability === 'checking' ? 'Connecting' : availability === 'online' ? 'Online' : availability === 'degraded' ? 'Limited' : availability === 'session' ? 'Sign in required' : 'Unavailable';
+  const availabilityColor = availability === 'online' ? '#20B573' : availability === 'checking' || availability === 'degraded' ? '#E0A128' : '#E05252';
   return <Modal animationType="fade" onRequestClose={() => setIsOpen(false)} transparent visible>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalRoot}>
       <View style={[styles.backdrop, { paddingBottom: insets.bottom + 12, paddingHorizontal: width < 380 ? 10 : 16, paddingTop: insets.top + 12 }]}>
         <View style={[styles.chatWindow, { backgroundColor: panel, borderColor: colors.border, height: Math.min(720, availableHeight) }]}>
           <View style={[styles.header, { backgroundColor: isDark ? '#102851' : '#EAF3FF', borderBottomColor: colors.border }]}>
             <Image accessibilityLabel="QuickQueue AI logo" source={assistantLogo} style={styles.headerLogo} />
-            <View style={styles.headerCopy}><Text numberOfLines={1} style={[styles.headerName, { color: colors.text }]}>QuickQueue Smart Assistant</Text><View style={styles.statusRow}><View style={[styles.statusDot, { backgroundColor: isOnline ? '#20B573' : '#E05252' }]} /><Text style={[styles.statusText, { color: colors.muted }]}>{isOnline ? 'Online' : 'Offline'}</Text></View></View>
+            <View style={styles.headerCopy}><Text numberOfLines={1} style={[styles.headerName, { color: colors.text }]}>QuickQueue Smart Assistant</Text><View style={styles.statusRow}><View style={[styles.statusDot, { backgroundColor: isOnline ? availabilityColor : '#E05252' }]} /><Text style={[styles.statusText, { color: colors.muted }]}>{availabilityLabel}</Text></View></View>
             <Pressable accessibilityLabel="Minimize assistant" hitSlop={10} onPress={() => setIsOpen(false)} style={({ pressed }) => [styles.closeButton, { backgroundColor: isDark ? '#203553' : '#FFFFFF', opacity: pressed ? 0.65 : 1 }]}><Ionicons color={colors.text} name="close" size={22} /></Pressable>
           </View>
           {!isOnline && <View accessibilityLiveRegion="polite" style={styles.offlineBanner}><Ionicons color="#9B3A32" name="cloud-offline-outline" size={18} /><Text style={styles.offlineText}>An internet connection is required to send messages. We’ll reconnect automatically.</Text></View>}

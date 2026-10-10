@@ -93,11 +93,10 @@ def create_appointment(
     if closed_date:
         reason = f" Reason: {closed_date.reason}" if closed_date.reason else ""
         raise ValueError(f"Appointments are unavailable on this date.{reason}")
-    if appointment_date == today and now.time() >= time_slot.start_time:
-        raise ValueError("Booking for this time slot has closed.")
-
     if appointment_date.weekday() >= 5:
         raise ValueError("Regular appointments are available Monday through Friday only.")
+    if appointment_date == today and now.time() >= time_slot.start_time:
+        raise ValueError("Booking for this time slot has closed.")
 
     if check_duplicate_appointment(
         resident,
