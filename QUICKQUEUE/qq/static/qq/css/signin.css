@@ -27,3 +27,6 @@
 .signin-panel::before{display:none}
 
 @media(max-width:760px){.signin-card{background-position:center}.signin-light-art{display:none}.signin-visual{background:#fff url("../images/logincard_02.png") center bottom/cover no-repeat}.signin-panel{background:url("../images/logincard_01.png") center/cover no-repeat}}
+
+.curve-definitions{position:absolute;pointer-events:none}
+.signin-light-art{-webkit-clip-path:url(#loginCurve);clip-path:url(#loginCurve);-webkit-mask-image:none;mask-image:none}
