@@ -3,6 +3,9 @@
 .service-settings-row > span, .service-settings-row label { display: grid; min-width: 0; gap: 6px; }
 .service-settings-row small, .closed-dates small { color: var(--muted); }
 .service-settings-row input { width: 100%; min-width: 0; height: 50px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.service-fee-input::-webkit-inner-spin-button,
+.service-fee-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.service-fee-input { -moz-appearance: textfield; appearance: textfield; }
 .service-settings-row button { height: 50px; }
 .closed-dates button { height: 42px; }
 .service-settings-row button, .closed-dates button { padding: 0 18px; border: 0; border-radius: 8px; background: #1268e8; color: #fff; font-weight: 700; }
