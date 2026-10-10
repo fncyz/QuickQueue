@@ -9,3 +9,12 @@
 @media(prefers-reduced-motion:reduce){.transition-arrival .signin-content>*{animation:none}.signin-submit{transition:none}}
 
 .signin-visual{background-color:#fff;background-position:center bottom;background-size:100% auto}
+
+/* Reference geometry: shallow white S-curve with the form safely inside the blue panel. */
+.signin-card{grid-template-columns:58% 42%}
+.signin-panel{padding-left:12%;padding-right:9%}
+.signin-panel::before{top:0;bottom:-8%;left:-32%;width:36%;border-radius:0 100% 100% 0/0 50% 50% 0}
+
+@media(max-width:1100px){.signin-card{grid-template-columns:56% 44%}.signin-panel{padding-left:11%;padding-right:7%}.signin-panel::before{left:-25%;width:30%}}
+
+@media(max-width:760px){.signin-card{grid-template-columns:1fr}.signin-panel{padding:34px 8% 42px}.signin-panel::before{display:none}}
