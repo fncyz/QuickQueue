@@ -12,6 +12,7 @@ class Service(models.Model):
     class Lifecycle(models.TextChoices):
         SCHEDULED = "scheduled", "Scheduled"
         CANCELLED = "cancelled", "Cancelled"
+        ARCHIVED = "archived", "Archived"
     code = models.CharField(
         max_length=5,
         blank=True,
@@ -102,12 +103,16 @@ class Service(models.Model):
         current_date = timezone.localdate(at) if at else timezone.localdate()
         if self.lifecycle == self.Lifecycle.CANCELLED:
             return "cancelled"
+        if self.lifecycle == self.Lifecycle.ARCHIVED:
+            return "archived"
         if not self.is_active:
             return "deactivated"
         if not self.booking_start_date or not self.booking_end_date:
             return "deactivated"
-        if current_date > self.booking_end_date:
+        if self.event_end_date and current_date > self.event_end_date:
             return "expired"
+        if current_date > self.booking_end_date:
+            return "booking_closed"
         if self.capacity and booking_count is not None and booking_count >= self.capacity:
             return "fully_booked"
         if current_date < self.booking_start_date:
@@ -115,4 +120,15 @@ class Service(models.Model):
         return "ending_soon" if current_date == self.booking_end_date else "active"
 
     def accepts_bookings(self, at=None, booking_count=None):
-        return self.computed_status(at=at, booking_count=booking_count) in {"active", "ending_soon"}
+        current_date = timezone.localdate(at) if at else timezone.localdate()
+        return bool(
+            self.is_temporary
+            and self.is_active
+            and self.lifecycle == self.Lifecycle.SCHEDULED
+            and self.booking_start_date
+            and self.booking_end_date
+            and self.event_end_date
+            and self.booking_start_date <= current_date <= self.booking_end_date
+            and current_date <= self.event_end_date
+            and (not self.capacity or booking_count is None or booking_count < self.capacity)
+        )

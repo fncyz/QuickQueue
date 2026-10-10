@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -33,6 +34,7 @@ def staff_temporary_services(request):
     now = timezone.now()
     records = []
     for offering in offerings:
+        offering.has_booking_history = offering.appointments.exists()
         count = offering.appointments.exclude(status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]).count()
         offering.display_status = offering.computed_status(now, count)
         offering.booking_count = count
@@ -122,6 +124,21 @@ def staff_temporary_service_action(request, pk):
         offering.is_active = False
         offering.save(update_fields=["is_active", "updated_at"])
         messages.success(request, "The event/service is no longer accepting bookings.")
+    elif action == "delete":
+        if offering.appointments.exists():
+            offering.is_active = False
+            offering.lifecycle = Service.Lifecycle.ARCHIVED
+            offering.save(update_fields=["is_active", "lifecycle", "updated_at"])
+            messages.success(request, "The event/service was archived. Booking and QR history were preserved.")
+        else:
+            try:
+                offering.delete()
+                messages.success(request, "The event/service was permanently deleted.")
+            except ProtectedError:
+                offering.is_active = False
+                offering.lifecycle = Service.Lifecycle.ARCHIVED
+                offering.save(update_fields=["is_active", "lifecycle", "updated_at"])
+                messages.success(request, "The event/service was archived because related history must be retained.")
     return redirect("staff_temporary_services")
 
 

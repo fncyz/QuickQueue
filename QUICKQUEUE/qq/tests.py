@@ -493,16 +493,16 @@ class ResidentAppointmentApiTests(APITestCase):
 
     def test_expired_and_cancelled_temporary_services_are_hidden(self):
         today = timezone.localdate()
-        for suffix, lifecycle, end in (
-            ("Expired", Service.Lifecycle.SCHEDULED, today - timedelta(days=1)),
-            ("Cancelled", Service.Lifecycle.CANCELLED, today + timedelta(days=1)),
+        for suffix, lifecycle, booking_end, event_end in (
+            ("Expired", Service.Lifecycle.SCHEDULED, today - timedelta(days=2), today - timedelta(days=1)),
+            ("Cancelled", Service.Lifecycle.CANCELLED, today + timedelta(days=1), today + timedelta(days=2)),
         ):
             Service.objects.create(
                 code="EVT", name=f"Hidden Event {suffix}", description="Hidden",
                 estimated_duration=15, is_temporary=True,
                 temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
-                event_start_date=today + timedelta(days=2), event_end_date=today + timedelta(days=2),
-                booking_start_date=today - timedelta(days=2), booking_end_date=end,
+                event_start_date=event_end, event_end_date=event_end,
+                booking_start_date=today - timedelta(days=2), booking_end_date=booking_end,
                 capacity=10, lifecycle=lifecycle,
             )
         summary = self.client.get("/api/appointments/?summary=1")

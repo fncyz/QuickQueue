@@ -359,7 +359,7 @@ def appointments_api(request):
     services = Service.objects.filter(is_active=True).filter(
         Q(is_temporary=False) |
         Q(is_temporary=True, barangay=resident.barangay, lifecycle=Service.Lifecycle.SCHEDULED,
-          booking_end_date__gte=today)
+          event_end_date__gte=today)
     ).annotate(
         live_booking_count=Count(
             "appointments",
@@ -464,7 +464,7 @@ def appointments_api(request):
             if not service.is_temporary:
                 continue
             service_status = service.computed_status(now, service.live_booking_count)
-            if service_status in {"expired", "cancelled", "deactivated"}:
+            if service_status in {"expired", "cancelled", "deactivated", "archived"}:
                 continue
             resident_booking = EventBooking.objects.filter(
                 appointment__resident=resident, appointment__service=service
@@ -482,7 +482,7 @@ def appointments_api(request):
                 "status": service_status,
                 "capacity": service.capacity,
                 "remaining_capacity": max(service.capacity - service.live_booking_count, 0) if service.capacity else None,
-                "can_book": service_status in {"active", "ending_soon"},
+                "can_book": service.accepts_bookings(now, service.live_booking_count),
                 "is_event": True,
                 "is_special_service": True,
                 "is_booked": resident_booking is not None,
@@ -493,7 +493,7 @@ def appointments_api(request):
                     if line.strip().lstrip("-â€¢").strip()
                 ],
             })
-        priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3}
+        priority = {"ending_soon": 0, "active": 1, "fully_booked": 2, "upcoming": 3, "booking_closed": 4}
         temporary_choices.sort(key=lambda item: (priority.get(item["status"], 9), item["event_start_date"]))
         if request.query_params.get("summary") == "1":
             return Response({"services": service_choices, "temporary_services": temporary_choices, "server_time": now.isoformat()})

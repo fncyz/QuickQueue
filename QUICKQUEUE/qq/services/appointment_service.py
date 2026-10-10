@@ -184,6 +184,8 @@ def create_special_service_booking(resident, service):
         raise ValueError("This Special Service is no longer accepting bookings.")
 
     today = timezone.localdate()
+    if not service.event_end_date or today > service.event_end_date:
+        raise ValueError("This Special Service has expired.")
     if not service.booking_start_date or today < service.booking_start_date:
         raise ValueError("Booking for this Special Service is not yet open.")
     if not service.booking_end_date or today > service.booking_end_date:

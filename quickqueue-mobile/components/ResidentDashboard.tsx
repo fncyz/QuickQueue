@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, AppState, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -23,7 +23,7 @@ const cctcLogo = require('../assets/images/cctc.png');
 const servicesBackground = require('../assets/images/services_bg.png');
 
 type Service = { id: number; name: string };
-type TemporaryService = { id: number; name: string; description: string; type: string; location: string; event_start_date: string; event_end_date: string; booking_start_date: string; booking_end_date: string; status: 'active' | 'ending_soon' | 'upcoming' | 'fully_booked'; capacity: number | null; remaining_capacity: number | null; can_book: boolean; is_event: boolean; is_booked: boolean; event_booking_id: number | null };
+type TemporaryService = { id: number; name: string; description: string; type: string; location: string; event_start_date: string; event_end_date: string; booking_start_date: string; booking_end_date: string; status: 'active' | 'ending_soon' | 'upcoming' | 'fully_booked' | 'booking_closed' | 'expired' | 'cancelled' | 'deactivated' | 'archived'; capacity: number | null; remaining_capacity: number | null; can_book: boolean; is_event: boolean; is_booked: boolean; event_booking_id: number | null };
 type ActiveAppointment = {
   appointment_id: string;
   barangay: string;
@@ -35,6 +35,19 @@ type ActiveAppointment = {
   time_slot: string;
 };
 type DashboardCache = { activeAppointment: ActiveAppointment | null; residentName: string; services: Service[]; temporaryServices?: TemporaryService[]; unreadNotifications: number; username: string };
+
+const manilaDateKey = () => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+};
+
+const safeCachedTemporaryServices = (items: TemporaryService[]) => {
+  const today = manilaDateKey();
+  return items
+    .filter((item) => item.event_end_date >= today && !['expired', 'cancelled', 'deactivated', 'archived'].includes(item.status))
+    .map((item) => ({ ...item, can_book: false }));
+};
 
 const serviceIcon = (name: string): keyof typeof Ionicons.glyphMap => {
   const value = name.toLowerCase();
@@ -57,8 +70,19 @@ export function ResidentDashboard() {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const lastFreshLoad = useRef(0);
   const loadInFlight = useRef(false);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        lastFreshLoad.current = 0;
+        setRefreshRevision((value) => value + 1);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useFocusEffect(useCallback(() => {
     let isActive = true;
@@ -68,7 +92,7 @@ export function ResidentDashboard() {
       try {
       const saved = await readOfflineCache<DashboardCache>('dashboard');
       if (saved && isActive) {
-        setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setTemporaryServices(saved.value.temporaryServices || []); setActiveAppointment(saved.value.activeAppointment);
+        setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setTemporaryServices(safeCachedTemporaryServices(saved.value.temporaryServices || [])); setActiveAppointment(saved.value.activeAppointment);
         const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`);
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
       }
@@ -102,7 +126,7 @@ export function ResidentDashboard() {
     };
     loadDashboard();
     return () => { isActive = false; };
-  }, [isOnline]));
+  }, [isOnline, refreshRevision]));
 
   const filteredServices = useMemo(() => services.filter((item) => item.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())), [serviceSearch, services]);
   const visibleServices = showAllServices || serviceSearch ? filteredServices : filteredServices.slice(0, 3);
