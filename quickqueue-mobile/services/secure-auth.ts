@@ -42,3 +42,11 @@ export const getBiometricStatuses = async () => {
   ]);
   return { fingerprint: fingerprint === "true", face: face === "true" };
 };
+
+export const clearAllBiometricLogin = async () => {
+  await Promise.all([
+    SecureStore.deleteItemAsync(refreshKey),
+    SecureStore.deleteItemAsync(enabledKey("fingerprint")),
+    SecureStore.deleteItemAsync(enabledKey("face")),
+  ]);
+};

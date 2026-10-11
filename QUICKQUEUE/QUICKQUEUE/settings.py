@@ -192,6 +192,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "chat": os.environ.get("CHAT_RATE_LIMIT", "12/min"),
+        "account_deletion": os.environ.get("ACCOUNT_DELETION_RATE_LIMIT", "5/hour"),
     },
 }
 

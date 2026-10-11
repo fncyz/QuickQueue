@@ -96,6 +96,67 @@ class RegistrationSecurityFlowTests(APITestCase):
         self.assertEqual(response.data["security_setup_stage"], "complete")
 
 
+class ResidentAccountDeletionTests(APITestCase):
+    def setUp(self):
+        self.barangay = Barangay.objects.create(
+            name="Deletion Test Barangay",
+            address="Toledo City",
+            contact_number="09120000000",
+        )
+        self.user = User.objects.create_user(
+            username="delete-me",
+            password="StrongPass1!",
+            email="resident@example.com",
+        )
+        self.resident = Resident.objects.create(
+            user=self.user,
+            first_name="Delete",
+            middle_name="My",
+            last_name="Account",
+            birthdate=date(1998, 5, 2),
+            sex=Resident.Sex.FEMALE,
+            email="resident@example.com",
+            contact_number="09990000000",
+            barangay=self.barangay,
+            pin_hash=make_password("4826"),
+            security_setup_stage=Resident.SecuritySetupStage.COMPLETE,
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_password_verification_anonymizes_and_disables_account(self):
+        response = self.client.post(
+            "/api/account/delete/",
+            {"method": "password", "credential": "StrongPass1!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.resident.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+        self.assertFalse(self.user.has_usable_password())
+        self.assertTrue(self.user.username.startswith("deleted-"))
+        self.assertEqual(self.resident.first_name, "Deleted")
+        self.assertEqual(self.resident.last_name, "Resident")
+        self.assertIsNone(self.resident.email)
+        self.assertEqual(self.resident.pin_hash, "")
+        self.assertNotEqual(self.resident.contact_number, "09990000000")
+
+    def test_invalid_pin_leaves_account_unchanged(self):
+        response = self.client.post(
+            "/api/account/delete/",
+            {"method": "pin", "credential": "1111"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.resident.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        self.assertEqual(self.user.username, "delete-me")
+        self.assertEqual(self.resident.first_name, "Delete")
+
+
 class ResidentAppointmentApiTests(APITestCase):
     def setUp(self):
         self.barangay = Barangay.objects.create(

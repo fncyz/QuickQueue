@@ -32,13 +32,14 @@ import logging
 import os
 import re
 import time
+import uuid
 
 from qq.models import Appointment, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
 from qq.gemini_service import GeminiUnavailable, ask_gemini
-from .throttles import ChatRateThrottle
+from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,85 @@ def profile_api(request):
     serializer = ResidentSerializer(resident)
 
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([AccountDeletionRateThrottle])
+def delete_account_api(request):
+    """Reauthenticate and irreversibly remove a resident's login and PII.
+
+    Operational appointment history remains linked to an anonymized resident
+    record so barangay queue and audit reports retain their integrity.
+    """
+    method = str(request.data.get("method", "")).strip().lower()
+    credential = str(request.data.get("credential", ""))
+    if method not in ("password", "pin"):
+        return Response(
+            {"success": False, "message": "Choose password or PIN verification."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        resident = request.user.resident_profile
+    except Resident.DoesNotExist:
+        return Response(
+            {"success": False, "message": "Only resident accounts can be deleted here."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    verified = request.user.check_password(credential) if method == "password" else (
+        credential.isdigit()
+        and len(credential) == 4
+        and bool(resident.pin_hash)
+        and check_password(credential, resident.pin_hash)
+    )
+    if not verified:
+        label = "password" if method == "password" else "PIN"
+        return Response(
+            {"success": False, "message": f"The {label} you entered is incorrect."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    tombstone = uuid.uuid4().hex
+    try:
+        with transaction.atomic():
+            resident = Resident.objects.select_for_update().select_related("user").get(pk=resident.pk)
+            user = resident.user
+
+            # Device registrations and resident-facing messages have no audit
+            # value once the owner is gone. Appointments and queue records do.
+            resident.push_devices.all().delete()
+            resident.notifications.all().delete()
+
+            resident.first_name = "Deleted"
+            resident.middle_name = ""
+            resident.last_name = "Resident"
+            resident.suffix = ""
+            resident.birthdate = date(1900, 1, 1)
+            resident.email = None
+            resident.contact_number = f"del{tombstone[:12]}"
+            resident.province = ""
+            resident.municipality = ""
+            resident.pin_hash = ""
+            resident.security_setup_stage = Resident.SecuritySetupStage.PASSWORD
+            resident.save()
+
+            user.username = f"deleted-{tombstone}"
+            user.first_name = ""
+            user.last_name = ""
+            user.email = ""
+            user.is_active = False
+            user.set_unusable_password()
+            user.save()
+    except (DatabaseError, IntegrityError):
+        logger.exception("Resident account deletion failed", extra={"resident_id": resident.pk})
+        return Response(
+            {"success": False, "message": "Your account could not be deleted. No changes were made."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    return Response({"success": True, "message": "Your account has been successfully deleted."})
 
 @api_view(["POST"])
 def register_api(request):
