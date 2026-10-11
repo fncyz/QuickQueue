@@ -1,4 +1,4 @@
-import axios, { AxiosError } from "axios";
+import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "@/src/config/api";
@@ -15,20 +15,6 @@ export const api = axios.create({
 let refreshInFlight: Promise<string> | null = null;
 
 const requestId = () => `qq-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-const retryDelay = (error: AxiosError, attempt: number) => {
-  const rawRetryAfter = error.response?.headers?.["retry-after"];
-  const retryAfterSeconds = Number(Array.isArray(rawRetryAfter) ? rawRetryAfter[0] : rawRetryAfter);
-  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) return Math.min(retryAfterSeconds * 1000, 4000);
-  return Math.min(600 * 2 ** attempt + Math.random() * 350, 2500);
-};
-
-const isTemporaryFailure = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return false;
-  if (!error.response) return error.code !== "ERR_CANCELED";
-  return [429, 502, 503, 504].includes(error.response.status);
-};
 
 api.interceptors.response.use(
   (response) => response,
@@ -168,23 +154,23 @@ export const getAssistantHealth = async (accessToken: string) => {
 export const sendChatMessage = async (accessToken: string, message: string, history: ChatMessage[]) => {
   const id = requestId();
   const started = Date.now();
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const currentAccessToken = await AsyncStorage.getItem("quickqueue.accessToken") || accessToken;
-      const response = await api.post<ChatResponse>("chat/", {
-        message,
-        history: history.slice(-6),
-      }, {
-        headers: authenticatedHeaders(currentAccessToken, id),
-        timeout: 25000,
-      });
-      return response.data;
-    } catch (error) {
-      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-      console.warn("QuickQueue chat request failed", { attempt: attempt + 1, durationMs: Date.now() - started, location: "chat_api", status: status ?? "network" });
-      if (attempt === 1 || !isTemporaryFailure(error)) throw error;
-      await wait(retryDelay(error as AxiosError, attempt));
-    }
+  try {
+    const currentAccessToken = await AsyncStorage.getItem("quickqueue.accessToken") || accessToken;
+    const response = await api.post<ChatResponse>("chat/", {
+      message,
+      history: history.slice(-6),
+    }, {
+      headers: authenticatedHeaders(currentAccessToken, id),
+      // The backend may try both the primary and fallback AI models before
+      // returning its built-in guidance, so allow that response to complete.
+      timeout: 60000,
+    });
+    return response.data;
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    console.warn("QuickQueue chat request failed", { durationMs: Date.now() - started, location: "chat_api", status: status ?? "network" });
+    // Chat POSTs are intentionally not retried automatically: a late response
+    // plus a retry can generate two answers and consume the rate limit twice.
+    throw error;
   }
-  throw new Error("Chat request retry loop ended unexpectedly");
 };
