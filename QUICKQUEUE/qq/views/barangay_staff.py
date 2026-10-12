@@ -7,6 +7,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+import re
 
 from qq.models import Barangay, BarangayStaff, Notification
 
@@ -91,6 +92,9 @@ def barangay_staff(request):
                 appointment__barangay=barangay,
                 admin_is_read=False,
             ).count(),
+            "staff_add_error": request.session.pop("staff_add_error", ""),
+            "staff_add_success": request.session.pop("staff_add_success", ""),
+            "staff_add_data": request.session.pop("staff_add_data", {}),
         },
     )
 
@@ -112,20 +116,36 @@ def barangay_staff_add(request):
     confirm_password = request.POST.get("confirm_password", "").strip()
     is_active = request.POST.get("is_active") == "on"
 
+    retained_data = {
+        "first_name": first_name,
+        "middle_name": middle_name,
+        "last_name": last_name,
+        "contact_number": contact_number,
+        "username": username,
+    }
+
+    def reject(message):
+        request.session["staff_add_error"] = message
+        request.session["staff_add_data"] = retained_data
+        return redirect("barangay_staff")
+
     if role not in dict(BarangayStaff.Role.choices):
         role = BarangayStaff.Role.STAFF
 
     if not first_name or not last_name or not username or not password or not contact_number:
-        return redirect("barangay_staff")
+        return reject("Complete all required fields before creating the staff account.")
+
+    if not re.fullmatch(r"09\d{9}", re.sub(r"[\s-]", "", contact_number)):
+        return reject("Enter a valid Philippine mobile number beginning with 09 and containing 11 digits.")
 
     if password != confirm_password:
-        return redirect("barangay_staff")
+        return reject("The password and confirmation do not match.")
 
     if len(password) < 6:
-        return redirect("barangay_staff")
+        return reject("The password must contain at least 6 characters.")
 
     if User.objects.filter(username=username).exists():
-        return redirect("barangay_staff")
+        return reject("That username is already in use. Choose a different username.")
 
     with transaction.atomic():
         user = User.objects.create_user(
@@ -150,6 +170,7 @@ def barangay_staff_add(request):
             is_active=is_active,
         )
 
+    request.session["staff_add_success"] = f"{first_name} {last_name} was added successfully."
     return redirect("barangay_staff")
 
 

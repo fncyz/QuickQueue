@@ -307,19 +307,34 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
-    width: min(440px, 100%);
+    width: min(540px, 100%);
     height: 100%;
     background: #fff;
     box-shadow: -18px 0 40px rgba(15, 23, 42, 0.18);
     overflow: hidden;
+    font-family: Poppins, Arial, sans-serif;
+    animation: staff-drawer-in 240ms cubic-bezier(.22, .8, .3, 1) both;
 }
+
+.staff-drawer .staff-modal-backdrop {
+    animation: staff-backdrop-in 200ms ease both;
+}
+
+.staff-drawer.is-closing .staff-drawer-panel { animation: staff-drawer-out 180ms ease both; }
+.staff-drawer.is-closing .staff-modal-backdrop { animation: staff-backdrop-out 180ms ease both; }
+
+@keyframes staff-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes staff-drawer-out { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes staff-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes staff-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
 
 .staff-drawer-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 20px 22px 16px;
+    min-height: 76px;
+    padding: 20px 28px;
     border-bottom: 1px solid #e8eef8;
 }
 
@@ -356,14 +371,21 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    overflow: auto;
-    padding: 8px 22px 22px;
+    overflow: hidden;
+}
+
+.drawer-form-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px 28px 24px;
 }
 
 .form-section {
     display: grid;
-    gap: 14px;
-    padding: 18px 0 8px;
+    gap: 18px;
+    padding: 20px 0 10px;
 }
 
 .form-section h3 {
@@ -374,11 +396,16 @@
 }
 
 .form-section label {
-    display: grid;
-    gap: 7px;
+    display: block;
     color: #4d5d79;
     font-size: 12px;
     font-weight: 600;
+}
+
+.form-section label > input,
+.form-section label > .input-with-icon {
+    display: block;
+    margin-top: 8px;
 }
 
 .form-section .req {
@@ -393,13 +420,13 @@
 .form-row.two {
     display: grid;
     grid-template-columns: 1.2fr 0.8fr;
-    gap: 12px;
+    gap: 16px;
 }
 
 .form-section input {
     width: 100%;
-    height: 42px;
-    padding: 0 12px;
+    height: 48px;
+    padding: 0 14px;
     border: 1px solid #d7e0ef;
     border-radius: 9px;
     background: #fff;
@@ -471,16 +498,39 @@
 }
 
 .field-hint {
-    margin: -4px 0 0;
+    margin: -10px 0 0;
     color: #8a96ad;
     font-size: 11px;
     line-height: 1.4;
 }
 
+.field-error {
+    display: none;
+    margin-top: 6px;
+    color: #c62828;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.field-error:not(:empty) { display: block; }
+.form-section input.is-invalid { border-color: #dc2626; }
+
+.form-alert {
+    margin-top: 14px;
+    padding: 11px 13px;
+    border: 1px solid #fecaca;
+    border-radius: 9px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .info-note {
     display: flex;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: 16px;
     padding: 14px 14px;
     border: 1px solid #cfe0ff;
     border-radius: 10px;
@@ -514,17 +564,21 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    flex: 0 0 auto;
     margin-top: auto;
-    padding-top: 20px;
+    padding: 16px 28px;
+    border-top: 1px solid #e8eef8;
+    background: #fff;
 }
 
 .staff-drawer .btn-cancel {
-    min-height: 40px;
-    padding: 0 16px;
-    border: 1.5px solid #0b5ce9;
+    min-width: 112px;
+    min-height: 44px;
+    padding: 0 20px;
+    border: 1px solid #d7e0ef;
     border-radius: 9px;
     background: #fff;
-    color: #0b5ce9;
+    color: #334155;
     font: 700 12px Poppins, Arial, sans-serif;
     cursor: pointer;
 }
@@ -534,8 +588,9 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 40px;
-    padding: 0 16px;
+    min-width: 150px;
+    min-height: 44px;
+    padding: 0 20px;
     border: 0;
     border-radius: 9px;
     background: #0b5ce9;
@@ -543,6 +598,29 @@
     font: 700 12px Poppins, Arial, sans-serif;
     cursor: pointer;
 }
+
+.staff-drawer .btn-cancel:hover { background: #f8fafc; border-color: #b8c4d6; }
+.btn-create-staff:hover { background: #084fc9; }
+.staff-drawer .modal-close:hover { background: #f1f5f9; color: #0b1f4d; }
+.btn-create-staff:disabled { cursor: wait; opacity: .72; }
+.btn-create-staff.is-loading svg { animation: staff-spin 800ms linear infinite; }
+@keyframes staff-spin { to { transform: rotate(360deg); } }
+
+.staff-toast {
+    position: fixed;
+    z-index: 120;
+    right: 24px;
+    bottom: 24px;
+    max-width: 380px;
+    padding: 13px 17px;
+    border-radius: 10px;
+    background: #0b2454;
+    color: #fff;
+    box-shadow: 0 14px 35px rgba(15, 23, 42, .2);
+    font: 500 12px Poppins, Arial, sans-serif;
+    animation: staff-toast-in 220ms ease both;
+}
+@keyframes staff-toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 .btn-create-staff svg {
     width: 16px;
@@ -697,11 +775,20 @@
     }
 
     .staff-drawer-footer {
-        flex-direction: column-reverse;
+        padding: 14px 18px;
     }
 
     .staff-drawer .btn-cancel,
     .btn-create-staff {
-        width: 100%;
+        width: calc(50% - 5px);
     }
+
+    .staff-drawer-header { padding-inline: 20px; }
+    .drawer-form-content { padding-inline: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .staff-drawer-panel,
+    .staff-drawer .staff-modal-backdrop,
+    .staff-toast { animation-duration: 1ms !important; }
 }

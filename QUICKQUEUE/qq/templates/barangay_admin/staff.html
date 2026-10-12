@@ -214,7 +214,7 @@
 
     <div class="staff-modal staff-drawer" id="add-staff" hidden>
         <div class="staff-modal-backdrop" data-close-modal></div>
-        <aside class="staff-drawer-panel" role="dialog" aria-labelledby="add-staff-title">
+        <aside class="staff-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="add-staff-title">
             <header class="staff-drawer-header">
                 <h2 id="add-staff-title">Add New Staff</h2>
                 <button type="button" class="modal-close" data-close-modal aria-label="Close">
@@ -222,30 +222,36 @@
                 </button>
             </header>
 
-            <form class="staff-drawer-form" method="post" action="{% url 'barangay_staff_add' %}">
+            <form class="staff-drawer-form" method="post" action="{% url 'barangay_staff_add' %}" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="role" value="staff">
                 <input type="hidden" name="is_active" value="on">
+
+                <div class="drawer-form-content">
+                {% if staff_add_error %}<div class="form-alert error" role="alert">{{ staff_add_error }}</div>{% endif %}
 
                 <section class="form-section">
                     <h3>Personal Information</h3>
                     <div class="form-row two">
                         <label>
                             First Name <span class="req">*</span>
-                            <input type="text" name="first_name" placeholder="Enter first name" required>
+                            <input type="text" name="first_name" value="{{ staff_add_data.first_name|default:'' }}" placeholder="Enter first name" required autocomplete="given-name">
+                            <small class="field-error" aria-live="polite"></small>
                         </label>
                         <label>
                             Middle Initial <span class="opt">(Optional)</span>
-                            <input type="text" name="middle_name" maxlength="5" placeholder="M.I.">
+                            <input type="text" name="middle_name" value="{{ staff_add_data.middle_name|default:'' }}" maxlength="5" placeholder="M.I." autocomplete="additional-name">
                         </label>
                     </div>
                     <label>
                         Last Name <span class="req">*</span>
-                        <input type="text" name="last_name" placeholder="Enter last name" required>
+                        <input type="text" name="last_name" value="{{ staff_add_data.last_name|default:'' }}" placeholder="Enter last name" required autocomplete="family-name">
+                        <small class="field-error" aria-live="polite"></small>
                     </label>
                     <label>
                         Contact Number <span class="req">*</span>
-                        <input type="text" name="contact_number" placeholder="09XX XXX XXXX" required>
+                        <input type="tel" name="contact_number" value="{{ staff_add_data.contact_number|default:'' }}" placeholder="09XX XXX XXXX" required inputmode="numeric" autocomplete="tel" pattern="09[0-9]{9}" maxlength="13">
+                        <small class="field-error" aria-live="polite"></small>
                     </label>
                 </section>
 
@@ -255,11 +261,11 @@
                         Username <span class="req">*</span>
                         <span class="input-with-icon">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1-3.4 3.4-5.2 7-5.2s6 1.8 7 5.2"/></svg>
-                            <input type="text" name="username" placeholder="Enter username" required autocomplete="username">
+                            <input type="text" name="username" value="{{ staff_add_data.username|default:'' }}" placeholder="Enter username" required autocomplete="username">
                         </span>
+                        <small class="field-error" aria-live="polite"></small>
                     </label>
-                    <div class="form-row two">
-                        <label>
+                    <label>
                             Password <span class="req">*</span>
                             <span class="input-with-icon has-toggle">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
@@ -268,8 +274,10 @@
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
                             </span>
-                        </label>
-                        <label>
+                        <small class="field-error" aria-live="polite"></small>
+                    </label>
+                    <p class="field-hint">Password must be at least 6 characters long.</p>
+                    <label>
                             Confirm Password <span class="req">*</span>
                             <span class="input-with-icon has-toggle">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
@@ -278,26 +286,28 @@
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
                             </span>
-                        </label>
-                    </div>
-                    <p class="field-hint">Password must be at least 6 characters long.</p>
+                        <small class="field-error" aria-live="polite"></small>
+                    </label>
                 </section>
 
                 <div class="info-note">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8.2v.01M11.2 11h1.6v5H11.2z"/></svg>
                     <p><b>Note:</b> Please provide the username and password to the staff securely. The staff member can change their password anytime through Settings after logging in.</p>
                 </div>
+                </div>
 
                 <footer class="staff-drawer-footer">
                     <button type="button" class="btn-cancel" data-close-modal>Cancel</button>
                     <button type="submit" class="btn-create-staff">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3"/><path d="M3.8 19c.7-3.2 2.7-5 6.2-5s5.5 1.8 6.2 5"/><path d="M18 8v6M15 11h6"/></svg>
-                        Create Staff Account
+                        <span class="button-label">Create Staff</span>
                     </button>
                 </footer>
             </form>
         </aside>
     </div>
+
+    {% if staff_add_success %}<div class="staff-toast" role="status">{{ staff_add_success }}</div>{% endif %}
 
 
     {% for member in staff_page %}
@@ -362,23 +372,102 @@
 
     <script>
         (function () {
+            var addDrawer = document.getElementById("add-staff");
+            var addForm = addDrawer && addDrawer.querySelector(".staff-drawer-form");
+            var initialFormState = addForm ? new FormData(addForm) : null;
+
+            function setPageLocked(locked) {
+                document.body.style.overflow = locked ? "hidden" : "";
+            }
+
             function openModal(id) {
                 document.querySelectorAll(".staff-modal:not([hidden])").forEach(function (modal) {
                     modal.hidden = true;
                 });
                 var el = document.getElementById(id);
-                if (el) el.hidden = false;
+                if (el) {
+                    el.classList.remove("is-closing");
+                    el.hidden = false;
+                    setPageLocked(true);
+                    window.setTimeout(function () {
+                        var firstField = el.querySelector("input:not([type=hidden]), button");
+                        if (firstField) firstField.focus();
+                    }, 50);
+                }
             }
-            function closeModal(el) {
-                var modal = el.closest(".staff-modal");
-                if (modal) modal.hidden = true;
+
+            function formIsDirty() {
+                if (!addForm || !initialFormState) return false;
+                var current = new FormData(addForm);
+                return Array.from(current.entries()).some(function (entry) {
+                    return entry[1] !== initialFormState.get(entry[0]);
+                });
             }
+
+            function closeModal(el, force) {
+                var modal = el.closest ? el.closest(".staff-modal") : el;
+                if (!modal) return;
+                if (!force && modal === addDrawer && formIsDirty() && !window.confirm("Discard the information entered for this staff account?")) return;
+                if (modal.classList.contains("staff-drawer")) {
+                    modal.classList.add("is-closing");
+                    window.setTimeout(function () {
+                        modal.hidden = true;
+                        modal.classList.remove("is-closing");
+                        setPageLocked(false);
+                    }, 180);
+                } else {
+                    modal.hidden = true;
+                    setPageLocked(false);
+                }
+            }
+
+            function showFieldError(input, message) {
+                var label = input.closest("label");
+                var error = label && label.querySelector(".field-error");
+                input.classList.toggle("is-invalid", Boolean(message));
+                input.setAttribute("aria-invalid", message ? "true" : "false");
+                if (error) error.textContent = message || "";
+            }
+
+            function validateAddForm() {
+                var firstInvalid = null;
+                var required = addForm.querySelectorAll("input[required]");
+                required.forEach(function (input) {
+                    var message = input.value.trim() ? "" : "This field is required.";
+                    showFieldError(input, message);
+                    if (message && !firstInvalid) firstInvalid = input;
+                });
+
+                var contact = addForm.elements.contact_number;
+                var normalizedContact = contact.value.replace(/[\s-]/g, "");
+                if (contact.value.trim() && !/^09\d{9}$/.test(normalizedContact)) {
+                    showFieldError(contact, "Enter an 11-digit Philippine mobile number beginning with 09.");
+                    firstInvalid = firstInvalid || contact;
+                } else if (normalizedContact) {
+                    contact.value = normalizedContact;
+                }
+
+                var password = addForm.elements.password;
+                var confirmation = addForm.elements.confirm_password;
+                if (password.value && password.value.length < 6) {
+                    showFieldError(password, "Use at least 6 characters.");
+                    firstInvalid = firstInvalid || password;
+                }
+                if (confirmation.value && confirmation.value !== password.value) {
+                    showFieldError(confirmation, "Passwords do not match.");
+                    firstInvalid = firstInvalid || confirmation;
+                }
+                if (firstInvalid) firstInvalid.focus();
+                return !firstInvalid;
+            }
+
             document.addEventListener("click", function (event) {
                 var toggle = event.target.closest("[data-toggle-password]");
                 if (toggle) {
                     var input = document.getElementById(toggle.getAttribute("data-toggle-password"));
                     if (input) {
                         input.type = input.type === "password" ? "text" : "password";
+                        toggle.setAttribute("aria-label", input.type === "password" ? "Show password" : "Hide password");
                     }
                     return;
                 }
@@ -394,10 +483,30 @@
             document.addEventListener("keydown", function (event) {
                 if (event.key === "Escape") {
                     document.querySelectorAll(".staff-modal:not([hidden])").forEach(function (modal) {
-                        modal.hidden = true;
+                        closeModal(modal);
                     });
                 }
             });
+
+            if (addForm) {
+                addForm.addEventListener("input", function (event) {
+                    if (event.target.matches("input")) showFieldError(event.target, "");
+                });
+                addForm.addEventListener("submit", function (event) {
+                    if (!validateAddForm()) {
+                        event.preventDefault();
+                        return;
+                    }
+                    var submit = addForm.querySelector(".btn-create-staff");
+                    submit.disabled = true;
+                    submit.classList.add("is-loading");
+                    submit.querySelector(".button-label").textContent = "Creating…";
+                });
+            }
+
+            {% if staff_add_error %}openModal("add-staff");{% endif %}
+            var toast = document.querySelector(".staff-toast");
+            if (toast) window.setTimeout(function () { toast.remove(); }, 4500);
         })();
     </script>
 </body>
