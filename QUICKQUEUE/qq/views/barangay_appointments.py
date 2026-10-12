@@ -93,14 +93,11 @@ def barangay_appointments(request):
     today = timezone.localdate()
 
     base = Appointment.objects.filter(barangay=barangay).select_related(
-        "resident", "service", "time_slot"
+        "resident", "service", "time_slot", "event_booking"
     )
 
     today_qs = base.filter(appointment_date=today).exclude(
         status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
-    )
-    pending_qs = today_qs.filter(status=Appointment.Status.PENDING).order_by(
-        "time_slot__start_time", "created_at"
     )
     confirmed_qs = today_qs.filter(
         status__in=[Appointment.Status.CONFIRMED, Appointment.Status.ONGOING, Appointment.Status.COMPLETED]
@@ -115,9 +112,16 @@ def barangay_appointments(request):
     service_id = request.GET.get("service", "")
     status_filter = request.GET.get("status", "")
 
-    filtered_confirmed = confirmed_qs
+    regular_qs = base.filter(service__is_temporary=False).order_by(
+        "-appointment_date", "time_slot__start_time", "queue_number"
+    )
+    special_qs = base.filter(service__is_temporary=True).order_by(
+        "-appointment_date", "-created_at"
+    )
+
+    filtered_regular = regular_qs
     if search:
-        filtered_confirmed = filtered_confirmed.filter(
+        filtered_regular = filtered_regular.filter(
             Q(resident__first_name__icontains=search)
             | Q(resident__last_name__icontains=search)
             | Q(service__name__icontains=search)
@@ -125,19 +129,18 @@ def barangay_appointments(request):
             | Q(queue_number__icontains=search)
         )
     if slot_id.isdigit():
-        filtered_confirmed = filtered_confirmed.filter(time_slot_id=int(slot_id))
+        filtered_regular = filtered_regular.filter(time_slot_id=int(slot_id))
     if service_id.isdigit():
-        filtered_confirmed = filtered_confirmed.filter(service_id=int(service_id))
+        filtered_regular = filtered_regular.filter(service_id=int(service_id))
     if status_filter in dict(Appointment.Status.choices):
-        filtered_confirmed = filtered_confirmed.filter(status=status_filter)
+        filtered_regular = filtered_regular.filter(status=status_filter)
 
-    show_all_confirmed = request.GET.get("confirmed") == "all"
-    show_all_upcoming = request.GET.get("upcoming") == "all"
-    confirmed_list = list(filtered_confirmed if show_all_confirmed else filtered_confirmed[:5])
-    upcoming_list = list(upcoming_qs if show_all_upcoming else upcoming_qs[:5])
-    pending_list = list(pending_qs)
+    show_all_regular = request.GET.get("regular") == "all"
+    show_all_special = request.GET.get("special") == "all"
+    regular_list = list(filtered_regular if show_all_regular else filtered_regular[:5])
+    special_list = list(special_qs if show_all_special else special_qs[:5])
 
-    for appointment in pending_list + confirmed_list + upcoming_list:
+    for appointment in regular_list + special_list:
         appointment.queue_series = _queue_series(appointment.queue_number)
 
     return render(
@@ -148,23 +151,19 @@ def barangay_appointments(request):
             "barangay": barangay,
             "today": today,
             "today_total": today_qs.count(),
-            "pending_count": pending_qs.count(),
+            "pending_count": today_qs.filter(status=Appointment.Status.PENDING).count(),
             "confirmed_count": confirmed_qs.count(),
             "upcoming_count": upcoming_qs.count(),
-            "pending_appointments": pending_list,
-            "confirmed_appointments": confirmed_list,
-            "confirmed_total_filtered": filtered_confirmed.count(),
-            "upcoming_appointments": upcoming_list,
-            "show_all_confirmed": show_all_confirmed,
-            "show_all_upcoming": show_all_upcoming,
-            "slot_availability": _slot_availability(barangay, today),
-            "services": Service.objects.filter(is_active=True).order_by("name"),
+            "regular_count": regular_qs.count(),
+            "special_count": special_qs.count(),
+            "regular_appointments": regular_list,
+            "regular_total_filtered": filtered_regular.count(),
+            "special_appointments": special_list,
+            "show_all_regular": show_all_regular,
+            "show_all_special": show_all_special,
+            "services": Service.objects.filter(is_active=True, is_temporary=False).order_by("name"),
             "time_slots": TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"),
-            "status_choices": [
-                (Appointment.Status.CONFIRMED, "Confirmed"),
-                (Appointment.Status.ONGOING, "Ongoing"),
-                (Appointment.Status.COMPLETED, "Completed"),
-            ],
+            "status_choices": Appointment.Status.choices,
             "filters": {
                 "q": search,
                 "time_slot": slot_id,
@@ -200,6 +199,14 @@ def barangay_confirm_appointment(request, pk):
     appointment.status = Appointment.Status.CONFIRMED
     appointment.save(update_fields=["status", "updated_at"])
 
+    if appointment.time_slot:
+        schedule_text = (
+            f" ({appointment.time_slot.start_time.strftime('%I:%M %p')} - "
+            f"{appointment.time_slot.end_time.strftime('%I:%M %p')})"
+        )
+    else:
+        schedule_text = ""
+
     Notification.objects.create(
         resident=appointment.resident,
         appointment=appointment,
@@ -207,9 +214,7 @@ def barangay_confirm_appointment(request, pk):
         title="Appointment Confirmed",
         message=(
             f"Your appointment for {appointment.service.name} on "
-            f"{appointment.appointment_date} "
-            f"({appointment.time_slot.start_time.strftime('%I:%M %p')} - "
-            f"{appointment.time_slot.end_time.strftime('%I:%M %p')}) "
+            f"{appointment.appointment_date}{schedule_text} "
             f"has been confirmed. Queue number: {appointment.queue_number}."
         ),
     )
