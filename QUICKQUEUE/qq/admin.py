@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import (Barangay, Service, Resident,
+from .models import (AssistantKnowledge, Barangay, ChatFeedback, ChatQuestionTopic, Service, Resident,
                      Appointment, QueueTicket, Notification, TimeSlot,
                      BarangayAdminRegistration, BarangayStaff, DocumentTemplate, GeneratedDocument)
 from django.utils import timezone
@@ -232,3 +232,23 @@ class DocumentTemplateAdmin(admin.ModelAdmin):
 class GeneratedDocumentAdmin(admin.ModelAdmin):
     list_display = ("ticket", "template", "status", "generated_at", "archived_at")
     list_filter = ("status",)
+
+
+@admin.register(AssistantKnowledge)
+class AssistantKnowledgeAdmin(admin.ModelAdmin):
+    list_display = ("title", "barangay", "is_approved", "updated_at")
+    list_filter = ("is_approved", "barangay")
+    search_fields = ("title", "content", "keywords")
+
+
+@admin.register(ChatQuestionTopic)
+class ChatQuestionTopicAdmin(admin.ModelAdmin):
+    list_display = ("example_question", "count", "unanswered_count", "last_asked_at")
+    readonly_fields = ("normalized_question", "example_question", "count", "unanswered_count", "last_asked_at")
+
+
+@admin.register(ChatFeedback)
+class ChatFeedbackAdmin(admin.ModelAdmin):
+    list_display = ("message", "helpful", "created_at")
+    list_filter = ("helpful",)
+    readonly_fields = ("message", "resident", "helpful", "created_at", "updated_at")

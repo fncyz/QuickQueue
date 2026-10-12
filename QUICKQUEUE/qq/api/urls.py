@@ -24,6 +24,8 @@ from .views import (
     push_devices_api,
     chat_api,
     chat_health_api,
+    chat_feedback_api,
+    chat_session_api,
     event_booking_pass_api,
 )
 
@@ -50,6 +52,8 @@ urlpatterns = [
     path("push-devices/", push_devices_api, name="api_push_devices"),
     path("chat/", chat_api, name="api_chat"),
     path("chat/health/", chat_health_api, name="api_chat_health"),
+    path("chat/sessions/<uuid:session_id>/", chat_session_api, name="api_chat_session"),
+    path("chat/messages/<int:message_id>/feedback/", chat_feedback_api, name="api_chat_feedback"),
     path("document-templates/", document_templates_api, name="api_document_templates"),
     path("document-templates/<int:pk>/", document_template_detail_api, name="api_document_template_detail"),
 ]

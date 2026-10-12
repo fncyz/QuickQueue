@@ -1,8 +1,10 @@
 import logging
 import os
+import time
 
 
 logger = logging.getLogger(__name__)
+_health_cache = {"checked_at": 0.0, "model": None}
 
 
 class GeminiUnavailable(Exception):
@@ -96,6 +98,7 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
             retryable=False,
         )
 
+    attempts = max(1, min(int(os.getenv("GEMINI_RETRY_ATTEMPTS", "2")), 3))
     client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
@@ -103,12 +106,13 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
             # the mobile and serverless request deadlines are reached.
             timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "10000")),
             retry_options=types.HttpRetryOptions(
-                attempts=int(os.getenv("GEMINI_RETRY_ATTEMPTS", "2")),
+                attempts=attempts,
                 initial_delay=0.5,
                 max_delay=2.0,
                 exp_base=2.0,
                 jitter=0.25,
-                http_status_codes=[408, 429, 500, 502, 503, 504],
+                # Never retry authentication, quota/rate-limit, or invalid-model failures.
+                http_status_codes=[408, 500, 502, 503, 504],
             ),
         ),
     )
@@ -129,29 +133,24 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
 
     for index, model in enumerate(models):
         try:
-            for output_limit in (1200, 1800):
-                response = client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        max_output_tokens=output_limit,
-                        temperature=0.2,
-                    ),
-                )
-                text = (response.text or "").strip()
-                candidates = getattr(response, "candidates", None) or []
-                finish_reason = str(getattr(candidates[0], "finish_reason", "")) if candidates else ""
-                was_truncated = "MAX_TOKENS" in finish_reason.upper()
-                if text and not was_truncated:
-                    if index:
-                        logger.info("Gemini fallback model succeeded: %s", model)
-                    return text
-                if was_truncated and output_limit == 1200:
-                    logger.info("Gemini output reached its token limit; retrying with a larger limit")
-                    continue
-                if text:
-                    raise GeminiUnavailable("Gemini returned an incomplete response.", code="ai_incomplete")
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    max_output_tokens=1400,
+                    temperature=0.2,
+                ),
+            )
+            text = (response.text or "").strip()
+            candidates = getattr(response, "candidates", None) or []
+            finish_reason = str(getattr(candidates[0], "finish_reason", "")) if candidates else ""
+            if text and "MAX_TOKENS" not in finish_reason.upper():
+                if index:
+                    logger.info("Gemini fallback model succeeded: %s", model)
+                return text
+            if text:
+                raise GeminiUnavailable("Gemini returned an incomplete response.", code="ai_incomplete")
             last_error = GeminiUnavailable("Gemini returned no response.")
         except errors.APIError as error:
             last_error = error
@@ -207,3 +206,32 @@ def ask_gemini(message, database_context="No authenticated QuickQueue record con
     raise GeminiUnavailable(
         "The AI provider is temporarily unavailable.", code="ai_provider_unavailable"
     ) from last_error
+
+
+def check_gemini_ready():
+    """Validate credentials and the configured model, cached to avoid hot-path API traffic."""
+    try:
+        from google import genai
+        from google.genai import errors, types
+    except ImportError as error:
+        raise GeminiUnavailable("The AI SDK is not installed.", code="ai_configuration", retryable=False) from error
+    api_key = os.getenv("GEMINI_API_KEY")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    if not api_key:
+        raise GeminiUnavailable("The AI service is not configured.", code="ai_configuration", retryable=False)
+    now = time.monotonic()
+    if _health_cache["model"] == model and now - _health_cache["checked_at"] < 300:
+        return
+    try:
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=5000))
+        client.models.get(model=model)
+    except errors.APIError as error:
+        code = int(getattr(error, "code", 500) or 500)
+        if code in (400, 401, 403, 404):
+            raise GeminiUnavailable("AI credentials or model were rejected.", code="ai_configuration", retryable=False) from error
+        if code == 429:
+            raise GeminiUnavailable("AI quota is currently unavailable.", code="ai_rate_limited", http_status=429, retryable=False) from error
+        raise GeminiUnavailable("AI provider health check failed.", code="ai_unavailable") from error
+    except Exception as error:
+        raise GeminiUnavailable("AI provider health check failed.", code="ai_connection") from error
+    _health_cache.update(checked_at=now, model=model)

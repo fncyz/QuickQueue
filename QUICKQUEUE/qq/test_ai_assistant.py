@@ -169,14 +169,37 @@ class AiAssistantApiTests(APITestCase):
         self.assertIn("multiple active appointments", response.data["reply"])
         self.assertIn("Which appointment", response.data["reply"])
 
-    @patch.dict("os.environ", {"GEMINI_API_KEY": "configured-for-test"})
-    def test_authenticated_chat_health_checks_dependencies_without_calling_gemini(self):
+    @patch("qq.api.views.check_gemini_ready")
+    def test_authenticated_chat_health_checks_dependencies_without_calling_gemini(self, mocked_health):
         with patch("qq.api.views.ask_gemini") as mocked_gemini:
             response = self.client.get(reverse("api_chat_health"), HTTP_X_REQUEST_ID="health-test")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "ready")
         mocked_gemini.assert_not_called()
+        mocked_health.assert_called_once()
+
+    @patch("qq.api.views.ask_gemini", return_value="Follow-up answer")
+    def test_chat_session_memory_is_owned_and_clearable(self, mocked_gemini):
+        first = self.client.post(self.url, {"message": "How do I book?"}, format="json")
+        second = self.client.post(self.url, {
+            "message": "What happens next?", "session_id": first.data["session_id"],
+        }, format="json")
+
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(mocked_gemini.call_args.args[2][-2]["text"], "How do I book?")
+        clear = self.client.delete(reverse("api_chat_session", args=[first.data["session_id"]]))
+        self.assertEqual(clear.status_code, 204)
+
+    @patch("qq.api.views.ask_gemini", return_value="A useful answer")
+    def test_feedback_is_limited_to_the_residents_assistant_message(self, _mocked_gemini):
+        chat = self.client.post(self.url, {"message": "What services are available?"}, format="json")
+        response = self.client.post(
+            reverse("api_chat_feedback", args=[chat.data["message_id"]]),
+            {"helpful": True}, format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["saved"])
 
     @patch("qq.api.views._chat_database_context", side_effect=DatabaseError("stale connection"))
     def test_chat_returns_retryable_database_failure_without_exposing_details(self, _mocked_context):

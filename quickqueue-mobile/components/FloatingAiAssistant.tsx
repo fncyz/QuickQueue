@@ -9,12 +9,12 @@ import { Text, TextInput } from '@/components/Typography';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
-import { getAssistantHealth, sendChatMessage } from '@/services/api';
+import { clearChatSession, getAssistantHealth, sendChatFeedback, sendChatMessage } from '@/services/api';
 
 const assistantLogo = require('../assets/images/qq-ai.png');
 const assistantBlue = '#0759D9';
 const suggestions = ['Requirements for Clearance', 'Service Fees', 'Office Hours', 'Book an Appointment', 'Queue Status'] as const;
-type Message = { id: string; retryText?: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
+type Message = { feedback?: boolean; id: string; messageId?: number; retryText?: string; role: 'assistant' | 'resident'; suggestions?: readonly string[]; text: string; time: string };
 const timeNow = () => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
 
 type Availability = 'checking' | 'online' | 'degraded' | 'unavailable' | 'session';
@@ -27,6 +27,7 @@ export function FloatingAiAssistant() {
   const scrollRef = useRef<ScrollView>(null);
   const nextId = useRef(1);
   const sendInFlight = useRef(false);
+  const sessionId = useRef<string | undefined>(undefined);
   const [isOpen, setIsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [availability, setAvailability] = useState<Availability>('checking');
@@ -76,10 +77,12 @@ export function FloatingAiAssistant() {
     try {
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) throw new Error('Missing resident session');
-      const result = await sendChatMessage(accessToken, trimmed, history);
+      const result = await sendChatMessage(accessToken, trimmed, history, sessionId.current);
+      sessionId.current = result.session_id;
       setAvailability(result.service_status === 'degraded' || result.fallback ? 'degraded' : 'online');
       setMessages((current) => [...current, {
         id: `assistant-${nextId.current++}`,
+        messageId: result.message_id,
         role: 'assistant',
         suggestions: result.suggestions,
         text: result.reply,
@@ -121,6 +124,25 @@ export function FloatingAiAssistant() {
     }
   };
 
+  const clearConversation = async () => {
+    if (sendInFlight.current) return;
+    const currentSession = sessionId.current;
+    sessionId.current = undefined;
+    setMessages([{ id: `assistant-welcome-${nextId.current++}`, role: 'assistant', suggestions, text: 'Hello! I’m the QuickQueue AI Assistant. How can I help you today?', time: timeNow() }]);
+    if (!currentSession) return;
+    const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
+    if (accessToken) clearChatSession(accessToken, currentSession).catch(() => undefined);
+  };
+
+  const giveFeedback = async (id: string, messageId: number, helpful: boolean) => {
+    const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
+    if (!accessToken) return;
+    try {
+      await sendChatFeedback(accessToken, messageId, helpful);
+      setMessages((current) => current.map((item) => item.id === id ? { ...item, feedback: helpful } : item));
+    } catch { /* Feedback is optional and must not interrupt chat. */ }
+  };
+
   if (!isOpen) return <Pressable accessibilityHint="Opens the QuickQueue Smart Assistant" accessibilityLabel="Open QuickQueue Smart Assistant" accessibilityRole="button" onPress={() => setIsOpen(true)} style={({ pressed }) => [styles.button, { bottom: insets.bottom + 101, height: size, opacity: pressed ? 0.82 : 1, right: Math.max(18, width * 0.045), transform: [{ scale: pressed ? 0.96 : 1 }], width: size }]}>
     <Image source={assistantLogo} resizeMode="contain" style={[styles.logo, { height: size - 8, width: size - 8 }]} />
   </Pressable>;
@@ -137,12 +159,13 @@ export function FloatingAiAssistant() {
           <View style={[styles.header, { backgroundColor: isDark ? '#102851' : '#EAF3FF', borderBottomColor: colors.border }]}>
             <Image accessibilityLabel="QuickQueue AI logo" source={assistantLogo} style={styles.headerLogo} />
             <View style={styles.headerCopy}><Text numberOfLines={1} style={[styles.headerName, { color: colors.text }]}>QuickQueue Smart Assistant</Text><View style={styles.statusRow}><View style={[styles.statusDot, { backgroundColor: isOnline ? availabilityColor : '#E05252' }]} /><Text style={[styles.statusText, { color: colors.muted }]}>{availabilityLabel}</Text></View></View>
+            <Pressable accessibilityLabel="Clear conversation" hitSlop={8} onPress={clearConversation} style={({ pressed }) => [styles.headerAction, { opacity: pressed ? 0.6 : 1 }]}><Ionicons color={colors.muted} name="trash-outline" size={18} /></Pressable>
             <Pressable accessibilityLabel="Minimize assistant" hitSlop={10} onPress={() => setIsOpen(false)} style={({ pressed }) => [styles.closeButton, { backgroundColor: isDark ? '#203553' : '#FFFFFF', opacity: pressed ? 0.65 : 1 }]}><Ionicons color={colors.text} name="close" size={22} /></Pressable>
           </View>
           {!isOnline && <View accessibilityLiveRegion="polite" style={styles.offlineBanner}><Ionicons color="#9B3A32" name="cloud-offline-outline" size={18} /><Text style={styles.offlineText}>An internet connection is required to send messages. We’ll reconnect automatically.</Text></View>}
           <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.conversation} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })} ref={scrollRef} showsVerticalScrollIndicator={false}>
             {visibleMessages.map((message, index) => <View key={message.id}>
-              <MessageBubble assistantBubble={assistantBubble} colors={colors} message={message} />
+              <MessageBubble assistantBubble={assistantBubble} colors={colors} message={message} onFeedback={giveFeedback} />
               {message.role === 'assistant' && index === visibleMessages.length - 1 && message.suggestions?.length && <View onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} style={[styles.suggestionsCard, { backgroundColor: inputBackground, borderColor: colors.border }]}><Text style={[styles.suggestionsTitle, { color: colors.text }]}>{message.retryText ? 'Message not sent' : 'Suggested Questions'}</Text><View style={styles.suggestionList}>{message.suggestions.map((suggestion) => <Pressable accessibilityRole="button" disabled={!isOnline || isSending} key={`${message.id}-${suggestion}`} onPress={() => send(message.retryText || suggestion, Boolean(message.retryText))} style={({ pressed }) => [styles.suggestion, { backgroundColor: panel, borderColor: isOnline ? '#B8D3FA' : colors.border, opacity: !isOnline || isSending ? 0.45 : pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: isOnline ? colors.accent : colors.muted }]}>{suggestion}</Text></Pressable>)}</View></View>}
             </View>)}
             {isSending && <View accessibilityLabel="QuickQueue Assistant is typing" accessibilityLiveRegion="polite" style={styles.typingRow}><Image source={assistantLogo} style={styles.messageAvatar} /><View style={[styles.typingBubble, { backgroundColor: assistantBubble }]}><QuickQueueLoadingIndicator size={34} /></View></View>}
@@ -157,9 +180,9 @@ export function FloatingAiAssistant() {
   </Modal>;
 }
 
-function MessageBubble({ assistantBubble, colors, message }: { assistantBubble: string; colors: { muted: string; text: string }; message: Message }) {
+function MessageBubble({ assistantBubble, colors, message, onFeedback }: { assistantBubble: string; colors: { muted: string; text: string }; message: Message; onFeedback: (id: string, messageId: number, helpful: boolean) => void }) {
   const resident = message.role === 'resident';
-  return <View style={[styles.messageRow, resident && styles.residentRow]}>{!resident && <Image source={assistantLogo} style={styles.messageAvatar} />}<View style={styles.messageContent}><View style={[styles.messageBubble, resident ? styles.residentBubble : { backgroundColor: assistantBubble }]}><Text style={[styles.messageText, { color: resident ? '#FFFFFF' : colors.text }]}>{message.text}</Text></View><Text style={[styles.timestamp, { color: colors.muted }, resident && styles.residentTimestamp]}>{message.time}</Text></View></View>;
+  return <View style={[styles.messageRow, resident && styles.residentRow]}>{!resident && <Image source={assistantLogo} style={styles.messageAvatar} />}<View style={styles.messageContent}><View style={[styles.messageBubble, resident ? styles.residentBubble : { backgroundColor: assistantBubble }]}><Text style={[styles.messageText, { color: resident ? '#FFFFFF' : colors.text }]}>{message.text}</Text></View><View style={styles.messageMeta}><Text style={[styles.timestamp, { color: colors.muted }, resident && styles.residentTimestamp]}>{message.time}</Text>{!resident && message.messageId && <View style={styles.feedbackRow}><Pressable accessibilityLabel="Helpful response" onPress={() => onFeedback(message.id, message.messageId!, true)}><Ionicons color={message.feedback === true ? '#20B573' : colors.muted} name={message.feedback === true ? 'thumbs-up' : 'thumbs-up-outline'} size={13} /></Pressable><Pressable accessibilityLabel="Not helpful response" onPress={() => onFeedback(message.id, message.messageId!, false)}><Ionicons color={message.feedback === false ? '#E05252' : colors.muted} name={message.feedback === false ? 'thumbs-down' : 'thumbs-down-outline'} size={13} /></Pressable></View>}</View></View></View>;
 }
 
 const styles = StyleSheet.create({
@@ -171,10 +194,12 @@ const styles = StyleSheet.create({
   headerLogo: { borderRadius: 23, height: 46, width: 46 }, headerCopy: { flex: 1, marginLeft: 10, minWidth: 0 }, headerName: { fontSize: 14, fontWeight: '700' },
   statusRow: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 3 }, statusDot: { borderRadius: 5, height: 8, width: 8 }, statusText: { fontSize: 11 },
   closeButton: { alignItems: 'center', borderRadius: 18, height: 36, justifyContent: 'center', marginLeft: 8, width: 36 },
+  headerAction: { alignItems: 'center', height: 36, justifyContent: 'center', width: 32 },
   offlineBanner: { alignItems: 'center', backgroundColor: '#FFF0ED', flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 9 }, offlineText: { color: '#7B302A', flex: 1, fontSize: 10, lineHeight: 15 },
   conversation: { paddingBottom: 14, paddingHorizontal: 14, paddingTop: 16 }, messageRow: { alignItems: 'flex-start', flexDirection: 'row', marginBottom: 13, maxWidth: '88%' }, residentRow: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
   messageAvatar: { borderRadius: 16, height: 30, marginRight: 7, marginTop: 2, width: 30 }, messageContent: { flexShrink: 1 }, messageBubble: { borderRadius: 16, borderTopLeftRadius: 5, paddingHorizontal: 13, paddingVertical: 10 }, residentBubble: { backgroundColor: assistantBlue, borderRadius: 16, borderTopRightRadius: 5 }, messageText: { fontSize: 12, lineHeight: 18 }, timestamp: { fontSize: 9, marginTop: 4 }, residentTimestamp: { textAlign: 'right' },
   suggestionsCard: { borderRadius: 15, borderWidth: 1, marginBottom: 16, marginLeft: 37, padding: 11 }, suggestionsTitle: { fontSize: 11, fontWeight: '700', marginBottom: 9 }, suggestionList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, suggestion: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 7 }, suggestionText: { fontSize: 9, fontWeight: '600' },
+  messageMeta: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, feedbackRow: { flexDirection: 'row', gap: 10, marginLeft: 12, marginTop: 4 },
   typingRow: { alignItems: 'center', flexDirection: 'row', marginBottom: 13 }, typingBubble: { alignItems: 'center', borderRadius: 16, borderTopLeftRadius: 5, flexDirection: 'row', height: 44, paddingHorizontal: 12 },
   composer: { alignItems: 'center', borderTopWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 }, input: { borderRadius: 13, borderWidth: 1, flex: 1, fontSize: 12, height: 46, paddingHorizontal: 13, paddingVertical: 9 }, sendButton: { alignItems: 'center', backgroundColor: assistantBlue, borderRadius: 13, height: 46, justifyContent: 'center', width: 46 },
 });

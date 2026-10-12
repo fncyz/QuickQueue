@@ -12,3 +12,4 @@ from .generated_document import GeneratedDocument
 from .push_device import PushDevice, PushDelivery
 from .event_booking import EventBooking
 from .booking_configuration import BarangayServiceConfiguration, ClosedAppointmentDate
+from .ai_assistant import AssistantKnowledge, ChatFeedback, ChatMessage, ChatQuestionTopic, ChatSession

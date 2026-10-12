@@ -34,11 +34,11 @@ import re
 import time
 import uuid
 
-from qq.models import Appointment, BarangayServiceConfiguration, BarangayStaff, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, AssistantKnowledge, BarangayServiceConfiguration, BarangayStaff, ChatFeedback, ChatMessage, ChatQuestionTopic, ChatSession, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
-from qq.gemini_service import GeminiUnavailable, ask_gemini
+from qq.gemini_service import GeminiUnavailable, ask_gemini, check_gemini_ready
 from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 
 
@@ -960,11 +960,35 @@ def _chat_database_context(resident):
     services = Service.objects.filter(
         Q(is_temporary=False) | Q(barangay=resident.barangay), is_active=True
     ).order_by("name")
-    service_lines = [
-        f"- {service.name}: requirements={service.requirements.strip() or 'not recorded'}; "
-        f"estimated processing duration={service.estimated_duration} minutes"
-        for service in services
-    ]
+    configurations = {
+        item.service_id: item for item in BarangayServiceConfiguration.objects.filter(
+            barangay=resident.barangay, is_active=True
+        )
+    }
+    service_lines = []
+    for service in services:
+        configuration = configurations.get(service.pk)
+        duration = configuration.estimated_duration if configuration else service.estimated_duration
+        fee = configuration.fee if configuration else None
+        details = (
+            f"- {service.name}: description={service.description.strip() or 'not recorded'}; "
+            f"requirements={service.requirements.strip() or 'not recorded'}; "
+            f"fee={'PHP ' + format(fee, '.2f') if fee is not None else 'not recorded'}; "
+            f"estimated processing duration={duration} minutes"
+        )
+        if service.is_temporary:
+            details += (
+                f"; kind={service.get_temporary_type_display()}; location={service.location or 'not recorded'}; "
+                f"event dates={service.event_start_date or 'not recorded'} to {service.event_end_date or 'not recorded'}; "
+                f"booking period={service.booking_start_date or 'not recorded'} to {service.booking_end_date or 'not recorded'}; "
+                f"booking status={service.computed_status()}"
+            )
+        service_lines.append(details)
+
+    knowledge = AssistantKnowledge.objects.filter(
+        Q(barangay__isnull=True) | Q(barangay=resident.barangay), is_approved=True
+    )
+    knowledge_lines = [f"- {item.title}: {item.content}" for item in knowledge[:20]]
     recent_notifications = resident.notifications.order_by("-created_at")[:3]
     notification_lines = [
         f"- {item.title}: {item.message} (read={'yes' if item.is_read else 'no'})"
@@ -1034,8 +1058,10 @@ def _chat_database_context(resident):
         *(service_lines or ["- No active services are currently recorded."]),
         "Recent QuickQueue notifications:",
         *(notification_lines or ["- No recent notifications are recorded."]),
+        "Approved QuickQueue knowledge:",
+        *(knowledge_lines or ["- No additional approved knowledge is recorded."]),
         f"QuickQueue office hours: {settings.QUICKQUEUE_OFFICE_HOURS}",
-        "Exact fees and unlisted availability are not present in this context.",
+        "Any fact marked not recorded must not be guessed.",
     ])
     return context, appointment, active_appointments
 
@@ -1079,7 +1105,7 @@ def _built_in_chat_reply(message, resident, appointment):
         return "Open the Queue tab, find Appointment Actions, and tap Check In. Wait for QuickQueue to confirm that staff were notified."
     if "cancel" in text:
         if (appointment.status in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED)
-                and appointment.appointment_date >= timezone.localdate()):
+                and (appointment.appointment_date is None or appointment.appointment_date >= timezone.localdate())):
             return "You can cancel this appointment from the Queue or Transactions tab. Open the appointment, tap Cancel Appointment, and confirm."
         return f"According to your QuickQueue record, this appointment is {appointment.get_status_display()} and can no longer be cancelled in the app. Contact barangay staff if you need help."
     if any(word in text for word in ("queue", "number", "wait", "status", "track")):
@@ -1162,6 +1188,31 @@ def _format_chat_instructions(reply):
     return re.sub(r"\s+(?=\d+[.)]\s)", "\n\n", reply).strip()
 
 
+def _record_question_topic(message, unanswered=False):
+    """Group close wording variants without treating resident text as knowledge."""
+    normalized = " ".join(re.findall(r"[a-z0-9]+", message.lower()))[:500]
+    if not normalized:
+        return
+    topic = ChatQuestionTopic.objects.filter(normalized_question=normalized).first()
+    if topic is None:
+        for candidate in ChatQuestionTopic.objects.order_by("-last_asked_at")[:100]:
+            if SequenceMatcher(None, normalized, candidate.normalized_question).ratio() >= 0.86:
+                topic = candidate
+                break
+    if topic is None:
+        ChatQuestionTopic.objects.create(
+            normalized_question=normalized,
+            example_question=message[:500],
+            unanswered_count=int(unanswered),
+        )
+        return
+    ChatQuestionTopic.objects.filter(pk=topic.pk).update(
+        count=F("count") + 1,
+        unanswered_count=F("unanswered_count") + int(unanswered),
+        last_asked_at=timezone.now(),
+    )
+
+
 def _chat_suggestions(message, reply, appointment):
     text = f"{message} {reply}".lower()
     if appointment and hasattr(appointment, "event_booking"):
@@ -1200,14 +1251,16 @@ def chat_health_api(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    if not os.getenv("GEMINI_API_KEY"):
+    try:
+        check_gemini_ready()
+    except GeminiUnavailable as error:
         logger.error(
-            "chat_health request_id=%s status=503 category=ai_configuration duration_ms=%d",
-            request_id, int((time.monotonic() - started) * 1000),
+            "chat_health request_id=%s status=%d category=%s duration_ms=%d",
+            request_id, error.http_status, error.code, int((time.monotonic() - started) * 1000),
         )
         return Response(
-            {"status": "unavailable", "category": "ai_configuration", "retryable": False},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            {"status": "unavailable", "category": error.code, "retryable": error.retryable},
+            status=error.http_status,
         )
 
     logger.info(
@@ -1229,17 +1282,16 @@ def chat_api(request):
     if len(message) > 500:
         return Response({"message": "Please keep your message under 500 characters."}, status=status.HTTP_400_BAD_REQUEST)
 
-    history = []
-    for item in request.data.get("history", [])[-6:]:
-        if not isinstance(item, dict) or item.get("role") not in ("resident", "assistant"):
-            continue
-        text = str(item.get("text", "")).strip()[:500]
-        if text:
-            history.append({"role": item["role"], "text": text})
-
     close_old_connections()
     resident = request.user.resident_profile
     try:
+        session_id = request.data.get("session_id")
+        session = ChatSession.objects.filter(id=session_id, resident=resident).first() if session_id else None
+        if session_id and session is None:
+            return Response({"message": "This chat session is not available."}, status=status.HTTP_404_NOT_FOUND)
+        session = session or ChatSession.objects.create(resident=resident)
+        history = list(session.messages.order_by("-created_at")[:8].values("role", "text"))[::-1]
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.RESIDENT, text=message)
         database_context, appointment, active_appointments = _chat_database_context(resident)
     except DatabaseError:
         logger.error(
@@ -1274,6 +1326,11 @@ def chat_api(request):
             logger.warning("Gemini unavailable; using QuickQueue guidance fallback (%s)", error.code)
             reply = _built_in_chat_reply(message, resident, appointment)
     reply = _format_chat_instructions(reply)
+    assistant_message = ChatMessage.objects.create(
+        session=session, role=ChatMessage.Role.ASSISTANT, text=reply,
+        source="gemini" if used_ai else "verified_backend", error_code=ai_error_code or "",
+    )
+    _record_question_topic(message, unanswered=bool(ai_error_code))
 
     logger.info(
         "chat_request request_id=%s status=200 category=%s location=%s duration_ms=%d",
@@ -1290,5 +1347,35 @@ def chat_api(request):
         "source": "QuickQueue records and AI guidance" if used_ai else "QuickQueue records and built-in guidance",
         "fallback": provider_failed,
         "service_status": "degraded" if provider_failed else "online",
+        "session_id": str(session.id),
+        "message_id": assistant_message.pk,
         **({"error_code": ai_error_code} if ai_error_code else {}),
     })
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def chat_session_api(request, session_id):
+    deleted, _ = ChatSession.objects.filter(id=session_id, resident=request.user.resident_profile).delete()
+    if not deleted:
+        return Response({"message": "This chat session is not available."}, status=status.HTTP_404_NOT_FOUND)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def chat_feedback_api(request, message_id):
+    helpful = request.data.get("helpful")
+    if not isinstance(helpful, bool):
+        return Response({"message": "Helpful must be true or false."}, status=status.HTTP_400_BAD_REQUEST)
+    message = ChatMessage.objects.filter(
+        pk=message_id, role=ChatMessage.Role.ASSISTANT,
+        session__resident=request.user.resident_profile,
+    ).first()
+    if not message:
+        return Response({"message": "This assistant response is not available."}, status=status.HTTP_404_NOT_FOUND)
+    ChatFeedback.objects.update_or_create(
+        message=message,
+        defaults={"resident": request.user.resident_profile, "helpful": helpful},
+    )
+    return Response({"saved": True})

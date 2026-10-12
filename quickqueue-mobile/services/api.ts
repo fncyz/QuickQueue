@@ -135,7 +135,7 @@ export const advanceSecuritySetup = async (accessToken: string, step: "fingerpri
 };
 
 export type ChatMessage = { role: "assistant" | "resident"; text: string };
-export type ChatResponse = { reply: string; suggestions: string[]; source: string; fallback?: boolean; service_status?: "online" | "degraded"; error_code?: string };
+export type ChatResponse = { reply: string; suggestions: string[]; source: string; fallback?: boolean; service_status?: "online" | "degraded"; error_code?: string; session_id: string; message_id: number };
 export type AssistantHealth = { status: "ready" | "unavailable"; category?: string; retryable?: boolean };
 
 const authenticatedHeaders = (accessToken: string, id = requestId()) => ({
@@ -151,7 +151,7 @@ export const getAssistantHealth = async (accessToken: string) => {
   return response.data;
 };
 
-export const sendChatMessage = async (accessToken: string, message: string, history: ChatMessage[]) => {
+export const sendChatMessage = async (accessToken: string, message: string, history: ChatMessage[], sessionId?: string) => {
   const id = requestId();
   const started = Date.now();
   try {
@@ -159,6 +159,7 @@ export const sendChatMessage = async (accessToken: string, message: string, hist
     const response = await api.post<ChatResponse>("chat/", {
       message,
       history: history.slice(-6),
+      session_id: sessionId,
     }, {
       headers: authenticatedHeaders(currentAccessToken, id),
       // The backend may try both the primary and fallback AI models before
@@ -173,4 +174,12 @@ export const sendChatMessage = async (accessToken: string, message: string, hist
     // plus a retry can generate two answers and consume the rate limit twice.
     throw error;
   }
+};
+
+export const clearChatSession = async (accessToken: string, sessionId: string) => {
+  await api.delete(`chat/sessions/${sessionId}/`, { headers: authenticatedHeaders(accessToken) });
+};
+
+export const sendChatFeedback = async (accessToken: string, messageId: number, helpful: boolean) => {
+  await api.post(`chat/messages/${messageId}/feedback/`, { helpful }, { headers: authenticatedHeaders(accessToken) });
 };

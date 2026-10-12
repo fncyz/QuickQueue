@@ -14,3 +14,5 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     }
 }
+
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["chat"] = "1000/min"  # noqa: F405
