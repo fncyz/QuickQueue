@@ -111,6 +111,8 @@ def barangay_appointments(request):
     slot_id = request.GET.get("time_slot", "")
     service_id = request.GET.get("service", "")
     status_filter = request.GET.get("status", "")
+    special_search = request.GET.get("special_q", "").strip()
+    special_service_id = request.GET.get("special_service", "")
 
     regular_qs = base.filter(service__is_temporary=False).order_by(
         "-appointment_date", "time_slot__start_time", "queue_number"
@@ -135,10 +137,20 @@ def barangay_appointments(request):
     if status_filter in dict(Appointment.Status.choices):
         filtered_regular = filtered_regular.filter(status=status_filter)
 
+    filtered_special = special_qs
+    if special_search:
+        filtered_special = filtered_special.filter(
+            Q(resident__first_name__icontains=special_search)
+            | Q(resident__last_name__icontains=special_search)
+            | Q(service__name__icontains=special_search)
+        )
+    if special_service_id.isdigit():
+        filtered_special = filtered_special.filter(service_id=int(special_service_id))
+
     show_all_regular = request.GET.get("regular") == "all"
     show_all_special = request.GET.get("special") == "all"
     regular_list = list(filtered_regular if show_all_regular else filtered_regular[:5])
-    special_list = list(special_qs if show_all_special else special_qs[:5])
+    special_list = list(filtered_special if show_all_special else filtered_special[:5])
 
     for appointment in regular_list + special_list:
         appointment.queue_series = _queue_series(appointment.queue_number)
@@ -159,9 +171,15 @@ def barangay_appointments(request):
             "regular_appointments": regular_list,
             "regular_total_filtered": filtered_regular.count(),
             "special_appointments": special_list,
+            "special_total_filtered": filtered_special.count(),
             "show_all_regular": show_all_regular,
             "show_all_special": show_all_special,
             "services": Service.objects.filter(is_active=True, is_temporary=False).order_by("name"),
+            "special_services": Service.objects.filter(
+                is_temporary=True,
+                barangay=barangay,
+                created_by__isnull=False,
+            ).order_by("name"),
             "time_slots": TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"),
             "status_choices": Appointment.Status.choices,
             "filters": {
@@ -169,6 +187,8 @@ def barangay_appointments(request):
                 "time_slot": slot_id,
                 "service": service_id,
                 "status": status_filter,
+                "special_q": special_search,
+                "special_service": special_service_id,
             },
             "unread_notifications": Notification.objects.filter(
                 appointment__barangay=barangay,
