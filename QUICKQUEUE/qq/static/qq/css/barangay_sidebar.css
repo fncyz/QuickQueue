@@ -1,10 +1,10 @@
 /* Shared barangay-admin sidebar */
 :root {
-    --sidebar-width: 236px;
-    --sidebar-collapsed: 76px;
+    --sidebar-width: 315px;
+    --sidebar-collapsed: 74px;
     --sidebar-ink: #ffffff;
     --sidebar-muted: rgba(255, 255, 255, 0.78);
-    --sidebar-active: #0a66ff;
+    --sidebar-active: #155eef;
     --sidebar-hover: rgba(255, 255, 255, 0.12);
 }
 
@@ -16,12 +16,15 @@
     width: var(--sidebar-width);
     height: 100vh;
     min-height: 100vh;
-    padding: 20px 12px;
+    padding: 30px 19px 25px;
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
     color: var(--sidebar-ink);
-    background: #001d60;
+    background: #0b2454;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }
 
 .shell {
@@ -33,6 +36,15 @@
 .dashboard {
     height: 100vh;
     overflow-y: auto;
+}
+
+/* Poppins is the primary typeface throughout every admin view and control. */
+body,
+button,
+input,
+select,
+textarea {
+    font-family: "Poppins", Arial, sans-serif !important;
 }
 
 .sidebar a,
@@ -55,13 +67,14 @@
 }
 
 .sidebar .brand {
-    gap: 10px;
-    padding: 2px 6px;
+    gap: 13px;
+    padding: 0 12px 25px;
+    border-bottom: 1px solid #294475;
 }
 
 .sidebar .brand-logo {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
     object-fit: cover;
     border-radius: 10px;
@@ -73,32 +86,46 @@
     display: grid;
     gap: 2px;
     min-width: 0;
-    font-size: 15px;
     font-weight: 700;
-    line-height: 1.15;
+    line-height: 1.2;
     color: #ffffff;
+}
+
+.sidebar .brand b {
+    font-size: 20px;
+}
+
+.sidebar .profile b {
+    font-size: 14px;
 }
 
 .sidebar .brand small,
 .sidebar .profile small {
-    font-size: 10px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 400;
     color: var(--sidebar-muted);
 }
 
+.sidebar .brand small {
+    max-width: 220px;
+    line-height: 1.35;
+    white-space: normal;
+}
+
 .sidebar .profile {
-    gap: 10px;
-    margin: 24px 4px 20px;
+    gap: 13px;
+    padding: 22px 12px;
 }
 
 .sidebar .avatar {
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 42px;
+    position: relative;
+    width: 49px;
+    height: 49px;
     flex-shrink: 0;
     border-radius: 50%;
-    font-size: 16px;
+    font-size: 14px;
     font-style: normal;
     font-weight: 700;
     color: #1460b9;
@@ -112,20 +139,12 @@
     object-fit: cover;
 }
 
-.sidebar .profile em {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 2px;
-    font-size: 10px;
-    font-style: normal;
-    font-weight: 600;
-    color: #63ed9b;
-}
-
 .sidebar .online-dot {
-    width: 7px;
-    height: 7px;
+    position: absolute;
+    right: 0;
+    bottom: 1px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: #63ed9b;
     box-shadow: 0 0 0 2px rgba(99, 237, 155, 0.25);
@@ -134,7 +153,8 @@
 .sidebar nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 7px;
+    flex: 0 0 auto;
 }
 
 .sidebar .nav-group {
@@ -153,14 +173,17 @@
 .sidebar .nav-link,
 .sidebar .nav-sublink,
 .sidebar .logout {
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
+    position: relative;
+    gap: 15px;
+    min-height: 51px;
+    padding: 15px 14px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 500;
     line-height: 1.2;
     color: #ffffff;
-    transition: background 0.15s ease;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .sidebar .nav-link:hover,
@@ -174,9 +197,18 @@
     background: var(--sidebar-active);
 }
 
+.sidebar .nav-link.active::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: 9px 0 0 9px;
+    background: #93c5fd;
+}
+
 .sidebar .nav-icon {
-    width: 18px;
-    height: 18px;
+    width: 21px;
+    height: 21px;
     flex-shrink: 0;
     fill: none;
     stroke: #ffffff;
@@ -221,8 +253,9 @@
 }
 
 .sidebar .nav-sublink {
-    padding: 8px 10px;
-    font-size: 11px;
+    min-height: 42px;
+    padding: 10px 14px;
+    font-size: 13px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.9);
 }
@@ -233,17 +266,30 @@
 
 .sidebar .logout {
     margin-top: auto;
-    margin-bottom: 20px;
+    flex: 0 0 auto;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) and (min-width: 761px) {
+    :root { --sidebar-width: 240px; }
+
+    .sidebar { padding-inline: 12px; }
+    .sidebar .brand,
+    .sidebar .profile { padding-inline: 8px; }
+    .sidebar .brand b { font-size: 17px; }
+    .sidebar .brand small { font-size: 10px; }
+    .sidebar .nav-link,
+    .sidebar .nav-sublink,
+    .sidebar .logout { gap: 11px; font-size: 12px; }
+}
+
+@media (max-width: 760px) {
     .shell {
         padding-left: var(--sidebar-collapsed);
     }
 
     .sidebar {
         width: var(--sidebar-collapsed);
-        padding: 16px 8px;
+        padding: 20px 8px;
         align-items: center;
     }
 
@@ -267,7 +313,7 @@
     }
 
     .sidebar .profile {
-        margin: 20px 0;
+        padding: 20px 0;
     }
 
     .sidebar .nav-group[open] > .nav-link {
