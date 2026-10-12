@@ -180,7 +180,7 @@ def barangay_live_queue(request):
         )
         next_in_line = [
             ticket for ticket in tickets if ticket.status == QueueTicket.Status.WAITING
-        ][:3]
+        ][:5]
         if next_in_line:
             next_wait_minutes = next_in_line[0].wait_minutes
 
@@ -190,6 +190,10 @@ def barangay_live_queue(request):
     ).exclude(status=QueueTicket.Status.CANCELLED)
 
     completed_today = today_tickets.filter(status=QueueTicket.Status.COMPLETED)
+    recently_served = completed_today.select_related(
+        "appointment__resident", "appointment__service"
+    ).order_by("-completed_at")[:3]
+    active_counters = today_tickets.filter(status=QueueTicket.Status.NOW_SERVING).count()
     avg_seconds = (
         completed_today.exclude(called_at=None)
         .exclude(completed_at=None)
@@ -233,6 +237,7 @@ def barangay_live_queue(request):
             "next_in_line": next_in_line,
             "next_wait_minutes": next_wait_minutes,
             "next_slot": next_slot,
+            "recently_served": recently_served,
             "stats": {
                 "average_service_minutes": average_service_minutes,
                 "completed_today": completed_today.count(),
@@ -240,6 +245,7 @@ def barangay_live_queue(request):
                     status=QueueTicket.Status.WAITING
                 ).count(),
                 "total_today": today_tickets.count(),
+                "active_counters": active_counters,
             },
             "unread_notifications": Notification.objects.filter(
                 appointment__barangay=barangay,
