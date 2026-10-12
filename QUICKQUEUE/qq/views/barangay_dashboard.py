@@ -4,7 +4,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from qq.models import Appointment, Barangay, BarangayStaff, QueueTicket, Service
+from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service
 
 
 @login_required(login_url="signin")
@@ -122,4 +122,8 @@ def barangay_dashboard(request):
         "month_total": month_total,
         "month_completed": month_completed,
         "month_cancelled": month_cancelled,
+        "unread_notifications": Notification.objects.filter(
+            appointment__barangay=barangay,
+            admin_is_read=False,
+        ).count(),
     })
