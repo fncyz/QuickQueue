@@ -4,7 +4,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from qq.models import Appointment, Barangay, BarangayStaff, QueueTicket
+from qq.models import Appointment, Barangay, BarangayStaff, QueueTicket, Service
 
 
 @login_required(login_url="signin")
@@ -64,10 +64,34 @@ def barangay_dashboard(request):
     def service_breakdown(queryset):
         return list(queryset.values("service__name").annotate(count=Count("id")).order_by("-count", "service__name"))
 
-    today_services = service_breakdown(today_appointments)
-    month_services = service_breakdown(month_appointments)
-    max_today_service_count = max((item["count"] for item in today_services), default=1)
-    max_month_service_count = max((item["count"] for item in month_services), default=1)
+    special_service_records = (
+        Service.objects.filter(
+            is_temporary=True,
+            barangay=barangay,
+            is_active=True,
+            lifecycle=Service.Lifecycle.SCHEDULED,
+            booking_start_date__lte=today,
+            booking_end_date__gte=today,
+            event_end_date__gte=today,
+        )
+        .annotate(
+            count=Count(
+                "appointments",
+                filter=Q(appointments__barangay=barangay)
+                & ~Q(appointments__status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]),
+                distinct=True,
+            )
+        )
+        .order_by("-count", "name")
+    )
+    special_services = [
+        {"service__name": service.name, "count": service.count}
+        for service in special_service_records
+        if service.accepts_bookings(booking_count=service.count)
+    ]
+    regular_services = service_breakdown(month_appointments.filter(service__is_temporary=False))
+    max_special_service_count = max((item["count"] for item in special_services), default=1)
+    max_regular_service_count = max((item["count"] for item in regular_services), default=1)
 
     running_total = 0
     queue_chart = {}
@@ -90,10 +114,10 @@ def barangay_dashboard(request):
         "no_show": no_show,
         "cancelled": cancelled,
         "queue_chart": queue_chart,
-        "today_services": today_services,
-        "month_services": month_services,
-        "max_today_service_count": max_today_service_count,
-        "max_month_service_count": max_month_service_count,
+        "special_services": special_services,
+        "regular_services": regular_services,
+        "max_special_service_count": max_special_service_count,
+        "max_regular_service_count": max_regular_service_count,
         "registered_residents": barangay.residents.count(),
         "month_total": month_total,
         "month_completed": month_completed,
