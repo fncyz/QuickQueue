@@ -1,6 +1,6 @@
 from django.urls import path
 
-from qq.views import landing, signin, staff_logout, barangay_admin_registration
+from qq.views import landing, signin, staff_logout
 from qq.views.barangay_dashboard import barangay_dashboard
 from qq.views.barangay_staff_portal import (
     staff_appointments, staff_review_appointment, staff_dashboard, staff_document_action,
@@ -45,7 +45,6 @@ urlpatterns = [
     path("", landing, name="index"),
     path("sign-in/", signin, name="signin"),
     path("staff/logout/", staff_logout, name="staff_logout"),
-    path("barangay-admin-registration/", barangay_admin_registration, name="barangay_admin_registration"),
     path("barangay/dashboard/", barangay_dashboard, name="barangay_dashboard"),
     path("barangay/staff/dashboard/", staff_dashboard, name="staff_dashboard"),
     path("barangay/staff/appointments/", staff_appointments, name="staff_appointments"),

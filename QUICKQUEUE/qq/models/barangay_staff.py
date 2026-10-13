@@ -59,12 +59,3 @@ class BarangayStaff(models.Model):
         first = self.first_name[:1] if self.first_name else ""
         last = self.last_name[:1] if self.last_name else ""
         return f"{first}{last}".upper() or "?"
-
-
-class BarangayAdministrator(BarangayStaff):
-    """Admin-site view of staff profiles that have the barangay admin role."""
-
-    class Meta:
-        proxy = True
-        verbose_name = "barangay admin"
-        verbose_name_plural = "barangay admins"

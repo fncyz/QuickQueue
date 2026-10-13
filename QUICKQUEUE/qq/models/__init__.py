@@ -6,7 +6,7 @@ from .queue_tix import QueueTicket
 from .notif import Notification
 from .timeslot import TimeSlot
 from .barangay_admin_registration import BarangayAdminRegistration
-from .barangay_staff import BarangayAdministrator, BarangayStaff
+from .barangay_staff import BarangayStaff
 from .document_template import DocumentTemplate
 from .generated_document import GeneratedDocument
 from .push_device import PushDevice, PushDelivery

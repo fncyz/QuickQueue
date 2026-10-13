@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from .models import (AssistantKnowledge, Barangay, ChatFeedback, ChatQuestionTopic, Service, Resident,
                      Appointment, QueueTicket, Notification, TimeSlot,
-                     BarangayAdministrator, BarangayAdminRegistration, BarangayStaff,
+                     BarangayAdminRegistration, BarangayStaff,
                      DocumentTemplate, GeneratedDocument)
 from django.utils import timezone
 
@@ -26,30 +26,49 @@ class BarangayAdminForm(forms.ModelForm):
         return name
 
 
-class BarangayAdministratorForm(forms.ModelForm):
+class BarangayAdminRegistrationForm(forms.ModelForm):
+    first_name = forms.CharField(max_length=150)
+    last_name = forms.CharField(max_length=150)
+    username = forms.CharField(max_length=150)
     password1 = forms.CharField(
-        label="Password",
+        label="Initial password",
         widget=forms.PasswordInput,
         required=False,
-        help_text="Required for new accounts. Leave blank when editing to keep the current password.",
+        help_text="Required when creating a registration. Leave blank when editing to keep the password.",
     )
     password2 = forms.CharField(
         label="Password confirmation",
         widget=forms.PasswordInput,
         required=False,
     )
+    account_is_active = forms.BooleanField(
+        label="Administrator account is active",
+        required=False,
+        initial=True,
+    )
 
     class Meta:
-        model = BarangayAdministrator
+        model = BarangayAdminRegistration
         fields = (
-            "barangay", "first_name", "middle_name", "last_name", "username",
-            "email", "contact_number", "profile_photo", "is_active",
+            "barangay", "municipality", "province", "complete_address", "zip_code",
+            "contact_number", "email",
         )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            # This form exists only inside the superuser-only Django Admin flow.
+            self.instance.origin = BarangayAdminRegistration.Origin.SUPERUSER
+        if self.instance.pk and self.instance.user_id:
+            self.fields["first_name"].initial = self.instance.user.first_name
+            self.fields["last_name"].initial = self.instance.user.last_name
+            self.fields["username"].initial = self.instance.user.username
+            self.fields["account_is_active"].initial = self.instance.user.is_active
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
         users = User.objects.filter(username__iexact=username)
-        if self.instance.pk and self.instance.user_id:
+        if self.instance.pk:
             users = users.exclude(pk=self.instance.user_id)
         if users.exists():
             raise forms.ValidationError("A user with this username already exists.")
@@ -58,7 +77,7 @@ class BarangayAdministratorForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data.get("email", "").strip()
         users = User.objects.filter(email__iexact=email) if email else User.objects.none()
-        if self.instance.pk and self.instance.user_id:
+        if self.instance.pk:
             users = users.exclude(pk=self.instance.user_id)
         if users.exists():
             raise forms.ValidationError("A user with this email address already exists.")
@@ -66,10 +85,6 @@ class BarangayAdministratorForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if self.instance.pk and not self.instance.user_id:
-            raise forms.ValidationError(
-                "This legacy profile has no linked user account and cannot be used to authenticate."
-            )
         password1 = cleaned_data.get("password1")
         password2 = cleaned_data.get("password2")
         if not self.instance.pk and not password1:
@@ -87,6 +102,11 @@ class BarangayAdministratorForm(forms.ModelForm):
                 validate_password(password1, password_user)
             except ValidationError as error:
                 self.add_error("password1", error)
+        barangay = cleaned_data.get("barangay")
+        if barangay and barangay.user_id:
+            current_user_id = self.instance.user_id if self.instance.pk else None
+            if barangay.user_id != current_user_id:
+                self.add_error("barangay", "This barangay already has an administrator account.")
         return cleaned_data
 
 
@@ -255,60 +275,126 @@ class TimeSlotAdmin(admin.ModelAdmin):
 
 @admin.register(BarangayAdminRegistration)
 class BarangayAdminRegistrationAdmin(admin.ModelAdmin):
-    list_display = ("barangay", "user", "contact_number", "email", "status", "created_at")
-    list_filter = ("status",)
+    form = BarangayAdminRegistrationForm
+    list_display = ("barangay", "user", "origin", "contact_number", "email", "status", "created_at")
+    list_filter = ("origin", "status")
     search_fields = ("barangay__name", "user__username", "email", "contact_number")
-    readonly_fields = ("created_at", "terms_accepted_at", "reviewed_at")
+    readonly_fields = ("origin", "status", "created_at", "terms_accepted_at", "reviewed_at")
     actions = ("approve_registrations", "reject_registrations")
+    fieldsets = (
+        ("Barangay", {"fields": (
+            "barangay", "municipality", "province", "complete_address", "zip_code",
+        )}),
+        ("Administrator account", {"fields": (
+            "first_name", "last_name", "username", "email", "contact_number",
+            "password1", "password2", "account_is_active",
+        )}),
+        ("Registration audit", {"fields": (
+            "origin", "terms_accepted_at", "status", "reviewed_at", "created_at",
+        )}),
+    )
 
     def has_add_permission(self, request):
-        """Registration rows must only come from a terms-accepting submission."""
-        return False
+        return request.user.is_active and request.user.is_superuser
+
+    def has_module_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
         """Keep the registration and approval audit trail intact."""
         return False
 
+    @staticmethod
+    def _provision(registration, *, is_active=True):
+        user = registration.user
+        user.is_active = is_active
+        # QuickQueue portal access is profile-based; Django Admin remains superuser-only.
+        user.is_staff = False
+        user.save(update_fields=("is_active", "is_staff"))
+        Barangay.objects.filter(user=user).exclude(pk=registration.barangay_id).update(user=None)
+        registration.barangay.user = user
+        registration.barangay.address = registration.complete_address
+        registration.barangay.contact_number = registration.contact_number
+        registration.barangay.email = registration.email
+        registration.barangay.save(
+            update_fields=("user", "address", "contact_number", "email", "updated_at")
+        )
+        BarangayStaff.objects.update_or_create(
+            user=user,
+            defaults={
+                "barangay": registration.barangay,
+                "first_name": user.first_name or user.username,
+                "last_name": user.last_name or "Admin",
+                "username": user.username,
+                "email": registration.email,
+                "contact_number": registration.contact_number,
+                "role": BarangayStaff.Role.ADMIN,
+                "is_active": is_active,
+            },
+        )
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        if change:
+            user = obj.user
+            user.username = form.cleaned_data["username"]
+            user.first_name = form.cleaned_data["first_name"]
+            user.last_name = form.cleaned_data["last_name"]
+            user.email = obj.email
+            if form.cleaned_data.get("password1"):
+                user.set_password(form.cleaned_data["password1"])
+            user.save()
+        else:
+            user = User(
+                username=form.cleaned_data["username"],
+                first_name=form.cleaned_data["first_name"],
+                last_name=form.cleaned_data["last_name"],
+                email=obj.email,
+                is_active=True,
+                is_staff=False,
+            )
+            user.set_password(form.cleaned_data["password1"])
+            user.save()
+            obj.user = user
+            obj.origin = BarangayAdminRegistration.Origin.SUPERUSER
+            obj.terms_accepted_at = None
+            obj.status = BarangayAdminRegistration.Status.APPROVED
+            obj.reviewed_at = timezone.now()
+
+        super().save_model(request, obj, form, change)
+        if obj.status == BarangayAdminRegistration.Status.APPROVED:
+            self._provision(obj, is_active=form.cleaned_data["account_is_active"])
+
     @admin.action(description="Approve selected barangay admin registrations")
     def approve_registrations(self, request, queryset):
         approved = 0
         for registration in queryset.select_related("user", "barangay"):
-            if registration.status != BarangayAdminRegistration.Status.PENDING or registration.barangay.user_id:
+            if registration.status != BarangayAdminRegistration.Status.PENDING:
+                continue
+            if registration.barangay.user_id not in (None, registration.user_id):
                 continue
             with transaction.atomic():
-                registration.user.is_active = True
-                registration.user.is_staff = True
-                registration.user.save(update_fields=("is_active", "is_staff"))
-                registration.barangay.user = registration.user
-                registration.barangay.address = registration.complete_address
-                registration.barangay.contact_number = registration.contact_number
-                registration.barangay.email = registration.email
-                registration.barangay.save(update_fields=("user", "address", "contact_number", "email", "updated_at"))
+                self._provision(registration)
                 registration.status = BarangayAdminRegistration.Status.APPROVED
                 registration.reviewed_at = timezone.now()
                 registration.save(update_fields=("status", "reviewed_at"))
-                BarangayStaff.objects.update_or_create(
-                    barangay=registration.barangay,
-                    user=registration.user,
-                    defaults={
-                        "first_name": registration.user.first_name or registration.user.username,
-                        "last_name": registration.user.last_name or "Admin",
-                        "username": registration.user.username,
-                        "email": registration.email,
-                        "contact_number": registration.contact_number,
-                        "role": BarangayStaff.Role.ADMIN,
-                        "is_active": True,
-                    },
-                )
                 approved += 1
         self.message_user(request, f"Approved {approved} registration(s).")
 
     @admin.action(description="Reject selected barangay admin registrations")
     def reject_registrations(self, request, queryset):
-        rejected = queryset.filter(status=BarangayAdminRegistration.Status.PENDING).update(
-            status=BarangayAdminRegistration.Status.REJECTED,
-            reviewed_at=timezone.now(),
-        )
+        pending = queryset.filter(status=BarangayAdminRegistration.Status.PENDING)
+        user_ids = list(pending.values_list("user_id", flat=True))
+        rejected = pending.update(status=BarangayAdminRegistration.Status.REJECTED, reviewed_at=timezone.now())
+        User.objects.filter(pk__in=user_ids).update(is_active=False)
         self.message_user(request, f"Rejected {rejected} registration(s).")
 
 
@@ -330,82 +416,6 @@ class BarangayStaffAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).exclude(role=BarangayStaff.Role.ADMIN)
 
-
-@admin.register(BarangayAdministrator)
-class BarangayAdministratorAdmin(admin.ModelAdmin):
-    form = BarangayAdministratorForm
-    list_display = ("username", "full_name", "barangay", "email", "is_active", "created_at")
-    list_filter = ("is_active", "barangay")
-    search_fields = ("username", "first_name", "last_name", "email", "barangay__name")
-    readonly_fields = ("created_at", "updated_at")
-    fieldsets = (
-        ("Barangay assignment", {"fields": ("barangay",)}),
-        ("Administrator", {"fields": (
-            "first_name", "middle_name", "last_name", "username", "email",
-            "contact_number", "profile_photo",
-        )}),
-        ("Authentication", {"fields": ("password1", "password2", "is_active")}),
-        ("Audit", {"fields": ("created_at", "updated_at")}),
-    )
-    add_fieldsets = fieldsets[:-1]
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).filter(role=BarangayStaff.Role.ADMIN).select_related("user", "barangay")
-
-    def get_fieldsets(self, request, obj=None):
-        return self.fieldsets if obj else self.add_fieldsets
-
-    def has_module_permission(self, request):
-        return request.user.is_active and request.user.is_superuser
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_active and request.user.is_superuser
-
-    def has_add_permission(self, request):
-        return request.user.is_active and request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_active and request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    @transaction.atomic
-    def save_model(self, request, obj, form, change):
-        if not request.user.is_superuser:
-            raise PermissionDenied
-
-        if change:
-            user = obj.user
-            if user is None:
-                raise forms.ValidationError("This legacy profile has no linked user account.")
-            user.username = obj.username
-            user.first_name = obj.first_name
-            user.last_name = obj.last_name
-            user.email = obj.email
-            user.is_active = obj.is_active
-            if form.cleaned_data.get("password1"):
-                user.set_password(form.cleaned_data["password1"])
-            user.save()
-            # Older approved accounts can also be linked through Barangay.user.
-            # Detach that legacy pointer on reassignment so portal resolution uses
-            # the newly selected BarangayStaff assignment instead of the old one.
-            Barangay.objects.filter(user=user).exclude(pk=obj.barangay_id).update(user=None)
-        else:
-            user = User(
-                username=obj.username,
-                first_name=obj.first_name,
-                last_name=obj.last_name,
-                email=obj.email,
-                is_active=obj.is_active,
-                is_staff=False,
-            )
-            user.set_password(form.cleaned_data["password1"])
-            user.save()
-            obj.user = user
-
-        obj.role = BarangayStaff.Role.ADMIN
-        super().save_model(request, obj, form, change)
 
 @admin.register(DocumentTemplate)
 class DocumentTemplateAdmin(admin.ModelAdmin):

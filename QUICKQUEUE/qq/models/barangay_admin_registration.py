@@ -1,10 +1,15 @@
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from .barangay import Barangay
 
 
 class BarangayAdminRegistration(models.Model):
+    class Origin(models.TextChoices):
+        LEGACY_PUBLIC = "legacy_public", "Legacy public registration"
+        SUPERUSER = "superuser", "Created by superuser"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Pending review"
         APPROVED = "approved", "Approved"
@@ -18,13 +23,25 @@ class BarangayAdminRegistration(models.Model):
     zip_code = models.CharField(max_length=10)
     contact_number = models.CharField(max_length=15)
     email = models.EmailField()
-    terms_accepted_at = models.DateTimeField()
+    origin = models.CharField(
+        max_length=20,
+        choices=Origin.choices,
+        default=Origin.LEGACY_PUBLIC,
+    )
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("-created_at",)
+
+    def clean(self):
+        super().clean()
+        if self.origin == self.Origin.LEGACY_PUBLIC and self.terms_accepted_at is None:
+            raise ValidationError({
+                "terms_accepted_at": "Terms acceptance is required for legacy public registrations."
+            })
 
     def __str__(self):
         return f"{self.barangay} — {self.user.username}"

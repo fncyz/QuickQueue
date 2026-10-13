@@ -1,312 +1,146 @@
+from django.contrib import admin
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from qq.models import Barangay, BarangayAdminRegistration, BarangayStaff, Resident
 
 
-class BarangayAdminCreationTests(TestCase):
-    def setUp(self):
-        self.superuser = User.objects.create_superuser(
-            username="root-admin",
-            email="root@example.com",
-            password="test-password",
-        )
-        self.client.force_login(self.superuser)
-        self.existing = Barangay.objects.get(name="Poblacion")
-
-    def test_superuser_creates_barangay_without_registration_record(self):
-        response = self.client.post(
-            reverse("admin:qq_barangay_add"),
-            {
-                "name": "Cambang-ug",
-                "address": "Toledo City",
-                "contact_number": "09987654321",
-                "email": "bato@example.com",
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
-        self.assertRedirects(response, reverse("admin:qq_barangay_changelist"))
-        barangay = Barangay.objects.get(name="Cambang-ug")
-        self.assertIsNone(barangay.user)
-        self.assertFalse(BarangayAdminRegistration.objects.filter(barangay=barangay).exists())
-        self.assertTrue(Barangay.objects.filter(pk=self.existing.pk, name="Poblacion").exists())
-
-    def test_admin_rejects_case_insensitive_duplicate_barangay_name(self):
-        response = self.client.post(
-            reverse("admin:qq_barangay_add"),
-            {
-                "name": "poblacion",
-                "address": "Another address",
-                "contact_number": "09111111111",
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "A barangay with this name already exists.")
-        self.assertEqual(Barangay.objects.filter(name__iexact="Poblacion").count(), 1)
-
-    def test_registration_admin_does_not_offer_or_accept_additions(self):
-        response = self.client.get(reverse("admin:qq_barangayadminregistration_add"))
-
-        self.assertEqual(response.status_code, 403)
-
-    def test_genuine_registration_still_records_terms_acceptance(self):
-        self.client.logout()
-        barangay = Barangay.objects.get(name="Luray 2")
-
-        response = self.client.post(
-            reverse("barangay_admin_registration"),
-            {
-                "barangay": barangay.pk,
-                "municipality": "Toledo City",
-                "province": "Cebu",
-                "complete_address": "Barangay Hall, Luray 2",
-                "zip_code": "6038",
-                "username": "luray-registration",
-                "contact_number": "09981234567",
-                "email": "luray-registration@example.com",
-                "password": "test-password",
-                "confirm_password": "test-password",
-                "terms": "on",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        registration = BarangayAdminRegistration.objects.get(barangay=barangay)
-        self.assertIsNotNone(registration.terms_accepted_at)
-        self.assertEqual(registration.status, BarangayAdminRegistration.Status.PENDING)
-
-    def test_regular_staff_can_still_be_assigned_through_staff_admin(self):
-        user = User.objects.create_user("bato-admin", password="test-password")
-        barangay = Barangay.objects.create(
-            name="Cambang-ug",
-            address="Toledo City",
-            contact_number="09987654321",
-        )
-
-        response = self.client.post(
-            reverse("admin:qq_barangaystaff_add"),
-            {
-                "barangay": barangay.pk,
-                "user": user.pk,
-                "first_name": "Bato",
-                "last_name": "Admin",
-                "middle_name": "",
-                "username": user.username,
-                "email": "bato-admin@example.com",
-                "contact_number": "09987654321",
-                "role": BarangayStaff.Role.STAFF,
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
-        self.assertRedirects(response, reverse("admin:qq_barangaystaff_changelist"))
-        self.assertTrue(
-            BarangayStaff.objects.filter(
-                barangay=barangay,
-                user=user,
-                role=BarangayStaff.Role.STAFF,
-            ).exists()
-        )
-
-
-class BarangayAdministratorManagementTests(TestCase):
+class BarangayAdminRegistrationManagementTests(TestCase):
     password = "Secure-Admin-Password-482!"
 
     def setUp(self):
         self.superuser = User.objects.create_superuser(
-            username="system-owner",
-            email="owner@example.com",
-            password="superuser-password",
+            username="system-owner", email="owner@example.com", password="superuser-password",
         )
         self.barangay = Barangay.objects.get(name="Poblacion")
         self.other_barangay = Barangay.objects.get(name="Bato")
-
-    def _create_admin_through_django_admin(self):
         self.client.force_login(self.superuser)
+
+    def _registration_data(self, **overrides):
+        data = {
+            "barangay": self.barangay.pk, "municipality": "Toledo City", "province": "Cebu",
+            "complete_address": "Barangay Hall, Poblacion, Toledo City", "zip_code": "6038",
+            "first_name": "Poblacion", "last_name": "Administrator",
+            "username": "poblacion-managed-admin", "email": "managed-admin@example.com",
+            "contact_number": "09981234567", "password1": self.password,
+            "password2": self.password, "account_is_active": "on", "_save": "Save",
+        }
+        data.update(overrides)
+        return data
+
+    def _create_registration(self):
         return self.client.post(
-            reverse("admin:qq_barangayadministrator_add"),
-            {
-                "barangay": self.barangay.pk,
-                "first_name": "Poblacion",
-                "middle_name": "",
-                "last_name": "Administrator",
-                "username": "poblacion-managed-admin",
-                "email": "managed-admin@example.com",
-                "contact_number": "09981234567",
-                "password1": self.password,
-                "password2": self.password,
-                "is_active": "on",
-                "_save": "Save",
-            },
+            reverse("admin:qq_barangayadminregistration_add"), self._registration_data(),
         )
 
-    def test_superuser_can_open_and_create_barangay_admin(self):
-        self.client.force_login(self.superuser)
-        self.assertEqual(
-            self.client.get(reverse("admin:qq_barangayadministrator_changelist")).status_code,
-            200,
-        )
+    def test_superuser_can_create_barangay_without_registration(self):
+        response = self.client.post(reverse("admin:qq_barangay_add"), {
+            "name": "Cambang-ug", "address": "Toledo City", "contact_number": "09987654321",
+            "email": "cambangug@example.com", "is_active": "on", "_save": "Save",
+        })
+        self.assertRedirects(response, reverse("admin:qq_barangay_changelist"))
+        barangay = Barangay.objects.get(name="Cambang-ug")
+        self.assertFalse(BarangayAdminRegistration.objects.filter(barangay=barangay).exists())
+        self.assertTrue(Barangay.objects.filter(pk=self.barangay.pk, name="Poblacion").exists())
 
-        response = self._create_admin_through_django_admin()
-
-        self.assertRedirects(response, reverse("admin:qq_barangayadministrator_changelist"))
-        profile = BarangayStaff.objects.select_related("user").get(
-            username="poblacion-managed-admin"
+    def test_registration_admin_creates_approved_hashed_account_without_terms(self):
+        response = self._create_registration()
+        self.assertRedirects(response, reverse("admin:qq_barangayadminregistration_changelist"))
+        registration = BarangayAdminRegistration.objects.select_related("user", "barangay").get(
+            user__username="poblacion-managed-admin"
         )
-        self.assertEqual(profile.barangay, self.barangay)
-        self.assertEqual(profile.role, BarangayStaff.Role.ADMIN)
-        self.assertTrue(profile.is_active)
-        self.assertTrue(profile.user.is_active)
-        self.assertFalse(profile.user.is_staff)
-        self.assertNotEqual(profile.user.password, self.password)
-        self.assertTrue(profile.user.check_password(self.password))
-        self.assertFalse(
-            BarangayAdminRegistration.objects.filter(user=profile.user).exists()
-        )
+        self.assertEqual(registration.origin, BarangayAdminRegistration.Origin.SUPERUSER)
+        self.assertEqual(registration.status, BarangayAdminRegistration.Status.APPROVED)
+        self.assertIsNone(registration.terms_accepted_at)
+        self.assertIsNotNone(registration.reviewed_at)
+        self.assertNotEqual(registration.user.password, self.password)
+        self.assertTrue(registration.user.check_password(self.password))
+        self.assertTrue(registration.user.is_active)
+        self.assertFalse(registration.user.is_staff)
+        self.assertEqual(registration.barangay.user, registration.user)
+        self.assertTrue(BarangayStaff.objects.filter(
+            user=registration.user, barangay=self.barangay,
+            role=BarangayStaff.Role.ADMIN, is_active=True,
+        ).exists())
 
-    def test_created_admin_logs_in_and_is_scoped_to_assigned_barangay(self):
-        self._create_admin_through_django_admin()
+    def test_created_administrator_logs_in_and_sees_only_assigned_barangay(self):
+        self._create_registration()
         assigned_user = User.objects.create_user("assigned-resident", password="resident-password")
-        other_user = User.objects.create_user("other-resident", password="resident-password")
+        hidden_user = User.objects.create_user("hidden-resident", password="resident-password")
         Resident.objects.create(
-            user=assigned_user, first_name="Assigned", last_name="Resident",
-            birthdate="1990-01-01", sex=Resident.Sex.FEMALE,
-            email="assigned@example.com", contact_number="09170000001",
+            user=assigned_user, first_name="Assigned", last_name="Resident", birthdate="1990-01-01",
+            sex=Resident.Sex.FEMALE, email="assigned@example.com", contact_number="09170000001",
             barangay=self.barangay,
         )
         Resident.objects.create(
-            user=other_user, first_name="Hidden", last_name="Resident",
-            birthdate="1990-01-01", sex=Resident.Sex.MALE,
-            email="hidden@example.com", contact_number="09170000002",
+            user=hidden_user, first_name="Hidden", last_name="Resident", birthdate="1990-01-01",
+            sex=Resident.Sex.MALE, email="hidden@example.com", contact_number="09170000002",
             barangay=self.other_barangay,
         )
         self.client.logout()
+        response = self.client.post(reverse("signin"), {
+            "username": "poblacion-managed-admin", "password": self.password,
+        })
+        self.assertRedirects(response, reverse("barangay_dashboard"))
+        residents = self.client.get(reverse("barangay_residents"))
+        self.assertEqual(residents.context["barangay"], self.barangay)
+        visible = {item.first_name for item in residents.context["residents_page"]}
+        self.assertIn("Assigned", visible)
+        self.assertNotIn("Hidden", visible)
 
-        login_response = self.client.post(
-            reverse("signin"),
-            {"username": "poblacion-managed-admin", "password": self.password},
-        )
-
-        self.assertRedirects(login_response, reverse("barangay_dashboard"))
-        residents_response = self.client.get(reverse("barangay_residents"))
-        self.assertEqual(residents_response.status_code, 200)
-        self.assertEqual(residents_response.context["barangay"], self.barangay)
-        visible_names = {resident.first_name for resident in residents_response.context["residents_page"]}
-        self.assertIn("Assigned", visible_names)
-        self.assertNotIn("Hidden", visible_names)
-
-    def test_non_superuser_cannot_access_global_admin_management(self):
-        user = User.objects.create_user(
-            "ordinary-barangay-admin",
-            password=self.password,
-            is_staff=True,
-        )
-        BarangayStaff.objects.create(
-            barangay=self.barangay,
-            user=user,
-            first_name="Ordinary",
-            last_name="Admin",
-            username=user.username,
-            role=BarangayStaff.Role.ADMIN,
-        )
-        self.client.force_login(user)
-
-        self.assertEqual(
-            self.client.get(reverse("admin:qq_barangayadministrator_changelist")).status_code,
-            403,
-        )
-
-    def test_superuser_can_edit_and_deactivate_account(self):
-        self._create_admin_through_django_admin()
-        profile = BarangayStaff.objects.get(username="poblacion-managed-admin")
-
+    def test_duplicate_username_and_email_are_rejected(self):
+        self._create_registration()
         response = self.client.post(
-            reverse("admin:qq_barangayadministrator_change", args=(profile.pk,)),
-            {
-                "barangay": self.other_barangay.pk,
-                "first_name": "Updated",
-                "middle_name": "",
-                "last_name": "Administrator",
-                "username": "updated-managed-admin",
-                "email": "updated-admin@example.com",
-                "contact_number": "09981234567",
-                "password1": "",
-                "password2": "",
-                "_save": "Save",
-            },
+            reverse("admin:qq_barangayadminregistration_add"),
+            self._registration_data(
+                barangay=self.other_barangay.pk, username="POBLACION-MANAGED-ADMIN",
+                email="MANAGED-ADMIN@EXAMPLE.COM",
+            ),
         )
-
-        self.assertRedirects(response, reverse("admin:qq_barangayadministrator_changelist"))
-        profile.refresh_from_db()
-        profile.user.refresh_from_db()
-        self.assertEqual(profile.barangay, self.other_barangay)
-        self.assertEqual(profile.user.username, "updated-managed-admin")
-        self.assertFalse(profile.is_active)
-        self.assertFalse(profile.user.is_active)
-        self.assertTrue(profile.user.check_password(self.password))
-
-    def test_reassignment_detaches_conflicting_legacy_barangay_owner_link(self):
-        user = User.objects.create_user("legacy-admin", password=self.password, is_staff=True)
-        self.barangay.user = user
-        self.barangay.save(update_fields=("user", "updated_at"))
-        profile = BarangayStaff.objects.create(
-            barangay=self.barangay,
-            user=user,
-            first_name="Legacy",
-            last_name="Admin",
-            username=user.username,
-            role=BarangayStaff.Role.ADMIN,
-        )
-        self.client.force_login(self.superuser)
-
-        response = self.client.post(
-            reverse("admin:qq_barangayadministrator_change", args=(profile.pk,)),
-            {
-                "barangay": self.other_barangay.pk,
-                "first_name": "Legacy",
-                "middle_name": "",
-                "last_name": "Admin",
-                "username": user.username,
-                "email": "legacy@example.com",
-                "contact_number": "09981234567",
-                "password1": "",
-                "password2": "",
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
-        self.assertRedirects(response, reverse("admin:qq_barangayadministrator_changelist"))
-        self.barangay.refresh_from_db()
-        profile.refresh_from_db()
-        self.assertIsNone(self.barangay.user)
-        self.assertEqual(profile.barangay, self.other_barangay)
-
-    def test_generic_staff_admin_cannot_create_administrator_role(self):
-        self.client.force_login(self.superuser)
-
-        response = self.client.post(
-            reverse("admin:qq_barangaystaff_add"),
-            {
-                "barangay": self.barangay.pk,
-                "first_name": "Bypass",
-                "last_name": "Attempt",
-                "middle_name": "",
-                "username": "bypass-attempt",
-                "email": "",
-                "contact_number": "",
-                "role": BarangayStaff.Role.ADMIN,
-                "is_active": "on",
-                "_save": "Save",
-            },
-        )
-
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(BarangayStaff.objects.filter(username="bypass-attempt").exists())
+        self.assertContains(response, "A user with this username already exists.")
+        self.assertContains(response, "A user with this email address already exists.")
+        self.assertEqual(User.objects.filter(username__iexact="poblacion-managed-admin").count(), 1)
+
+    def test_superuser_can_deactivate_account_by_editing_registration(self):
+        self._create_registration()
+        registration = BarangayAdminRegistration.objects.get(user__username="poblacion-managed-admin")
+        response = self.client.post(
+            reverse("admin:qq_barangayadminregistration_change", args=(registration.pk,)),
+            self._registration_data(password1="", password2="", account_is_active=""),
+        )
+        self.assertRedirects(response, reverse("admin:qq_barangayadminregistration_changelist"))
+        registration.user.refresh_from_db()
+        staff = BarangayStaff.objects.get(user=registration.user)
+        self.assertFalse(registration.user.is_active)
+        self.assertFalse(staff.is_active)
+        self.assertTrue(registration.user.check_password(self.password))
+
+    def test_non_superuser_cannot_manage_registrations(self):
+        user = User.objects.create_user("ordinary-staff", password=self.password, is_staff=True)
+        self.client.force_login(user)
+        self.assertEqual(
+            self.client.get(reverse("admin:qq_barangayadminregistration_changelist")).status_code, 403,
+        )
+        self.assertEqual(
+            self.client.get(reverse("admin:qq_barangayadminregistration_add")).status_code, 403,
+        )
+
+    def test_legacy_public_origin_still_requires_real_terms_acceptance(self):
+        user = User.objects.create_user("legacy-request", email="legacy@example.com")
+        registration = BarangayAdminRegistration(
+            user=user, barangay=self.other_barangay, municipality="Toledo City", province="Cebu",
+            complete_address="Barangay Hall, Bato", zip_code="6038", contact_number="09980000000",
+            email="legacy@example.com", origin=BarangayAdminRegistration.Origin.LEGACY_PUBLIC,
+        )
+        with self.assertRaises(ValidationError):
+            registration.full_clean()
+        registration.terms_accepted_at = timezone.now()
+        registration.full_clean()
+
+    def test_no_separate_barangay_administrator_model_is_registered(self):
+        registered_model_names = {model.__name__ for model in admin.site._registry}
+        self.assertNotIn("BarangayAdministrator", registered_model_names)
