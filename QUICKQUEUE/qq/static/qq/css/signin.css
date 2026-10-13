@@ -20,7 +20,7 @@
 @media(max-width:760px){.signin-card{grid-template-columns:1fr}.signin-panel{padding:34px 8% 42px}.signin-panel::before{display:none}}
 
 /* The supplied login assets are full-card layers; keep them aligned and mask only the dividing curve. */
-.signin-card{position:relative;isolation:isolate;background:url("../images/logincard_01.png") center/cover no-repeat;border:1px solid rgb(255 255 255/50%)}
+.signin-card{position:relative;isolation:isolate;background:url("../images/logincard_01.png") center/cover no-repeat;border:1px solid rgba(255,255,255,.5)}
 .signin-light-art{position:absolute;z-index:0;inset:0;background:url("../images/logincard_02.png") center/cover no-repeat;-webkit-mask-image:linear-gradient(90deg,#000 0 44%,transparent 44%),radial-gradient(ellipse 16% 52% at 44% 50%,#000 99%,transparent 100%);-webkit-mask-composite:source-over;mask-image:linear-gradient(90deg,#000 0 44%,transparent 44%),radial-gradient(ellipse 16% 52% at 44% 50%,#000 99%,transparent 100%);mask-composite:add}
 .signin-visual{z-index:1;background:none}
 .signin-panel{z-index:2;background:transparent}
