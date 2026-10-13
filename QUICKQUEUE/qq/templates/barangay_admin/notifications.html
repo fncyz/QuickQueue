@@ -14,8 +14,8 @@
 </head>
 <body>
     <div class="shell">
-        {% include 'barangay_admin/includes/sidebar.html' %}
-        <main class="dashboard notifications-page">
+        {% if is_regular_staff %}{% include 'barangay_staff/includes/sidebar.html' %}{% else %}{% include 'barangay_admin/includes/sidebar.html' %}{% endif %}
+        <main class="{% if is_regular_staff %}staff-main{% else %}dashboard{% endif %} notifications-page">
             <header class="dashboard-header">
                 <div>
                     <h1>Notifications</h1>
@@ -28,6 +28,11 @@
                 </form>
                 {% endif %}
             </header>
+            <form class="notification-filters" method="get">
+                <input name="q" value="{{ search }}" placeholder="Search notifications" aria-label="Search notifications">
+                <button name="filter" value="all" class="{% if active_filter == 'all' %}active{% endif %}">All</button>
+                <button name="filter" value="unread" class="{% if active_filter == 'unread' %}active{% endif %}">Unread</button>
+            </form>
 
             {% if messages %}
             <ul class="notification-messages">
@@ -37,7 +42,7 @@
 
             <section class="notification-list" aria-label="Notifications">
                 {% for notification in notifications %}
-                <article class="notification-item{% if not notification.admin_is_read %} unread{% endif %}">
+                <article class="notification-item{% if not notification.is_read %} unread{% endif %}">
                     <span class="notification-dot" aria-hidden="true"></span>
                     <div>
                         <h2>{{ notification.title }}</h2>
@@ -49,6 +54,7 @@
                 <div class="empty-notifications">No notifications yet.</div>
                 {% endfor %}
             </section>
+            {% if page_obj.paginator.num_pages > 1 %}<nav class="notification-pagination" aria-label="Notification pages">{% if page_obj.has_previous %}<a href="?q={{ search|urlencode }}&filter={{ active_filter }}&page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?q={{ search|urlencode }}&filter={{ active_filter }}&page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
         </main>
     </div>
 </body>

@@ -1,0 +1,4 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'qq/css/notification_dropdown.css' %}">
+<div id="qq-notification-root" data-url="{% url 'barangay_notifications' %}" data-csrf="{{ csrf_token }}"></div>
+<script defer src="{% static 'qq/js/notification_dropdown.js' %}"></script>

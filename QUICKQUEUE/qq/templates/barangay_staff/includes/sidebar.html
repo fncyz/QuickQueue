@@ -17,6 +17,7 @@
   <a class="staff-logout" href="{% url 'staff_logout' %}"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 16l4-4-4-4M18 12H9"/></svg>Logout</a>
 </aside>
 <div id="staff-notification-root" data-url="{% url 'staff_document_notifications' %}">{% csrf_token %}</div>
+{% include 'notifications/dropdown.html' %}
 <style>
   .staff-profile em{background:#22c55e}
   .user-tools .avatar{overflow:hidden}
@@ -69,7 +70,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const bell = document.querySelector(".user-tools .bell");
   const notificationRoot = document.getElementById("staff-notification-root");
-  if (bell && notificationRoot) {
+  if (bell && notificationRoot && !document.getElementById("qq-notification-root")) {
     bell.addEventListener("click", async function (event) {
       event.preventDefault();
       const existing = document.querySelector(".staff-notification-menu");

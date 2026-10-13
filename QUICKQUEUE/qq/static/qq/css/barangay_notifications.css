@@ -84,3 +84,4 @@
     border: 1px solid var(--line);
     border-radius: 12px;
 }
+.notification-filters{display:flex;gap:9px;align-items:center;margin-bottom:18px}.notification-filters input{min-width:240px;padding:11px 14px;border:1px solid #dbe4f0;border-radius:9px;font:12px Poppins,sans-serif}.notification-filters button,.notification-pagination a{padding:9px 16px;border:0;border-radius:999px;background:#f0f4f9;color:#223653;font:600 12px Poppins,sans-serif;text-decoration:none}.notification-filters button.active{background:#0874ed;color:#fff}.notification-pagination{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:18px;color:#647795;font-size:12px}
