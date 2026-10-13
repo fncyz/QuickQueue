@@ -7,7 +7,7 @@ from django.utils import timezone
 from qq.models import BarangayStaff, Notification, QueueTicket, Service
 from qq.services.configuration_service import service_configuration_map
 from qq.views.barangay_live_queue import (
-    _annotate_wait_estimates, _resolve_slot, _ticket_queryset, _window_label,
+    _annotate_wait_estimates, _resolve_slot, _service_window_for_user, _ticket_queryset,
 )
 
 
@@ -30,12 +30,16 @@ def staff_live_queue(request):
     }
     tickets, now_serving, next_in_line = [], None, []
     waiting_count = completed_count = serving_count = 0
-    next_wait_minutes, window = None, "A"
+    service_window = _service_window_for_user(request.user, barangay)
+    next_wait_minutes, window = None, service_window.number if service_window else "Unassigned"
     search = request.GET.get("q", "").strip()
     service_id = request.GET.get("service", "").strip()
     if current_slot:
-        window = _window_label(slots, current_slot)
         ticket_queryset = _ticket_queryset(barangay, today, current_slot)
+        if service_window:
+            ticket_queryset = ticket_queryset.filter(
+                Q(status=QueueTicket.Status.WAITING) | Q(service_window=service_window)
+            )
         if search:
             ticket_queryset = ticket_queryset.filter(
                 Q(queue_number__icontains=search)
@@ -74,7 +78,7 @@ def staff_live_queue(request):
     next_slot = slots[current_index + 1] if 0 <= current_index < len(slots) - 1 else None
     return render(request, "barangay_staff/live_queue.html", {
         "active_page": "queue", "staff": staff, "barangay": barangay, "today": today,
-        "current_slot": current_slot, "slots": slots, "window_label": window, "tickets": tickets,
+        "current_slot": current_slot, "slots": slots, "window_label": window, "service_window": service_window, "tickets": tickets,
         "now_serving": now_serving, "waiting_count": waiting_count,
         "completed_count": completed_count, "serving_count": serving_count,
         "slot_capacity": current_slot.max_appointments if current_slot else 0,

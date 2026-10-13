@@ -13,3 +13,4 @@ from .push_device import PushDevice, PushDelivery
 from .event_booking import EventBooking
 from .booking_configuration import BarangayServiceConfiguration, ClosedAppointmentDate
 from .ai_assistant import AssistantKnowledge, ChatFeedback, ChatMessage, ChatQuestionTopic, ChatSession
+from .service_window import ServiceWindow

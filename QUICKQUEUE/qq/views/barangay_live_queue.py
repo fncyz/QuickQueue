@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, TimeSlot
+from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, ServiceWindow, TimeSlot
 from qq.services.configuration_service import service_configuration_map
 
 
@@ -30,6 +30,14 @@ def _window_label(slots, slot):
     except ValueError:
         index = 0
     return chr(65 + (index % 26))
+
+
+def _service_window_for_user(user, barangay):
+    if hasattr(user, "staff_profile") and user.staff_profile.role != BarangayStaff.Role.ADMIN:
+        return ServiceWindow.objects.filter(
+            barangay=barangay, assigned_staff=user.staff_profile, is_active=True,
+        ).first()
+    return ServiceWindow.objects.filter(barangay=barangay, is_active=True).order_by("number").first()
 
 
 def _resolve_slot(barangay, slot_id, today, now_time):
@@ -115,6 +123,8 @@ def _ticket_queryset(barangay, today, slot):
             "appointment__resident",
             "appointment__service",
             "appointment__time_slot",
+            "service_window",
+            "served_by",
         )
         .order_by("queue_number")
     )
@@ -160,15 +170,15 @@ def barangay_live_queue(request):
     serving_count = 0
     next_in_line = []
     next_wait_minutes = None
-    window = "A"
+    service_window = _service_window_for_user(request.user, barangay)
+    window = service_window.number if service_window else "Unassigned"
 
     if current_slot:
-        window = _window_label(slots, current_slot)
         tickets = _annotate_wait_estimates(
             list(_ticket_queryset(barangay, today, current_slot)), duration_by_service
         )
         now_serving = next(
-            (ticket for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING),
+            (ticket for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING and (not service_window or ticket.service_window_id == service_window.id)),
             None,
         )
         waiting_count = sum(1 for ticket in tickets if ticket.status == QueueTicket.Status.WAITING)
@@ -228,6 +238,7 @@ def barangay_live_queue(request):
             "current_slot": current_slot,
             "slots": slots,
             "window_label": window,
+            "service_window": service_window,
             "tickets": tickets,
             "now_serving": now_serving,
             "waiting_count": waiting_count,
@@ -265,6 +276,10 @@ def barangay_queue_call_next(request):
     current_slot, _slots = _resolve_slot(
         barangay, slot_id, today, timezone.localtime().time()
     )
+    service_window = _service_window_for_user(request.user, barangay)
+    if not service_window:
+        messages.error(request, "No active service window has been assigned to your account.")
+        return _redirect_live_queue(request, current_slot.id if current_slot else None)
     if not current_slot:
         messages.error(request, "No active time slot is available.")
         return _redirect_live_queue(request)
@@ -277,6 +292,7 @@ def barangay_queue_call_next(request):
                 appointment__appointment_date=today,
                 appointment__time_slot=current_slot,
                 status=QueueTicket.Status.NOW_SERVING,
+                service_window=service_window,
             )
             .first()
         )
@@ -305,7 +321,9 @@ def barangay_queue_call_next(request):
         now = timezone.now()
         nxt.status = QueueTicket.Status.NOW_SERVING
         nxt.called_at = now
-        nxt.save(update_fields=["status", "called_at", "updated_at"])
+        nxt.service_window = service_window
+        nxt.served_by = request.user.staff_profile if hasattr(request.user, "staff_profile") else None
+        nxt.save(update_fields=["status", "called_at", "service_window", "served_by", "updated_at"])
         nxt.appointment.status = Appointment.Status.ONGOING
         nxt.appointment.save(update_fields=["status", "updated_at"])
 
@@ -314,7 +332,7 @@ def barangay_queue_call_next(request):
             appointment=nxt.appointment,
             notification_type=Notification.NotificationType.QUEUE_UPDATE,
             title="Now Serving",
-            message=f"Your queue number {nxt.queue_number} is now being served.",
+            message=f"Your queue number {nxt.queue_number} is now being served at {service_window.name}.",
         )
 
     messages.success(
@@ -335,6 +353,11 @@ def barangay_queue_complete(request, pk):
         pk=pk,
         appointment__barangay=barangay,
     )
+    service_window = _service_window_for_user(request.user, barangay)
+    is_regular_staff = hasattr(request.user, "staff_profile") and request.user.staff_profile.role != BarangayStaff.Role.ADMIN
+    if is_regular_staff and (not service_window or ticket.service_window_id != service_window.id):
+        messages.error(request, "This queue transaction belongs to another service window.")
+        return _redirect_live_queue(request, ticket.appointment.time_slot_id)
     if ticket.status != QueueTicket.Status.NOW_SERVING:
         messages.error(request, "Only a now-serving ticket can be completed.")
         return _redirect_live_queue(request, ticket.appointment.time_slot_id)
@@ -371,6 +394,10 @@ def barangay_queue_skip(request):
     current_slot, _slots = _resolve_slot(
         barangay, slot_id, today, timezone.localtime().time()
     )
+    service_window = _service_window_for_user(request.user, barangay)
+    if not service_window:
+        messages.error(request, "No active service window has been assigned to your account.")
+        return _redirect_live_queue(request, current_slot.id if current_slot else None)
     if not current_slot:
         messages.error(request, "No active time slot is available.")
         return _redirect_live_queue(request)
@@ -381,6 +408,7 @@ def barangay_queue_skip(request):
             appointment__appointment_date=today,
             appointment__time_slot=current_slot,
             status=QueueTicket.Status.NOW_SERVING,
+            service_window=service_window,
         )
         .select_related("appointment__resident")
         .first()

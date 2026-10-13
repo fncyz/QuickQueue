@@ -24,6 +24,16 @@ class QueueTicket(models.Model):
         related_name="queue_ticket",
     )
 
+    service_window = models.ForeignKey(
+        "ServiceWindow", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="queue_tickets",
+    )
+
+    served_by = models.ForeignKey(
+        "BarangayStaff", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="served_queue_tickets",
+    )
+
     queue_number = models.CharField(
         max_length=10,
     )

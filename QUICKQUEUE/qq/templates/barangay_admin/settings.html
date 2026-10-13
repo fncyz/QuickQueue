@@ -60,6 +60,10 @@
                         <b>Change Password</b>
                         <span>Update your account password</span>
                     </a>
+                    <a href="?tab=windows" class="{% if active_tab == 'windows' %}active{% endif %}">
+                        <b>Window Management</b>
+                        <span>Configure windows and staff assignments</span>
+                    </a>
                 </nav>
 
                 <div class="settings-content">
@@ -138,6 +142,15 @@
                                 <button type="submit" class="btn-primary">Save Changes</button>
                             </div>
                         </form>
+                    </section>
+
+                    <section class="settings-panel window-panel" id="windows-panel"{% if active_tab != 'windows' %} hidden{% endif %}>
+                        <header class="settings-panel-head"><h2>Window Management</h2><p>Configure service windows and assign barangay staff to manage resident transactions.</p></header>
+                        <form method="post" class="window-config-form">{% csrf_token %}<input type="hidden" name="action" value="window_count"><label for="total-windows"><b>Total Windows</b><input id="total-windows" name="total_windows" type="number" min="1" max="50" value="{{ window_stats.available|default:1 }}" required></label><button class="btn-primary" type="submit">Save Configuration</button></form>
+                        <div class="window-stats"><article><strong>{{ window_stats.available }}</strong><span>Available Windows</span></article><article><strong>{{ window_stats.assigned }}</strong><span>Assigned Windows</span></article><article><strong>{{ window_stats.unassigned }}</strong><span>Unassigned Windows</span></article></div>
+                        <div class="window-grid">
+                        {% for window in windows %}<article class="window-card"><header><div><h3>{{ window.name }}</h3><small>Window {{ window.number }}</small></div><span class="window-status {{ window.operational_status }}">{{ window.operational_status|title }}</span></header><form method="post" data-current-staff="{{ window.assigned_staff_id|default:'' }}">{% csrf_token %}<input type="hidden" name="action" value="window_update"><input type="hidden" name="window_id" value="{{ window.pk }}"><div class="field"><label>Window Name</label><input name="name" value="{{ window.name }}" maxlength="80" required></div><div class="field"><label>Assigned Staff</label><select name="assigned_staff"><option value="">No Staff Assigned</option>{% for member in eligible_staff %}<option value="{{ member.pk }}" {% if window.assigned_staff_id == member.pk %}selected{% endif %}>{{ member.full_name }} — {{ member.get_role_display }}</option>{% endfor %}</select></div><p class="window-assignee">{% if window.assigned_staff %}<b>{{ window.assigned_staff.full_name }}</b><span>{{ window.assigned_staff.get_role_display }}</span>{% else %}<b>No Staff Assigned</b><span>Unassigned</span>{% endif %}</p><label class="window-toggle"><input type="checkbox" name="is_active" {% if window.is_active %}checked{% endif %}> Administratively active</label><footer><button class="btn-primary" type="submit">Save Window</button>{% if not window.assigned_staff_id and not window.queue_tickets.exists %}<button class="window-delete" type="submit" name="window_action" value="delete" onclick="return confirm('Remove this unused window?')">Remove</button>{% endif %}</footer></form></article>{% empty %}<p class="window-empty">No service windows configured yet. Set the total number above to get started.</p>{% endfor %}
+                        </div>
                     </section>
 
                     <section class="settings-panel" id="password-panel"{% if active_tab != 'password' %} hidden{% endif %}>
