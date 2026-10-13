@@ -203,7 +203,10 @@ def barangay_live_queue(request):
     recently_served = completed_today.select_related(
         "appointment__resident", "appointment__service"
     ).order_by("-completed_at")[:3]
-    active_counters = today_tickets.filter(status=QueueTicket.Status.NOW_SERVING).count()
+    active_windows = ServiceWindow.objects.filter(
+        barangay=barangay,
+        is_active=True,
+    ).count()
     avg_seconds = (
         completed_today.exclude(called_at=None)
         .exclude(completed_at=None)
@@ -256,7 +259,7 @@ def barangay_live_queue(request):
                     status=QueueTicket.Status.WAITING
                 ).count(),
                 "total_today": today_tickets.count(),
-                "active_counters": active_counters,
+                "active_windows": active_windows,
             },
             "unread_notifications": Notification.objects.filter(
                 appointment__barangay=barangay,

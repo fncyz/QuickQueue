@@ -44,3 +44,17 @@ class WindowManagementTests(TestCase):
         self.assertEqual(ticket.status, QueueTicket.Status.NOW_SERVING)
         self.assertEqual(ticket.service_window, window)
         self.assertEqual(ticket.served_by, self.staff)
+
+    def test_live_monitor_counts_active_windows_for_current_barangay(self):
+        ServiceWindow.objects.create(barangay=self.barangay, number=1, name="Window 1", is_active=True)
+        ServiceWindow.objects.create(barangay=self.barangay, number=2, name="Window 2", is_active=True)
+        ServiceWindow.objects.create(barangay=self.barangay, number=3, name="Window 3", is_active=False)
+
+        other_barangay = Barangay.objects.create(name="Other Barangay", address="Toledo", contact_number="09123333333")
+        ServiceWindow.objects.create(barangay=other_barangay, number=1, name="Other Window", is_active=True)
+
+        response = self.client.get("/barangay/queue/live/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["stats"]["active_windows"], 2)
+        self.assertContains(response, "Active Windows")
