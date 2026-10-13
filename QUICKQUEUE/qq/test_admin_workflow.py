@@ -141,7 +141,9 @@ class AdminStaffWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Resident History")
-        self.assertContains(response, "Completed resident service history")
+        self.assertContains(response, 'class="logbook-table embedded-history-table"')
+        self.assertContains(response, "COMPLETED SERVICE")
+        self.assertContains(response, "COMPLETED DATE")
 
     def test_document_processing_action_still_updates_existing_ticket(self):
         ticket = self._ticket("document-resident", "Document", self.service, "C09")
