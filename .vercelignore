@@ -1,0 +1,51 @@
+# Repository and local tooling
+.git/
+.github/
+.agents/
+.codex/
+.vercel/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python environments, caches, tests, and logs
+venv/
+.venv/
+**/venv/
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.tox/
+**/.nox/
+**/.coverage*
+**/coverage.xml
+**/htmlcov/
+**/*.log
+
+# Local and temporary databases
+**/*.sqlite3
+**/.tmp_*.sqlite3
+
+# Django-generated static output (source assets remain included)
+QUICKQUEUE/staticfiles/
+
+# React Native / Expo dependencies and generated output
+quickqueue-mobile/node_modules/
+quickqueue-mobile/.expo/
+quickqueue-mobile/.expo-web-test/
+quickqueue-mobile/dist/
+quickqueue-mobile/web-build/
+quickqueue-mobile/build/
+quickqueue-mobile/ios/
+quickqueue-mobile/android/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db

@@ -1,0 +1,39 @@
+# Local secrets and environment files
+.env
+.env.*
+
+# Local Python environments and caches
+venv/
+.venv/
+**/venv/
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.tox/
+**/.nox/
+**/.coverage*
+**/coverage.xml
+**/htmlcov/
+**/*.log
+
+# Local and temporary databases
+db.sqlite3
+**/*.sqlite3
+**/.tmp_*.sqlite3
+
+# Django output generated during deployment
+staticfiles/
+
+# Tests are retained in Git but are not needed by the production function
+qq/test*.py
+QUICKQUEUE/test_settings.py
+
+# Local Vercel and editor state
+.vercel/
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db
