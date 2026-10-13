@@ -30,8 +30,7 @@
   background: #2563eb;
 }
 
-/* Keep dashboard glyphs centered at every viewport and browser zoom level. */
-.user-tools .bell,
+/* Keep dashboard card glyphs centered at every viewport and browser zoom level. */
 .attention > a > i {
   display: flex;
   flex-shrink: 0;
@@ -42,7 +41,6 @@
   line-height: 0;
 }
 
-.user-tools .bell::before,
 .attention > a > i::before {
   display: block;
   width: 22px;

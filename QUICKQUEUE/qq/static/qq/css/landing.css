@@ -57,3 +57,20 @@
     .hero-copy{transition:opacity 120ms linear!important}
     .hero-card.is-transitioning .hero-copy{transform:none}
 }
+
+/* Typography-only refinement: keep the existing button geometry unchanged. */
+.get-started{font-weight:700}
+
+/* Premium elevation without changing the card geometry or its contents. */
+.hero-card{
+    border-color:rgba(255,255,255,.65);
+    box-shadow:0 8px 18px rgba(0,31,94,.10),0 22px 48px rgba(0,40,110,.16),0 38px 85px rgba(0,28,90,.12);
+    animation:premium-card-float 7s ease-in-out infinite;
+    transition:box-shadow .4s ease,transform .4s ease;
+}
+@keyframes premium-card-float{
+    0%,100%{transform:translate3d(0,0,0)}
+    50%{transform:translate3d(0,-4px,0)}
+}
+@media(max-width:720px){.hero-card{box-shadow:0 7px 16px rgba(0,31,94,.09),0 18px 38px rgba(0,40,110,.14),0 28px 58px rgba(0,28,90,.10)}}
+@media(prefers-reduced-motion:reduce){.hero-card{animation:none;transform:none}}

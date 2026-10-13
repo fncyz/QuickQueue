@@ -1,8 +1,15 @@
 /* Shared staff-portal outline icons */
 .bell{font-size:0}
+.user-tools .bell{
+  display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;box-sizing:border-box;padding:0;line-height:0
+}
 .bell::before,.attention>a>i::before,.queue-summary article>i::before{
   content:"";display:block;width:22px;height:22px;background:currentColor;
   -webkit-mask:center/contain no-repeat;mask:center/contain no-repeat
+}
+.user-tools .bell::before{
+  width:22px;height:22px;flex:0 0 22px;margin:0;padding:0
 }
 .bell::before{
   -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9'/%3E%3Cpath d='M10 21h4'/%3E%3C/g%3E%3C/svg%3E");
