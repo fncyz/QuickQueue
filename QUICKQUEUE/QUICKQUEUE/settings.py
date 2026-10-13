@@ -172,10 +172,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_SSL_INSECURE = DEBUG
 
-EMAIL_HOST_USER = "garulampe045@gmail.com"
-EMAIL_HOST_PASSWORD = "xxnp wcmg nlgs vguj"
 
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 CORS_ALLOW_ALL_ORIGINS = True
 
 # Resident-facing hours used by QuickQueue surfaces and the AI assistant.

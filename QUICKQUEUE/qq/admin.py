@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django import forms
 from .models import (AssistantKnowledge, Barangay, ChatFeedback, ChatQuestionTopic, Service, Resident,
                      Appointment, QueueTicket, Notification, TimeSlot,
                      BarangayAdminRegistration, BarangayStaff, DocumentTemplate, GeneratedDocument)
@@ -6,8 +7,24 @@ from django.utils import timezone
 from django.db import transaction
 
 
+class BarangayAdminForm(forms.ModelForm):
+    class Meta:
+        model = Barangay
+        fields = "__all__"
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        duplicate = Barangay.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError("A barangay with this name already exists.")
+        return name
+
+
 @admin.register(Barangay)
 class BarangayAdmin(admin.ModelAdmin):
+    form = BarangayAdminForm
     list_display = (
         "name",
         "user",
@@ -163,6 +180,14 @@ class BarangayAdminRegistrationAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "terms_accepted_at", "reviewed_at")
     actions = ("approve_registrations", "reject_registrations")
 
+    def has_add_permission(self, request):
+        """Registration rows must only come from a terms-accepting submission."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Keep the registration and approval audit trail intact."""
+        return False
+
     @admin.action(description="Approve selected barangay admin registrations")
     def approve_registrations(self, request, queryset):
         approved = 0
@@ -197,6 +222,14 @@ class BarangayAdminRegistrationAdmin(admin.ModelAdmin):
                 approved += 1
         self.message_user(request, f"Approved {approved} registration(s).")
 
+    @admin.action(description="Reject selected barangay admin registrations")
+    def reject_registrations(self, request, queryset):
+        rejected = queryset.filter(status=BarangayAdminRegistration.Status.PENDING).update(
+            status=BarangayAdminRegistration.Status.REJECTED,
+            reviewed_at=timezone.now(),
+        )
+        self.message_user(request, f"Rejected {rejected} registration(s).")
+
 
 @admin.register(BarangayStaff)
 class BarangayStaffAdmin(admin.ModelAdmin):
@@ -211,15 +244,6 @@ class BarangayStaffAdmin(admin.ModelAdmin):
     )
     list_filter = ("role", "is_active", "barangay")
     search_fields = ("first_name", "last_name", "username", "email", "contact_number")
-
-    @admin.action(description="Reject selected barangay admin registrations")
-    def reject_registrations(self, request, queryset):
-        rejected = queryset.filter(status=BarangayAdminRegistration.Status.PENDING).update(
-            status=BarangayAdminRegistration.Status.REJECTED,
-            reviewed_at=timezone.now(),
-        )
-        self.message_user(request, f"Rejected {rejected} registration(s).")
-
 
 @admin.register(DocumentTemplate)
 class DocumentTemplateAdmin(admin.ModelAdmin):
