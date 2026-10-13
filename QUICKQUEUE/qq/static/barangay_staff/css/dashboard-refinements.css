@@ -30,6 +30,28 @@
   background: #2563eb;
 }
 
+/* Keep dashboard glyphs centered at every viewport and browser zoom level. */
+.user-tools .bell,
+.attention > a > i {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  line-height: 0;
+}
+
+.user-tools .bell::before,
+.attention > a > i::before {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  margin: 0;
+  padding: 0;
+}
+
 .welcome em,
 .priority header > div > em {
   color: #2563eb;
