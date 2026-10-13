@@ -6,6 +6,8 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db.models.deletion import ProtectedError
 from django.db import transaction
+from django.db.models import Q
+from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -164,11 +166,128 @@ def _scan_payload(booking, now):
     return {**base, "result": "valid", "message": "Valid Booking", "can_check_in": True}
 
 
+def _scanner_event_status(event, today):
+    if event.lifecycle == Service.Lifecycle.CANCELLED:
+        return "cancelled"
+    if event.event_end_date and today > event.event_end_date:
+        return "completed"
+    if event.event_start_date and today < event.event_start_date:
+        return "upcoming"
+    return "ongoing"
+
+
+def _scanner_events(staff, today):
+    events = list(Service.objects.filter(
+        is_temporary=True,
+        temporary_type=Service.TemporaryType.EVENT,
+        barangay=staff.barangay,
+    ).order_by("-event_start_date", "name"))
+    for event in events:
+        event.scanner_status = _scanner_event_status(event, today)
+    return events
+
+
+def _attendance_payload(staff, event, request):
+    bookings = EventBooking.objects.filter(
+        appointment__service=event,
+        appointment__barangay=staff.barangay,
+    ).exclude(
+        status=EventBooking.Status.CANCELLED,
+    ).exclude(
+        appointment__status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED],
+    ).select_related("appointment__resident", "appointment__service").order_by(
+        "appointment__resident__last_name", "appointment__resident__first_name", "created_at"
+    )
+    total_registered = bookings.count()
+    scanned_in = bookings.filter(status=EventBooking.Status.CHECKED_IN).count()
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "all")
+    if query:
+        if query.upper().startswith("EVT-"):
+            matching_ids = [item.pk for item in bookings if query.upper() in item.booking_reference]
+            bookings = bookings.filter(pk__in=matching_ids)
+        else:
+            bookings = bookings.filter(
+                Q(appointment__resident__first_name__icontains=query)
+                | Q(appointment__resident__middle_name__icontains=query)
+                | Q(appointment__resident__last_name__icontains=query)
+                | Q(appointment__resident__contact_number__icontains=query)
+            )
+    if status_filter == "scanned":
+        bookings = bookings.filter(status=EventBooking.Status.CHECKED_IN)
+    elif status_filter == "not_scanned":
+        bookings = bookings.filter(status=EventBooking.Status.CONFIRMED)
+    paginator = Paginator(bookings, 10)
+    page = paginator.get_page(request.GET.get("page", 1))
+    participants = []
+    for booking in page.object_list:
+        resident = booking.appointment.resident
+        name = " ".join(filter(None, [resident.first_name, resident.middle_name, resident.last_name, resident.suffix]))
+        participants.append({
+            "name": name,
+            "booking_reference": booking.booking_reference,
+            "contact_number": resident.contact_number,
+            "booking_status": booking.get_status_display(),
+            "scanned": booking.status == EventBooking.Status.CHECKED_IN,
+            "scan_time": timezone.localtime(booking.checked_in_at).strftime("%I:%M %p").lstrip("0") if booking.checked_in_at else None,
+            "checked_in_at": timezone.localtime(booking.checked_in_at).strftime("%B %d, %Y at %I:%M %p").replace(" 0", " ") if booking.checked_in_at else None,
+        })
+    today = timezone.localdate()
+    return {
+        "event": {
+            "id": event.pk,
+            "name": event.name,
+            "description": event.description,
+            "date": event.event_start_date.strftime("%B %d, %Y (%A)") if event.event_start_date else "Not scheduled",
+            "date_range": (
+                f"{event.event_start_date:%B %d, %Y} – {event.event_end_date:%B %d, %Y}"
+                if event.event_start_date and event.event_end_date and event.event_start_date != event.event_end_date
+                else (event.event_start_date.strftime("%B %d, %Y") if event.event_start_date else "Not scheduled")
+            ),
+            "location": event.location or "Barangay Hall",
+            "capacity": event.capacity or 0,
+            "requirements": [line.strip() for line in event.requirements.splitlines() if line.strip()],
+            "status": _scanner_event_status(event, today),
+        },
+        "stats": {
+            "registered": total_registered,
+            "scanned": scanned_in,
+            "not_scanned": max(total_registered - scanned_in, 0),
+        },
+        "participants": participants,
+        "pagination": {
+            "page": page.number,
+            "pages": paginator.num_pages,
+            "count": paginator.count,
+            "has_previous": page.has_previous(),
+            "has_next": page.has_next(),
+        },
+        "updated_at": timezone.localtime().isoformat(),
+    }
+
+
 @login_required(login_url="signin")
 def staff_event_scanner(request):
     staff = _staff_for(request.user)
     if request.method == "GET":
-        return render(request, "barangay_staff/event_scanner.html", {"active_page": "event_scanner", "staff": staff})
+        today = timezone.localdate()
+        events = _scanner_events(staff, today)
+        selected_id = request.GET.get("event")
+        selected_event = next((event for event in events if str(event.pk) == selected_id), None)
+        if selected_event is None:
+            selected_event = next((event for event in events if event.scanner_status == "ongoing"), None)
+        if selected_event is None:
+            selected_event = next((event for event in events if event.scanner_status == "upcoming"), None)
+        if selected_event is None and events:
+            selected_event = events[0]
+        if request.GET.get("format") == "json":
+            if not selected_event:
+                return JsonResponse({"event": None, "stats": {"registered": 0, "scanned": 0, "not_scanned": 0}, "participants": [], "pagination": {"page": 1, "pages": 1, "count": 0, "has_previous": False, "has_next": False}})
+            return JsonResponse(_attendance_payload(staff, selected_event, request))
+        return render(request, "barangay_staff/event_scanner.html", {
+            "active_page": "event_scanner", "staff": staff, "events": events,
+            "selected_event": selected_event,
+        })
     try:
         body = json.loads(request.body or "{}")
         booking_id = EventBooking.booking_id_from_token(str(body.get("token", "")))
@@ -179,6 +298,14 @@ def staff_event_scanner(request):
             booking = EventBooking.objects.select_for_update().select_related(
                 "appointment__service", "appointment__resident"
             ).get(booking_id=booking_id, appointment__barangay=staff.barangay)
+            selected_event_id = body.get("event_id")
+            if selected_event_id and str(booking.appointment.service_id) != str(selected_event_id):
+                return JsonResponse({
+                    **_scan_payload(booking, timezone.now()),
+                    "result": "event_mismatch",
+                    "message": f"This QR code belongs to {booking.appointment.service.name}.",
+                    "can_check_in": False,
+                }, status=409)
             payload = _scan_payload(booking, timezone.now())
             if body.get("action") == "check_in":
                 if not payload["can_check_in"]:

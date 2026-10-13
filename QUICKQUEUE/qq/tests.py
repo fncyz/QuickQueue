@@ -594,6 +594,15 @@ class ResidentAppointmentApiTests(APITestCase):
         self.client.force_login(staff_user)
         token = booking.qr_token()
 
+        attendance = self.client.get(
+            "/barangay/staff/events/scanner/",
+            {"format": "json", "event": event.pk},
+        )
+        self.assertEqual(attendance.status_code, 200)
+        self.assertEqual(attendance.json()["event"]["id"], event.pk)
+        self.assertEqual(attendance.json()["stats"], {"registered": 1, "scanned": 0, "not_scanned": 1})
+        self.assertEqual(attendance.json()["participants"][0]["booking_reference"], booking.booking_reference)
+
         valid = self.client.post("/barangay/staff/events/scanner/", {"token": token}, format="json")
         self.assertEqual(valid.status_code, 200)
         self.assertEqual(valid.json()["result"], "valid")
@@ -603,6 +612,13 @@ class ResidentAppointmentApiTests(APITestCase):
         booking.refresh_from_db()
         first_checked_at = booking.checked_in_at
         self.assertEqual(booking.status, EventBooking.Status.CHECKED_IN)
+
+        refreshed_attendance = self.client.get(
+            "/barangay/staff/events/scanner/",
+            {"format": "json", "event": event.pk},
+        ).json()
+        self.assertEqual(refreshed_attendance["stats"], {"registered": 1, "scanned": 1, "not_scanned": 0})
+        self.assertTrue(refreshed_attendance["participants"][0]["scanned"])
 
         reused = self.client.post("/barangay/staff/events/scanner/", {"token": token, "action": "check_in"}, format="json")
         self.assertEqual(reused.status_code, 409)
