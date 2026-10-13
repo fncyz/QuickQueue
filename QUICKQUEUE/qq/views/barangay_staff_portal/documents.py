@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, Notification, QueueTicket, Service
 from qq.views.barangay_staff_portal.completed_documents import completed_documents_context
+from qq.services.notification_service import notify_resident
 
 
 def _staff_for(user):
@@ -94,11 +95,12 @@ def staff_document_action(request, pk):
     elif action == "ready" and ticket.claim_status == QueueTicket.ClaimStatus.PROCESSING:
         ticket.claim_status = QueueTicket.ClaimStatus.READY
         ticket.save(update_fields=["claim_status", "updated_at"])
-        Notification.objects.create(
-            resident=ticket.appointment.resident, appointment=ticket.appointment,
-            notification_type=Notification.NotificationType.QUEUE_UPDATE,
+        notify_resident(
+            appointment=ticket.appointment,
+            notification_type=Notification.NotificationType.DOCUMENT_UPDATE,
             title="Document Ready for Claiming",
             message=f"Your {ticket.appointment.service.name} document is ready for claiming.",
+            event_key=f"ticket:{ticket.pk}:document-ready",
         )
         messages.success(request, f"{ticket.queue_number} is ready for claiming.")
     elif action == "archive" and ticket.claim_status in (

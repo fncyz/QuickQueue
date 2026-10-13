@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, Service, TimeSlot
 from qq.services.timeslot_service import regular_slot_capacity
+from qq.services.notification_service import notify_resident
 
 
 ACTIVE_BOOKING_STATUSES = [
@@ -227,8 +228,7 @@ def barangay_confirm_appointment(request, pk):
     else:
         schedule_text = ""
 
-    Notification.objects.create(
-        resident=appointment.resident,
+    notify_resident(
         appointment=appointment,
         notification_type=Notification.NotificationType.APPOINTMENT_CONFIRMED,
         title="Appointment Confirmed",
@@ -236,7 +236,7 @@ def barangay_confirm_appointment(request, pk):
             f"Your appointment for {appointment.service.name} on "
             f"{appointment.appointment_date}{schedule_text} "
             f"has been confirmed. Queue number: {appointment.queue_number}."
-        ),
+        ), event_key=f"appointment:{appointment.pk}:confirmed",
     )
 
     messages.success(

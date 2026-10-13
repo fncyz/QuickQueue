@@ -5,6 +5,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from qq.models import Barangay, BarangayStaff, Notification
+from qq.services.notification_service import notifications_for_user
 
 
 def _barangay_for(user):
@@ -21,12 +22,12 @@ def _barangay_for(user):
 @login_required(login_url="signin")
 def barangay_notifications(request):
     barangay = _barangay_for(request.user)
-    notifications = Notification.objects.filter(
-        appointment__barangay=barangay,
-    ).select_related("resident", "appointment").order_by("-created_at")
+    notifications = notifications_for_user(
+        request.user, Notification.RecipientRole.ADMIN,
+    ).filter(barangay=barangay).select_related("resident", "appointment").order_by("-created_at")
 
     if request.method == "POST":
-        updated = notifications.filter(admin_is_read=False).update(admin_is_read=True)
+        updated = notifications.filter(is_read=False).update(is_read=True, admin_is_read=True)
         messages.success(request, f"Marked {updated} notification{'s' if updated != 1 else ''} as read.")
         return redirect("barangay_notifications")
 
@@ -34,5 +35,5 @@ def barangay_notifications(request):
         "barangay": barangay,
         "today": timezone.localdate(),
         "notifications": notifications[:100],
-        "unread_notifications": notifications.filter(admin_is_read=False).count(),
+        "unread_notifications": notifications.filter(is_read=False).count(),
     })

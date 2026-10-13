@@ -4,6 +4,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from qq.models import Appointment, BarangayStaff, Notification, QueueTicket
+from qq.services.notification_service import unread_count_for_user
 
 
 @login_required(login_url="signin")
@@ -80,7 +81,5 @@ def staff_dashboard(request):
             claim_status=QueueTicket.ClaimStatus.PROCESSING
         ).count(),
         "upcoming_appointments": upcoming,
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=barangay, admin_is_read=False
-        ).count(),
+        "unread_notifications": unread_count_for_user(request.user),
     })

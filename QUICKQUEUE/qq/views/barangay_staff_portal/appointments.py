@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, ClosedAppointmentDate, Notification, Service, TimeSlot
+from qq.services.notification_service import notify_resident
 from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacity
 from qq.views.barangay_staff_portal.resident_logbook import resident_history_context
 
@@ -191,12 +192,12 @@ def staff_review_appointment(request, pk):
         return redirect("staff_appointments")
 
     appointment.save(update_fields=["status", "updated_at"])
-    Notification.objects.create(
-        resident=appointment.resident,
+    notify_resident(
         appointment=appointment,
         notification_type=notification_type,
         title=title,
         message=message,
+        event_key=f"appointment:{appointment.pk}:review:{appointment.status}",
     )
     messages.success(request, feedback)
     return redirect("staff_appointments")

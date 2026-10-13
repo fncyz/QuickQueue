@@ -74,8 +74,10 @@ export const unregisterCurrentPushDevice = async () => {
 };
 
 export const notificationRoute = (data: Record<string, unknown>): Href => {
+  if (data.route === 'queue') return '/(tabs)/queue';
+  if (data.route === 'transactions') return '/(tabs)/transactions';
   if (data.type === 'QU') return '/(tabs)/queue';
-  if (data.type === 'CO') return '/(tabs)/transactions';
+  if (['CO', 'DU', 'EV', 'AC', 'AR', 'CA'].includes(String(data.type))) return '/(tabs)/transactions';
   return '/(tabs)/transactions';
 };
 

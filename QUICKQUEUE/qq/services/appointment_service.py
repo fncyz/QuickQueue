@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from .queue_service import generate_queue_number
 from .timeslot_service import regular_daily_capacity, regular_slot_capacity
+from .notification_service import notify_barangay_staff, notify_resident
 
 
 def check_duplicate_appointment(
@@ -154,8 +155,7 @@ def create_appointment(
         appointment=appointment,
         queue_number=queue_number,
     )
-    Notification.objects.create(
-        resident=resident,
+    notify_resident(
         appointment=appointment,
         notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
         title="Appointment Confirmed",
@@ -164,7 +164,13 @@ def create_appointment(
             f"Queue Number: {queue_number}\n"
             f"Date: {appointment_date}\n"
             f"Time: {time_slot.start_time} - {time_slot.end_time}"
-        ),
+        ), event_key=f"appointment:{appointment.pk}:created",
+    )
+    notify_barangay_staff(
+        appointment=appointment,
+        title="New Appointment",
+        message=f"{resident} booked {service.name} for {appointment_date}.",
+        event_key=f"appointment:{appointment.pk}:staff-created",
     )
 
     return appointment
@@ -217,16 +223,21 @@ def create_special_service_booking(resident, service):
     event_date = service.event_start_date.strftime("%B %d, %Y")
     if service.event_end_date and service.event_end_date != service.event_start_date:
         event_date += f" - {service.event_end_date.strftime('%B %d, %Y')}"
-    Notification.objects.create(
-        resident=resident,
+    notify_resident(
         appointment=appointment,
-        notification_type=Notification.NotificationType.APPOINTMENT_REMINDER,
+        notification_type=Notification.NotificationType.EVENT_UPDATE,
         title="Special Service Booking Confirmed",
         message=(
             f"Your reservation for {service.name} is confirmed.\n"
             f"Booking Reference: {event_booking.booking_reference}\n"
             f"Event Date: {event_date}\n"
             "Open your QR Pass and present it at the venue."
-        ),
+        ), event_key=f"event-booking:{event_booking.pk}:confirmed",
+    )
+    notify_barangay_staff(
+        appointment=appointment,
+        title="New Special Service Booking",
+        message=f"{resident} booked {service.name}. Reference: {event_booking.booking_reference}.",
+        event_key=f"event-booking:{event_booking.pk}:staff-created",
     )
     return appointment

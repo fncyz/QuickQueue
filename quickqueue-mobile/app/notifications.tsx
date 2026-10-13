@@ -13,6 +13,7 @@ import { ConnectionStatusBanner, useConnectivity } from '@/contexts/connectivity
 import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
+import { notificationRoute } from '@/services/push-notifications';
 
 type NotificationItem = { id: number; type: string; title: string; message: string; is_read: boolean; appointment_id: number; created_at: string };
 type NotificationsResponse = { notifications: NotificationItem[]; pagination?: { has_more: boolean; page: number } };
@@ -112,7 +113,8 @@ export default function NotificationsScreen() {
   };
 
   const markRead = async (item: NotificationItem) => {
-    if (!isOnline) return router.push('/queue');
+    const target = notificationRoute({ type: item.type });
+    if (!isOnline) return router.push(target);
     if (!item.is_read && !readInFlight.current.has(item.id)) {
       readInFlight.current.add(item.id);
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, is_read: true } : entry));
@@ -125,7 +127,7 @@ export default function NotificationsScreen() {
         readInFlight.current.delete(item.id);
       }
     }
-    router.push('/queue');
+    router.push(target);
   };
 
   const markAllRead = async () => {

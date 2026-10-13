@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, ServiceWindow, TimeSlot
 from qq.services.configuration_service import service_configuration_map
+from qq.services.notification_service import notify_resident
 
 
 def _barangay_for(user):
@@ -330,13 +331,33 @@ def barangay_queue_call_next(request):
         nxt.appointment.status = Appointment.Status.ONGOING
         nxt.appointment.save(update_fields=["status", "updated_at"])
 
-        Notification.objects.create(
-            resident=nxt.appointment.resident,
+        notify_resident(
             appointment=nxt.appointment,
             notification_type=Notification.NotificationType.QUEUE_UPDATE,
             title="Now Serving",
             message=f"Your queue number {nxt.queue_number} is now being served at {service_window.name}.",
+            event_key=f"ticket:{nxt.pk}:called",
         )
+        approaching = (
+            QueueTicket.objects.filter(
+                appointment__barangay=barangay,
+                appointment__appointment_date=today,
+                appointment__time_slot=current_slot,
+                status=QueueTicket.Status.WAITING,
+            )
+            .select_related("appointment__resident__user", "appointment__barangay")
+            .order_by("queue_number")
+            .first()
+        )
+        if approaching:
+            notify_resident(
+                appointment=approaching.appointment,
+                notification_type=Notification.NotificationType.QUEUE_UPDATE,
+                title="You're Next in Line!",
+                message=(f"Your queue number {approaching.queue_number} is next. "
+                         "Please prepare to proceed to the designated counter."),
+                event_key=f"ticket:{approaching.pk}:next",
+            )
 
     messages.success(
         request, f"Now serving {nxt.queue_number} · {nxt.appointment.resident}."

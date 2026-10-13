@@ -448,8 +448,8 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertFalse(QueueTicket.objects.filter(pk=ticket.pk).exists())
         self.assertFalse(GeneratedDocument.objects.filter(ticket_id=ticket.pk).exists())
 
-    @patch("qq.services.push_notifications.Thread")
-    def test_notification_push_is_started_in_background_after_commit(self, thread):
+    @patch("qq.services.push_notifications._send_notification_push_safely")
+    def test_notification_push_is_sent_only_after_commit(self, send_push):
         appointment = Appointment.objects.create(
             resident=self.resident,
             barangay=self.barangay,
@@ -467,10 +467,7 @@ class ResidentAppointmentApiTests(APITestCase):
                 message="Your queue changed.",
             )
 
-        thread.assert_called_once()
-        self.assertEqual(thread.call_args.kwargs["args"], (notification.pk,))
-        self.assertTrue(thread.call_args.kwargs["daemon"])
-        thread.return_value.start.assert_called_once_with()
+        send_push.assert_called_once_with(notification.pk)
 
     def test_transaction_action_cannot_access_another_residents_appointment(self):
         other_user = User.objects.create_user(username="other-resident", password="secret")

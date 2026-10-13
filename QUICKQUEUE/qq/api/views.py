@@ -38,6 +38,7 @@ from qq.models import Appointment, AssistantKnowledge, BarangayServiceConfigurat
 from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
+from qq.services.notification_service import notify_barangay_staff, notify_resident
 from qq.gemini_service import GeminiUnavailable, ask_gemini, check_gemini_ready
 from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 
@@ -665,11 +666,18 @@ def queue_status_api(request):
                 EventBooking.objects.filter(appointment=appointment).update(
                     status=EventBooking.Status.CANCELLED, cancelled_at=timezone.now(), updated_at=timezone.now()
                 )
-                Notification.objects.create(
-                    resident=resident, appointment=appointment,
+                notify_resident(
+                    appointment=appointment,
                     notification_type=Notification.NotificationType.APPOINTMENT_CANCELLED,
                     title="Appointment Cancelled",
                     message="Your appointment has been cancelled.",
+                    event_key=f"appointment:{appointment.pk}:resident-cancelled",
+                )
+                notify_barangay_staff(
+                    appointment=appointment,
+                    title="Appointment Cancelled",
+                    message=f"{resident} cancelled {appointment.service.name} ({appointment.queue_number}).",
+                    event_key=f"appointment:{appointment.pk}:staff-cancelled",
                 )
             return Response({"success": True, "message": "Your appointment has been cancelled."})
 
@@ -682,11 +690,12 @@ def queue_status_api(request):
                     return Response({"success": True, "message": "You are already checked in."})
                 ticket.notes = "Resident checked in and is waiting at the barangay."
                 ticket.save(update_fields=["notes", "updated_at"])
-            Notification.objects.create(
-                resident=resident, appointment=appointment,
-                notification_type=Notification.NotificationType.QUEUE_UPDATE,
-                title="Check-in Complete",
-                message=f"You are checked in with queue number {appointment.queue_number}.",
+            notify_barangay_staff(
+                appointment=appointment,
+                title="Resident Checked In",
+                message=(f"{resident} has successfully checked in for {appointment.service.name}. "
+                         f"Queue Number: {appointment.queue_number}."),
+                event_key=f"appointment:{appointment.pk}:staff-check-in",
             )
             return Response({"success": True, "message": "You are checked in. Barangay staff have been notified."})
 
@@ -761,11 +770,18 @@ def transactions_api(request):
                 appointment.status = Appointment.Status.CANCELLED
                 appointment.save(update_fields=["status", "updated_at"])
                 QueueTicket.objects.filter(appointment=appointment).update(status=QueueTicket.Status.CANCELLED, updated_at=timezone.now())
-                Notification.objects.create(
-                    resident=resident, appointment=appointment,
+                notify_resident(
+                    appointment=appointment,
                     notification_type=Notification.NotificationType.APPOINTMENT_CANCELLED,
                     title="Appointment Cancelled",
                     message="Your appointment has been cancelled.",
+                    event_key=f"appointment:{appointment.pk}:resident-cancelled",
+                )
+                notify_barangay_staff(
+                    appointment=appointment,
+                    title="Appointment Cancelled",
+                    message=f"{resident} cancelled {appointment.service.name} ({appointment.queue_number}).",
+                    event_key=f"appointment:{appointment.pk}:staff-cancelled",
                 )
             return Response({"success": True, "message": "Appointment cancelled."})
 
@@ -886,16 +902,23 @@ def notifications_api(request):
     resident = request.user.resident_profile
 
     if request.method == "POST":
+        owned_notifications = Notification.objects.filter(
+            recipient=request.user,
+            recipient_role=Notification.RecipientRole.RESIDENT,
+        )
         notification_id = request.data.get("notification_id")
         if notification_id:
-            updated = resident.notifications.filter(pk=notification_id).update(is_read=True)
+            updated = owned_notifications.filter(pk=notification_id).update(is_read=True)
             if not updated:
                 return Response({"message": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
         else:
-            resident.notifications.filter(is_read=False).update(is_read=True)
+            owned_notifications.filter(is_read=False).update(is_read=True)
         return Response({"success": True})
 
-    notifications = resident.notifications.order_by("-created_at")
+    notifications = Notification.objects.filter(
+        recipient=request.user,
+        recipient_role=Notification.RecipientRole.RESIDENT,
+    ).order_by("-created_at")
     unread_count = notifications.filter(is_read=False).count()
     if request.query_params.get("summary") == "1":
         return Response({"unread_count": unread_count})

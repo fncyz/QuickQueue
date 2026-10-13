@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Barangay, BarangayStaff, Notification, QueueTicket
+from qq.services.notification_service import notify_resident
 
 
 def _barangay_for(user):
@@ -166,15 +167,14 @@ def barangay_mark_claim_ready(request, pk):
     ticket.claim_status = QueueTicket.ClaimStatus.READY
     ticket.save(update_fields=["claim_status", "updated_at"])
 
-    Notification.objects.create(
-        resident=ticket.appointment.resident,
+    notify_resident(
         appointment=ticket.appointment,
-        notification_type=Notification.NotificationType.QUEUE_UPDATE,
+        notification_type=Notification.NotificationType.DOCUMENT_UPDATE,
         title="Document Ready for Claiming",
         message=(
             f"Your document for queue number {ticket.queue_number} "
             "is ready for claiming at the barangay office."
-        ),
+        ), event_key=f"ticket:{ticket.pk}:document-ready",
     )
     messages.success(request, f"{ticket.queue_number} is ready for claiming.")
     return _redirect_history()
