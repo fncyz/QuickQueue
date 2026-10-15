@@ -1,0 +1,41 @@
+{% extends "superadmin/base.html" %}
+{% load static %}
+
+{% block title %}QuickQueue Super Admin Dashboard{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'superadmin/css/dashboard.css' %}">{% endblock %}
+{% block page_title %}Welcome back, Super Admin!{% endblock %}
+{% block page_description %}Here's an overview of the QuickQueue system.{% endblock %}
+{% block header_actions %}<div class="dashboard-meta"><span class="notification-icon" aria-label="Notifications"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span><span><b>Toledo City, Cebu</b><small>{{ today|date:"l, F j, Y" }}</small></span></div>{% endblock %}
+
+{% block content %}
+<section class="summary-grid" aria-label="System summary">
+    <article class="summary-card blue"><i><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></i><span><small>Total Barangays</small><strong>{{ total_barangays }}</strong><a href="{% url 'superadmin_barangays' %}">View all barangays <b>›</b></a></span></article>
+    <article class="summary-card purple"><i><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M17 11h4M19 9v4"/></svg></i><span><small>Barangay Admins</small><strong>{{ total_admins }}</strong><a href="{% url 'superadmin_barangay_admins' %}">View all admins <b>›</b></a></span></article>
+    <article class="summary-card green"><i><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20a6 6 0 0 1 12 0M14 15a5 5 0 0 1 7 5"/></svg></i><span><small>Registered Residents</small><strong>{{ total_residents }}</strong><em>Across all barangays</em></span></article>
+    <article class="summary-card orange"><i><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></i><span><small>Today's Appointments</small><strong>{{ today_appointments }}</strong><em>Scheduled system-wide</em></span></article>
+</section>
+
+<section class="dashboard-row primary-row">
+    <article class="dashboard-card chart-card">
+        <header><span><h2>Appointments per Barangay</h2><p>Scheduled appointments for {{ period_label|lower }}</p></span><form method="get"><label for="period">Date range</label><select id="period" name="period" onchange="this.form.submit()"><option value="today" {% if selected_period == 'today' %}selected{% endif %}>Today</option><option value="last_7_days" {% if selected_period == 'last_7_days' %}selected{% endif %}>Last 7 Days</option><option value="this_month" {% if selected_period == 'this_month' %}selected{% endif %}>This Month</option><option value="this_year" {% if selected_period == 'this_year' %}selected{% endif %}>This Year</option></select></form></header>
+        {% if appointment_counts %}<div class="bar-chart">{% for item in appointment_counts %}<div class="bar-row"><b title="{{ item.barangay__name }}">{{ item.barangay__name }}</b><span><i style="width:{{ item.percentage }}%"></i></span><strong>{{ item.total }}</strong></div>{% endfor %}</div>{% else %}<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><b>No appointment records</b><p>There are no scheduled appointments for {{ period_label|lower }}.</p></div>{% endif %}
+    </article>
+    <article class="dashboard-card activities-card">
+        <header><span><h2>Recent System Activities</h2><p>Latest recorded system events</p></span></header>
+        {% if recent_activities %}<div class="activity-list">{% for activity in recent_activities %}<div class="activity"><i class="{{ activity.kind }}"></i><span><b>{{ activity.description }}</b><time>{{ activity.timestamp|date:"M j, Y · g:i A" }}</time></span></div>{% endfor %}</div>{% else %}<div class="empty-state compact"><b>No recorded activities</b><p>Timestamped system events will appear here.</p></div>{% endif %}
+    </article>
+</section>
+
+<section class="dashboard-card verification-card">
+    <header><span><h2>Verification Report</h2><p>Barangay administrator application status</p></span></header>
+    {% if total_applications %}
+    <div class="verification-summary"><article><small>Total Applications</small><strong>{{ total_applications }}</strong></article><article class="approved"><small>Approved</small><strong>{{ approved_applications }}</strong></article><article class="rejected"><small>Rejected</small><strong>{{ rejected_applications }}</strong></article><article class="pending"><small>Pending</small><strong>{{ pending_applications }}</strong></article></div>
+    <div class="table-scroll"><table><thead><tr><th>Status</th><th>Applications</th><th>Action Taken</th><th>Percentage</th></tr></thead><tbody>{% for row in verification_rows %}<tr><td><span class="status {{ row.status }}">{{ row.label }}</span></td><td>{{ row.count }}</td><td>{{ row.action }}</td><td><div class="percentage"><span><i class="{{ row.status }}" style="width:{{ row.percentage }}%"></i></span><b>{{ row.percentage }}%</b></div></td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="empty-state"><b>No verification data</b><p>No barangay administrator applications have been submitted.</p></div>{% endif %}
+</section>
+
+<section class="dashboard-card pending-card">
+    <header><span><h2>Pending Verifications</h2><p>Administrator applications awaiting review</p></span><a href="{% url 'superadmin_pending_verifications' %}">View All <b>›</b></a></header>
+    {% if pending_verifications %}<div class="table-scroll"><table><thead><tr><th>Barangay</th><th>Applicant</th><th>Date Submitted</th><th>Actions</th></tr></thead><tbody>{% for application in pending_verifications %}<tr><td><b>{{ application.barangay.name }}</b></td><td>{{ application.user.get_full_name|default:application.user.username }}</td><td>{{ application.created_at|date:"M j, Y · g:i A" }}</td><td><a class="review-link" href="{% url 'superadmin_pending_verifications' %}">View request</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state compact"><b>No pending verifications</b><p>All administrator applications have been reviewed.</p></div>{% endif %}
+</section>
+{% endblock %}

@@ -9,21 +9,8 @@ from .models import (AssistantKnowledge, Barangay, ChatFeedback, ChatQuestionTop
                      BarangayAdminRegistration, BarangayStaff,
                      DocumentTemplate, GeneratedDocument)
 from django.utils import timezone
-
-
-class BarangayAdminForm(forms.ModelForm):
-    class Meta:
-        model = Barangay
-        fields = "__all__"
-
-    def clean_name(self):
-        name = self.cleaned_data["name"].strip()
-        duplicate = Barangay.objects.filter(name__iexact=name)
-        if self.instance.pk:
-            duplicate = duplicate.exclude(pk=self.instance.pk)
-        if duplicate.exists():
-            raise forms.ValidationError("A barangay with this name already exists.")
-        return name
+from .forms import BarangayForm
+from .services.admin_account_service import provision_admin_registration
 
 
 class BarangayAdminRegistrationForm(forms.ModelForm):
@@ -125,7 +112,7 @@ class BarangayStaffAdminForm(forms.ModelForm):
 
 @admin.register(Barangay)
 class BarangayAdmin(admin.ModelAdmin):
-    form = BarangayAdminForm
+    form = BarangayForm
     list_display = (
         "name",
         "user",
@@ -312,32 +299,7 @@ class BarangayAdminRegistrationAdmin(admin.ModelAdmin):
 
     @staticmethod
     def _provision(registration, *, is_active=True):
-        user = registration.user
-        user.is_active = is_active
-        # QuickQueue portal access is profile-based; Django Admin remains superuser-only.
-        user.is_staff = False
-        user.save(update_fields=("is_active", "is_staff"))
-        Barangay.objects.filter(user=user).exclude(pk=registration.barangay_id).update(user=None)
-        registration.barangay.user = user
-        registration.barangay.address = registration.complete_address
-        registration.barangay.contact_number = registration.contact_number
-        registration.barangay.email = registration.email
-        registration.barangay.save(
-            update_fields=("user", "address", "contact_number", "email", "updated_at")
-        )
-        BarangayStaff.objects.update_or_create(
-            user=user,
-            defaults={
-                "barangay": registration.barangay,
-                "first_name": user.first_name or user.username,
-                "last_name": user.last_name or "Admin",
-                "username": user.username,
-                "email": registration.email,
-                "contact_number": registration.contact_number,
-                "role": BarangayStaff.Role.ADMIN,
-                "is_active": is_active,
-            },
-        )
+        provision_admin_registration(registration, is_active=is_active)
 
     @transaction.atomic
     def save_model(self, request, obj, form, change):

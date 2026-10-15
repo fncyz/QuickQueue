@@ -19,6 +19,14 @@ def signin(request):
         )
         if user is not None:
             login(request, user)
+            if user.is_superuser:
+                return redirect("superadmin_dashboard")
+            if (
+                hasattr(user, "staff_profile")
+                and user.staff_profile.role == BarangayStaff.Role.ADMIN
+                and user.staff_profile.must_change_password
+            ):
+                return redirect("mandatory_password_change")
             if user.is_staff and hasattr(user, "barangay_profile"):
                 return redirect("barangay_dashboard")
             if hasattr(user, "staff_profile"):

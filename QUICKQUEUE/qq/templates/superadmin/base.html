@@ -1,0 +1,27 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Super Admin Portal | QuickQueue{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'superadmin/css/portal.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% include "superadmin/components/sidebar.html" %}
+    <main class="superadmin-main">
+        <header class="superadmin-topbar">
+            <div>
+                <h1>{% block page_title %}Super Admin Portal{% endblock %}</h1>
+                <p>{% block page_description %}{% endblock %}</p>
+            </div>
+            {% block header_actions %}{% endblock %}
+        </header>
+        <div class="superadmin-workspace">{% block content %}{% endblock %}</div>
+    </main>
+</body>
+</html>

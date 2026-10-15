@@ -1,0 +1,52 @@
+{% extends "superadmin/base.html" %}
+{% load static %}
+
+{% block title %}Barangays Management | QuickQueue{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'superadmin/css/barangays.css' %}">{% endblock %}
+{% block page_title %}Barangays Management{% endblock %}
+{% block page_description %}Manage registered barangays within the QuickQueue system.{% endblock %}
+{% block header_actions %}<button class="primary-button" type="button" onclick="document.getElementById('barangay-modal').showModal()">+ Add Barangay</button>{% endblock %}
+
+{% block content %}
+{% if messages %}<div class="management-messages">{% for message in messages %}<p>{{ message }}</p>{% endfor %}</div>{% endif %}
+<section class="barangay-summary">
+    <article><small>Total Barangays</small><strong>{{ total_barangays }}</strong></article>
+    <article class="active"><small>Active Barangay Admins</small><strong>{{ active_admins }}</strong></article>
+    <article class="pending"><small>Pending Registrations</small><strong>{{ pending_registrations }}</strong></article>
+    <article class="residents"><small>Total Residents</small><strong>{{ total_residents }}</strong></article>
+</section>
+
+<div class="split-management"><section class="management-card">
+    <header><div><h2>Registered Barangays</h2><p>View and maintain barangay information and availability.</p></div></header>
+    <form class="barangay-filters" method="get">
+        <label class="search-field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input type="search" name="q" value="{{ search_query }}" placeholder="Search by barangay name or address" aria-label="Search barangays"></label>
+        <select name="status" aria-label="Filter by status"><option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option><option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option><option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option></select>
+        <select name="sort" aria-label="Sort barangays"><option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Name: A–Z</option><option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Name: Z–A</option></select>
+        <button type="submit">Apply</button>
+        {% if search_query or status_filter != 'all' or sort_order != 'asc' %}<a href="{% url 'superadmin_barangays' %}">Clear</a>{% endif %}
+    </form>
+    {% if barangay_page.object_list %}
+    <div class="table-scroll"><table><thead><tr><th>Barangay Name</th><th>Location</th><th>Barangay Admin</th><th>Residents</th><th>Staff</th><th>Status</th><th>Date Registered</th><th>Actions</th></tr></thead><tbody>
+    {% for barangay in barangay_page %}<tr class="selectable-row {% if selected_barangay.pk == barangay.pk %}selected{% endif %}" data-id="{{ barangay.pk }}" data-name="{{ barangay.name|escape }}" data-location="{{ barangay.address|escape }}" data-admin="{{ barangay.assigned_administrator|default:'Not assigned'|escape }}" data-contact="{{ barangay.contact_number|escape }}{% if barangay.email %} · {{ barangay.email|escape }}{% endif %}" data-status="{% if barangay.is_active %}Active{% else %}Inactive{% endif %}" data-date="{{ barangay.created_at|date:'M j, Y' }}" data-residents="{{ barangay.resident_count }}" data-staff="{{ barangay.staff_count }}"><td><b>{{ barangay.name }}</b></td><td title="{{ barangay.address }}">{{ barangay.address|truncatechars:30 }}</td><td>{% if barangay.assigned_administrator %}{{ barangay.assigned_administrator }}{% else %}<span class="unassigned">Not assigned</span>{% endif %}</td><td>{{ barangay.resident_count }}</td><td>{{ barangay.staff_count }}</td><td><span class="status-pill {% if barangay.is_active %}active{% else %}inactive{% endif %}">{% if barangay.is_active %}Active{% else %}Inactive{% endif %}</span></td><td>{{ barangay.created_at|date:"M j, Y" }}</td><td><div class="row-actions"><a class="select-row" href="?selected={{ barangay.pk }}">View</a><a href="{% url 'superadmin_barangay_edit' barangay.pk %}">Edit</a></div></td></tr>{% endfor %}
+    </tbody></table></div>
+    <footer class="pagination"><span>Showing {{ barangay_page.start_index }}–{{ barangay_page.end_index }} of {{ barangay_page.paginator.count }}</span><nav>{% if barangay_page.has_previous %}<a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&sort={{ sort_order }}&page={{ barangay_page.previous_page_number }}">Previous</a>{% endif %}<b>Page {{ barangay_page.number }} of {{ barangay_page.paginator.num_pages }}</b>{% if barangay_page.has_next %}<a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&sort={{ sort_order }}&page={{ barangay_page.next_page_number }}">Next</a>{% endif %}</nav></footer>
+    {% else %}<div class="management-empty"><b>No barangays found</b><p>{% if search_query or status_filter != 'all' %}Try changing your search or status filter.{% else %}Add the first barangay to begin managing the system.{% endif %}</p></div>{% endif %}
+</section><aside class="selection-panel" id="barangay-selection">{% if selected_barangay %}<header><small>SELECTED BARANGAY</small><h2 data-detail="name">{{ selected_barangay.name }}</h2><span data-detail="status" class="status-pill {% if selected_barangay.is_active %}active{% else %}inactive{% endif %}">{% if selected_barangay.is_active %}Active{% else %}Inactive{% endif %}</span></header><dl><div><dt>Location</dt><dd data-detail="location">{{ selected_barangay.address }}</dd></div><div><dt>Administrator</dt><dd data-detail="admin">{{ selected_barangay.assigned_administrator|default:"Not assigned" }}</dd></div><div><dt>Contact</dt><dd data-detail="contact">{{ selected_barangay.contact_number }}{% if selected_barangay.email %} · {{ selected_barangay.email }}{% endif %}</dd></div><div><dt>Registered</dt><dd data-detail="date">{{ selected_barangay.created_at|date:"M j, Y" }}</dd></div></dl><h3>Quick Statistics</h3><div class="quick-stats"><article><b data-detail="residents">{{ selected_barangay.resident_count }}</b><small>Residents</small></article><article><b data-detail="staff">{{ selected_barangay.staff_count }}</b><small>Staff</small></article><article><b>{{ selected_barangay.today_appointments }}</b><small>Today's Appointments</small></article><article><b>{{ selected_barangay.completed_today }}</b><small>Completed Today</small></article></div><footer><a data-detail-link href="{% url 'superadmin_barangay_detail' selected_barangay.pk %}">Full Details</a><a data-edit-link href="{% url 'superadmin_barangay_edit' selected_barangay.pk %}">Edit</a></footer>{% else %}<div class="management-empty"><b>No barangay selected</b></div>{% endif %}</aside></div>
+
+<dialog id="barangay-modal" class="barangay-modal" {% if show_barangay_modal %}open{% endif %}>
+    <form method="post" action="{% if editing_barangay %}{% url 'superadmin_barangay_edit' editing_barangay.pk %}{% else %}{% url 'superadmin_barangay_add' %}{% endif %}">
+        {% csrf_token %}
+        <header><span><small>{% if editing_barangay %}UPDATE BARANGAY{% else %}NEW BARANGAY{% endif %}</small><h2>{% if editing_barangay %}Edit {{ editing_barangay.name }}{% else %}Add Barangay{% endif %}</h2></span><button type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button></header>
+        {% if barangay_form.non_field_errors %}<div class="form-error">{{ barangay_form.non_field_errors }}</div>{% endif %}
+        <div class="form-grid">
+            <label class="wide">Barangay Name {{ barangay_form.name }}{% for error in barangay_form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</label>
+            <label class="wide">Address / Location {{ barangay_form.address }}{% for error in barangay_form.address.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</label>
+            <label>Contact Number {{ barangay_form.contact_number }}{% for error in barangay_form.contact_number.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</label>
+            <label>Email Address <span>(optional)</span>{{ barangay_form.email }}{% for error in barangay_form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</label>
+            <label class="checkbox wide">{{ barangay_form.is_active }} <span>Barangay is active</span>{% for error in barangay_form.is_active.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</label>
+        </div>
+        <footer><button class="secondary-button" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="primary-button" type="submit">{% if editing_barangay %}Save Changes{% else %}Add Barangay{% endif %}</button></footer>
+    </form>
+</dialog>
+<script>document.querySelectorAll('.select-row').forEach(function(link){link.addEventListener('click',function(event){event.preventDefault();const row=this.closest('tr'),panel=document.getElementById('barangay-selection');document.querySelectorAll('.selectable-row').forEach(r=>r.classList.remove('selected'));row.classList.add('selected');['name','location','admin','contact','status','date','residents','staff'].forEach(function(key){const target=panel.querySelector('[data-detail="'+key+'"]');if(target)target.textContent=row.dataset[key]});panel.querySelector('[data-detail-link]').href='/superadmin/barangays/'+row.dataset.id+'/';panel.querySelector('[data-edit-link]').href='/superadmin/barangays/'+row.dataset.id+'/edit/';history.replaceState(null,'','?selected='+row.dataset.id)})});</script>
+{% endblock %}

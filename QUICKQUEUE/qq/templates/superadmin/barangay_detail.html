@@ -1,0 +1,12 @@
+{% extends "superadmin/base.html" %}
+{% load static %}
+{% block title %}{{ barangay.name }} | QuickQueue{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'superadmin/css/barangays.css' %}">{% endblock %}
+{% block page_title %}Barangay Details{% endblock %}
+{% block page_description %}View registered barangay information and status.{% endblock %}
+{% block header_actions %}<a class="primary-button" href="{% url 'superadmin_barangay_edit' barangay.pk %}">Edit Barangay</a>{% endblock %}
+{% block content %}
+{% if messages %}<div class="management-messages">{% for message in messages %}<p>{{ message }}</p>{% endfor %}</div>{% endif %}
+<nav class="breadcrumbs"><a href="{% url 'superadmin_barangays' %}">Barangays</a><span>›</span><b>{{ barangay.name }}</b></nav>
+<section class="detail-card"><header><div><small>REGISTERED BARANGAY</small><h2>{{ barangay.name }}</h2></div><span class="status-pill {% if barangay.is_active %}active{% else %}inactive{% endif %}">{% if barangay.is_active %}Active{% else %}Inactive{% endif %}</span></header><dl><div><dt>Address / Location</dt><dd>{{ barangay.address }}</dd></div><div><dt>Contact Number</dt><dd>{{ barangay.contact_number }}</dd></div><div><dt>Email Address</dt><dd>{{ barangay.email|default:"Not provided" }}</dd></div><div><dt>Assigned Administrator</dt><dd>{{ barangay.assigned_administrator|default:"Not assigned" }}</dd></div><div><dt>Date Registered</dt><dd>{{ barangay.created_at|date:"F j, Y · g:i A" }}</dd></div><div><dt>Last Updated</dt><dd>{{ barangay.updated_at|date:"F j, Y · g:i A" }}</dd></div></dl><footer><div><b>Status Management</b><p>Changing status preserves all residents, appointments, staff, and historical records.</p></div><form method="post" action="{% url 'superadmin_barangay_status' barangay.pk %}" onsubmit="return confirm('Are you sure you want to {% if barangay.is_active %}deactivate{% else %}activate{% endif %} this barangay?')">{% csrf_token %}<input type="hidden" name="status" value="{% if barangay.is_active %}inactive{% else %}active{% endif %}"><button class="{% if barangay.is_active %}danger-button{% else %}primary-button{% endif %}" type="submit">{% if barangay.is_active %}Deactivate Barangay{% else %}Activate Barangay{% endif %}</button></form></footer></section>
+{% endblock %}

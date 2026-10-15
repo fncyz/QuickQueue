@@ -1,4 +1,6 @@
 from django.urls import path
+from django.contrib.auth import views as auth_views
+from django.urls import reverse_lazy
 
 from qq.views import landing, signin, staff_logout
 from qq.views.barangay_dashboard import barangay_dashboard
@@ -40,11 +42,54 @@ from qq.views.barangay_waiting_time import (
 from qq.views.barangay_settings import barangay_settings
 from qq.views.barangay_notifications import barangay_notifications
 from qq.views.barangay_document_templates import barangay_document_templates
+from qq.views.superadmin_dashboard import (
+    superadmin_barangay_add,
+    superadmin_barangay_detail,
+    superadmin_barangay_edit,
+    superadmin_barangay_status,
+    superadmin_barangays,
+    superadmin_dashboard,
+    superadmin_placeholder,
+)
+from qq.views.superadmin_admins import (
+    superadmin_admin_add, superadmin_admin_detail, superadmin_admin_edit,
+    superadmin_admin_password_reset, superadmin_admin_status, superadmin_admins,
+    superadmin_admin_temporary_password,
+)
+from qq.views.superadmin_verifications import (
+    superadmin_verification_approve, superadmin_verification_detail,
+    superadmin_verification_reject, superadmin_verifications,
+)
+from qq.views.superadmin_settings import superadmin_settings
+from qq.views.mandatory_password import mandatory_password_change
 
 urlpatterns = [
     path("", landing, name="index"),
     path("sign-in/", signin, name="signin"),
+    path("reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(
+        template_name="superadmin/password_reset_confirm.html",
+        success_url=reverse_lazy("signin"),
+    ), name="password_reset_confirm"),
     path("staff/logout/", staff_logout, name="staff_logout"),
+    path("account/change-temporary-password/", mandatory_password_change, name="mandatory_password_change"),
+    path("superadmin/dashboard/", superadmin_dashboard, name="superadmin_dashboard"),
+    path("superadmin/barangays/", superadmin_barangays, name="superadmin_barangays"),
+    path("superadmin/barangays/add/", superadmin_barangay_add, name="superadmin_barangay_add"),
+    path("superadmin/barangays/<int:pk>/", superadmin_barangay_detail, name="superadmin_barangay_detail"),
+    path("superadmin/barangays/<int:pk>/edit/", superadmin_barangay_edit, name="superadmin_barangay_edit"),
+    path("superadmin/barangays/<int:pk>/status/", superadmin_barangay_status, name="superadmin_barangay_status"),
+    path("superadmin/barangay-admins/", superadmin_admins, name="superadmin_barangay_admins"),
+    path("superadmin/barangay-admins/add/", superadmin_admin_add, name="superadmin_admin_add"),
+    path("superadmin/barangay-admins/<int:pk>/", superadmin_admin_detail, name="superadmin_admin_detail"),
+    path("superadmin/barangay-admins/<int:pk>/edit/", superadmin_admin_edit, name="superadmin_admin_edit"),
+    path("superadmin/barangay-admins/<int:pk>/status/", superadmin_admin_status, name="superadmin_admin_status"),
+    path("superadmin/barangay-admins/<int:pk>/password-reset/", superadmin_admin_password_reset, name="superadmin_admin_password_reset"),
+    path("superadmin/barangay-admins/<int:pk>/temporary-password/", superadmin_admin_temporary_password, name="superadmin_admin_temporary_password"),
+    path("superadmin/pending-verifications/", superadmin_verifications, name="superadmin_pending_verifications"),
+    path("superadmin/pending-verifications/<int:pk>/", superadmin_verification_detail, name="superadmin_verification_detail"),
+    path("superadmin/pending-verifications/<int:pk>/approve/", superadmin_verification_approve, name="superadmin_verification_approve"),
+    path("superadmin/pending-verifications/<int:pk>/reject/", superadmin_verification_reject, name="superadmin_verification_reject"),
+    path("superadmin/system-settings/", superadmin_settings, name="superadmin_system_settings"),
     path("barangay/dashboard/", barangay_dashboard, name="barangay_dashboard"),
     path("barangay/staff/dashboard/", staff_dashboard, name="staff_dashboard"),
     path("barangay/staff/appointments/", staff_appointments, name="staff_appointments"),
