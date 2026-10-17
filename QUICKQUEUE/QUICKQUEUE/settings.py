@@ -128,9 +128,9 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'NAME': 'qq.validators.MinimumLengthOnlyValidator',
         'OPTIONS': {
-            'min_length': 6,
+            'min_length': 8,
         },
     },
 ]

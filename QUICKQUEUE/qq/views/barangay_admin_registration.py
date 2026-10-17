@@ -1,4 +1,6 @@
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import render
 from django.utils import timezone
@@ -27,6 +29,11 @@ def barangay_admin_registration(request):
     errors = [f"{label} is required." for label, value in fields.items() if not value]
     if fields["Password"] and fields["Password"] != request.POST.get("confirm_password", ""):
         errors.append("Passwords do not match.")
+    elif fields["Password"]:
+        try:
+            validate_password(fields["Password"], User(username=fields["Username"], email=fields["Email address"]))
+        except ValidationError as error:
+            errors.extend(error.messages)
     if not request.POST.get("terms"):
         errors.append("You must agree to the Terms and Privacy Policy.")
     if User.objects.filter(username__iexact=fields["Username"]).exists():

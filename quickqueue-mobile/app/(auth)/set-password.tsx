@@ -11,13 +11,6 @@ import SecurityGradientButton from "@/components/SecurityGradientButton";
 import { Text, TextInput } from "@/components/Typography";
 import { setInitialPassword } from "@/services/api";
 
-const passwordChecks = (value: string) => [
-  { label: "At least 8 characters", valid: value.length >= 8 },
-  { label: "One uppercase and one lowercase letter", valid: /[A-Z]/.test(value) && /[a-z]/.test(value) },
-  { label: "One number", valid: /\d/.test(value) },
-  { label: "One special character (eg. .,_,!,@)", valid: /[^A-Za-z0-9]/.test(value) },
-];
-
 export default function SetPasswordScreen() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -25,8 +18,7 @@ export default function SetPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [saving, setSaving] = useState(false);
-  const checks = passwordChecks(password);
-  const valid = checks.every((item) => item.valid) && password === confirmation && confirmation.length > 0;
+  const valid = password.length >= 8 && password === confirmation && confirmation.length > 0;
 
   const submit = async () => {
     if (!valid || saving) return;
@@ -50,7 +42,7 @@ export default function SetPasswordScreen() {
     <PasswordField label="Create Password" placeholder="Enter your password" value={password} onChangeText={setPassword} visible={showPassword} onToggle={() => setShowPassword((value) => !value)} returnKeyType="next" onSubmitEditing={() => confirmationRef.current?.focus()} />
     <PasswordField ref={confirmationRef} label="Confirm Password" placeholder="Re-enter your password" value={confirmation} onChangeText={setConfirmation} visible={showConfirmation} onToggle={() => setShowConfirmation((value) => !value)} returnKeyType="done" onSubmitEditing={submit} />
     {confirmation.length > 0 && password !== confirmation && <Text style={s.error}>Passwords do not match.</Text>}
-    <View style={s.rules}><Text style={s.rulesTitle}>Your password must include:</Text>{checks.map((item) => <View key={item.label} style={s.ruleRow}><Ionicons name={item.valid ? "checkmark-circle" : "ellipse-outline"} size={15} color={item.valid ? "#1DAA61" : "#94A0B4"} /><Text style={[s.rule, item.valid && s.ruleValid]}>{item.label}</Text></View>)}</View>
+    <Text style={[s.passwordRequirement, password.length > 0 && password.length < 8 && s.error]}>Password must be at least 8 characters.</Text>
     <SecurityGradientButton onPress={submit} disabled={!valid || saving} label={saving ? "Creating Password..." : "Create Password"} style={s.button} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView>;
 }
@@ -63,6 +55,6 @@ const s = StyleSheet.create({
   safe: { backgroundColor: "#F8FBFF", flex: 1 }, keyboard: { flex: 1 }, content: { alignSelf: "center", flexGrow: 1, maxWidth: 500, paddingBottom: 25, paddingHorizontal: 22, paddingTop: 45, width: "100%" },
   icon: { alignItems: "center", alignSelf: "center", backgroundColor: "#EEF5FF", borderRadius: 32, height: 64, justifyContent: "center", marginTop: 2, position: "relative", width: 64 }, lockOverlay: { position: "absolute", top: 27 }, title: { color: "#082A72", fontSize: 24, fontWeight: "800", marginTop: 17, textAlign: "center" }, description: { color: "#7083A2", fontSize: 12, lineHeight: 18, marginBottom: 10, marginTop: 4, textAlign: "center" },
   field: { marginTop: 10 }, label: { color: "#233F73", fontSize: 12, fontWeight: "600", marginBottom: 5 }, inputShell: { alignItems: "center", backgroundColor: "rgba(255,255,255,0.82)", borderColor: "#AFC9EF", borderRadius: 8, borderWidth: 1, flexDirection: "row", height: 49, paddingLeft: 13 }, input: { color: "#18233C", flex: 1, fontSize: 13, height: "100%", paddingHorizontal: 11 }, eye: { alignItems: "center", height: "100%", justifyContent: "center", paddingHorizontal: 13 },
-  error: { color: "#D62F45", fontSize: 10, marginTop: 5 }, rules: { backgroundColor: "transparent", marginTop: 10, paddingHorizontal: 4 }, rulesTitle: { color: "#46658F", fontSize: 11, fontWeight: "700", marginBottom: 4 }, ruleRow: { alignItems: "center", flexDirection: "row", gap: 6, marginVertical: 1 }, rule: { color: "#7183A0", fontSize: 10 }, ruleValid: { color: "#16864E" },
+  error: { color: "#D62F45", fontSize: 10, marginTop: 5 }, passwordRequirement: { color: "#7183A0", fontSize: 10, marginTop: 10, paddingHorizontal: 4 },
   button: { marginTop: 22 },
 });

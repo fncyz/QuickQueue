@@ -48,8 +48,8 @@
                             <label>Username <b>*</b><input name="username" autocomplete="username" value="{{ form_data.username|default:'' }}" required></label>
                             <label>Contact Number <b>*</b><input name="contact_number" type="tel" value="{{ form_data.contact_number|default:'' }}" required></label>
                             <label>Email Address <b>*</b><input name="email" type="email" autocomplete="email" value="{{ form_data.email|default:'' }}" required></label>
-                            <label class="password-field">Password <b>*</b><input name="password" type="password" autocomplete="new-password" required></label>
-                            <label class="password-field">Confirm Password <b>*</b><input name="confirm_password" type="password" autocomplete="new-password" required></label>
+                            <label class="password-field">Password <b>*</b><input name="password" type="password" autocomplete="new-password" minlength="8" required><small>Password must be at least 8 characters.</small></label>
+                            <label class="password-field">Confirm Password <b>*</b><input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
                         </div>
                     </fieldset>
 

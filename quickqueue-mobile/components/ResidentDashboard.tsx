@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, AppState, Image, ImageBackground, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, AppState, Image, ImageBackground, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,6 +16,7 @@ import { useAppTheme } from '@/contexts/app-theme';
 import { residentLayout } from '@/constants/resident-layout';
 import { useConnectivity } from '@/contexts/connectivity';
 import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/services/offline-cache';
+import { useTutorial } from '@/contexts/tutorial';
 
 const quickQueueLogo = require('../assets/images/qqlogo.png');
 const toledoLogo = require('../assets/images/toledo.png');
@@ -62,6 +63,11 @@ export function ResidentDashboard() {
   const { colors, isDark } = useAppTheme();
   const { isOnline } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
+  const { registerTarget } = useTutorial();
+  const dashboardScroll = useRef<ScrollView | null>(null);
+  const specialServicesY = useRef(0);
+  const notificationTarget = useCallback((node: View | null) => registerTarget('notifications', node), [registerTarget]);
+  const specialServicesTarget = useCallback((node: View | null) => registerTarget('specialServices', node, { reveal: () => dashboardScroll.current?.scrollTo({ animated: true, y: Math.max(0, specialServicesY.current - 90) }) }), [registerTarget]);
   const [residentName, setResidentName] = useState('Resident');
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [services, setServices] = useState<Service[]>([]);
@@ -131,18 +137,18 @@ export function ResidentDashboard() {
   const filteredServices = useMemo(() => services.filter((item) => item.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())), [serviceSearch, services]);
   const visibleServices = showAllServices || serviceSearch ? filteredServices : filteredServices.slice(0, 3);
 
-  return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView automaticallyAdjustKeyboardInsets style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
-    <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text numberOfLines={2} style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
+  return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView ref={dashboardScroll} automaticallyAdjustKeyboardInsets style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
+    <Animated.View style={[s.hero, coverHeader.headerStyle]}><View style={s.logos}><Image source={quickQueueLogo} style={s.brandLogo} resizeMode="contain" accessibilityLabel="QuickQueue logo" /><Image source={toledoLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="City of Toledo official seal" /><Image source={cctcLogo} style={s.partnerLogo} resizeMode="contain" accessibilityLabel="Consolatrix College of Toledo City logo" /></View><HeaderNotificationBell ref={notificationTarget} onPress={() => router.push('/notifications')} style={s.avatar} unreadCount={unreadNotifications} /><Pressable onPress={() => router.push('/profile')} style={s.headerProfile}>{profilePhoto ? <Image source={{ uri: profilePhoto }} style={s.headerProfileImage} /> : <Ionicons name="person" size={21} color="#0759D9" />}</Pressable><Text style={s.name}>Mabuhay, {residentName}!</Text><Text numberOfLines={2} style={s.subtitle}>Book your barangay appointment in just a few taps.</Text></Animated.View>
     <SavedInformationBanner />
     {activeAppointment ? <UpcomingAppointmentCard appointment={activeAppointment} isDark={isDark} /> : <EmptyAppointmentCard isDark={isDark} />}
-    {temporaryServices.length > 0 && <EventCarousel events={temporaryServices} />}
+    {temporaryServices.length > 0 && <EventCarousel events={temporaryServices} onLayout={(event) => { specialServicesY.current = event.nativeEvent.layout.y; }} tutorialRef={specialServicesTarget} />}
     <View style={[s.section, isDark && s.darkCard]}><View style={s.header}><Title icon="document-text" label="Available Services" /><Pressable onPress={() => setShowAllServices((value) => !value)}><Text style={[s.viewAll, { color: colors.accent }]}>{showAllServices ? 'Show Less' : 'View All  ›'}</Text></Pressable></View><View style={[s.search, isDark && s.darkIcon]}><Ionicons name="search" size={16} color={colors.muted} /><TextInput value={serviceSearch} onChangeText={setServiceSearch} placeholder="Search services" placeholderTextColor={colors.muted} style={[s.searchInput, { color: colors.text }]} /></View>{visibleServices.map((service) => <Pressable key={service.id} onPress={() => router.push({ pathname: '/booking', params: { serviceId: String(service.id) } })} style={[s.service, isDark && s.darkService]}><View style={[s.serviceIcon, isDark && s.darkIcon]}><Ionicons name={serviceIcon(service.name)} size={21} color={colors.accent} /></View><View style={{ flex: 1 }}><Text style={[s.serviceTitle, { color: colors.text }]}>{service.name}</Text><Text style={[s.serviceDetail, { color: colors.muted }]}>Book this service with your barangay.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>)}</View>
     <View style={[s.section, isDark && s.darkCard]}><Title icon="time" label="Office Hours" /><Hours label="Monday – Friday" value="8:00 AM – 5:00 PM" /><Hours label="Saturday" value="8:00 AM – 12:00 PM" /><Hours label="Sunday & Holidays" value="Closed" closed /></View>
     <Pressable onPress={() => router.push('/queue')} style={[s.notice, { backgroundColor: colors.surfaceAlt }]}><Ionicons name="information-circle" size={21} color={colors.accent} /><View style={{ flex: 1 }}><Text style={[s.noticeTitle, { color: colors.text }]}>Make sure to arrive 5 minutes before your time slot.</Text><Text style={[s.noticeCopy, { color: colors.muted }]}>Late arrivals may forfeit your appointment.</Text></View><Ionicons name="chevron-forward" size={18} color={colors.accent} /></Pressable>
   </Animated.ScrollView></SafeAreaView>;
 }
 
-function EventCarousel({ events }: { events: TemporaryService[] }) {
+function EventCarousel({ events, onLayout, tutorialRef }: { events: TemporaryService[]; onLayout: (event: LayoutChangeEvent) => void; tutorialRef: (node: View | null) => void }) {
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -190,8 +196,8 @@ function EventCarousel({ events }: { events: TemporaryService[] }) {
   const open = (item: TemporaryService) => item.is_event && item.is_booked && item.event_booking_id
     ? router.push({ pathname: '/event-pass' as never, params: { bookingId: String(item.event_booking_id) } })
     : router.push({ pathname: '/event-details' as never, params: { event: JSON.stringify(item) } });
-  return <View style={[s.eventSection, { backgroundColor: colors.surface, borderColor: colors.border }, isDark && s.darkCard]}>
-    <View style={s.eventSectionHeader}><SpecialServicesTitle /><Pressable onPress={() => router.push('/booking')} hitSlop={8}><Text style={[s.viewAll, { color: colors.accent }]}>View All  ›</Text></Pressable></View>
+  return <View onLayout={onLayout} style={[s.eventSection, { backgroundColor: colors.surface, borderColor: colors.border }, isDark && s.darkCard]}>
+    <View ref={tutorialRef} collapsable={false} style={s.eventSectionHeader}><SpecialServicesTitle /><Pressable onPress={() => router.push('/booking')} hitSlop={8}><Text style={[s.viewAll, { color: colors.accent }]}>View All  ›</Text></Pressable></View>
     <Animated.ScrollView ref={carouselRef} horizontal pagingEnabled={false} snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum showsHorizontalScrollIndicator={false} contentContainerStyle={s.eventList} onScrollBeginDrag={onScrollBegin} onMomentumScrollEnd={onScrollEnd}>
       {carouselEvents.map((item, displayIndex) => <Pressable accessibilityRole="button" key={`${item.id}-${displayIndex}`} onPress={() => open(item)} style={[s.eventCard, { width: cardWidth }]}>
         <ImageBackground source={servicesBackground} resizeMode="cover" imageStyle={s.eventBackgroundImage} style={s.eventBackground}>

@@ -95,6 +95,96 @@ class RegistrationSecurityFlowTests(APITestCase):
         self.assertIn("refresh", response.data)
         self.assertEqual(response.data["security_setup_stage"], "complete")
 
+    def test_initial_password_accepts_length_only_policy(self):
+        accepted_passwords = ("abcdefgh", "12345678", "password123", "QuickQueue", "hello@123")
+
+        for index, candidate in enumerate(accepted_passwords):
+            with self.subTest(password=candidate):
+                user = User.objects.create_user(username=f"password-policy-{index}")
+                resident = Resident.objects.create(
+                    user=user,
+                    first_name="Password",
+                    last_name="Policy",
+                    birthdate=date(2000, 1, 1),
+                    sex=Resident.Sex.MALE,
+                    contact_number=f"0970000000{index}",
+                    barangay=self.barangay,
+                    security_setup_stage=Resident.SecuritySetupStage.PASSWORD,
+                )
+                self.client.force_authenticate(user)
+
+                response = self.client.post("/api/set-initial-password/", {
+                    "new_password": candidate,
+                    "confirm_password": candidate,
+                }, format="json")
+
+                self.assertEqual(response.status_code, 200)
+                user.refresh_from_db()
+                resident.refresh_from_db()
+                self.assertNotEqual(user.password, candidate)
+                self.assertTrue(user.check_password(candidate))
+                self.assertEqual(resident.security_setup_stage, Resident.SecuritySetupStage.PIN)
+
+    def test_initial_password_rejects_short_or_mismatched_passwords(self):
+        user = User.objects.create_user(username="password-policy-invalid")
+        Resident.objects.create(
+            user=user,
+            first_name="Password",
+            last_name="Invalid",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.MALE,
+            contact_number="09700000009",
+            barangay=self.barangay,
+            security_setup_stage=Resident.SecuritySetupStage.PASSWORD,
+        )
+        self.client.force_authenticate(user)
+
+        short = self.client.post("/api/set-initial-password/", {
+            "new_password": "abcdefg",
+            "confirm_password": "abcdefg",
+        }, format="json")
+        mismatch = self.client.post("/api/set-initial-password/", {
+            "new_password": "abcdefgh",
+            "confirm_password": "different",
+        }, format="json")
+
+        self.assertEqual(short.status_code, 400)
+        self.assertEqual(short.data["message"], "Password must be at least 8 characters.")
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertEqual(mismatch.data["message"], "The new passwords do not match.")
+        user.refresh_from_db()
+        self.assertFalse(user.has_usable_password())
+
+    def test_password_created_by_setup_endpoint_can_be_used_to_log_in(self):
+        user = User.objects.create_user(username="password-login-test")
+        resident = Resident.objects.create(
+            user=user,
+            first_name="Password",
+            last_name="Login",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.MALE,
+            contact_number="09700000008",
+            barangay=self.barangay,
+            security_setup_stage=Resident.SecuritySetupStage.PASSWORD,
+        )
+        self.client.force_authenticate(user)
+        response = self.client.post("/api/set-initial-password/", {
+            "new_password": "abcdefgh",
+            "confirm_password": "abcdefgh",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        resident.security_setup_stage = Resident.SecuritySetupStage.COMPLETE
+        resident.save(update_fields=("security_setup_stage", "updated_at"))
+        self.client.force_authenticate(user=None)
+        login = self.client.post("/api/login/", {
+            "username": user.username,
+            "password": "abcdefgh",
+        }, format="json")
+
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.data["success"])
+
 
 class ResidentAccountDeletionTests(APITestCase):
     def setUp(self):

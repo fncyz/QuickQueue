@@ -10,12 +10,14 @@ import { useAssistantPreference } from '@/contexts/assistant-preference';
 import { securitySetupRoute } from '@/services/security-flow';
 import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
 import { useAuthSession } from '@/contexts/auth-session';
+import { useTutorial } from '@/contexts/tutorial';
 
 export default function TabLayout() {
   const { notice } = useConnectivity();
   const { enabled: assistantEnabled } = useAssistantPreference();
   const pathname = usePathname();
   const { isUnlocked } = useAuthSession();
+  const { isTutorialActive } = useTutorial();
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [setupStage, setSetupStage] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function TabLayout() {
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
-    {(assistantEnabled || pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index') && <FloatingAiAssistant />}
+    {!isTutorialActive && (assistantEnabled || pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index') && <FloatingAiAssistant />}
     {notice && <ConnectionStatusBanner />}
   </View>;
 }

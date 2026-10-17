@@ -1,5 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
@@ -141,8 +144,10 @@ def barangay_staff_add(request):
     if password != confirm_password:
         return reject("The password and confirmation do not match.")
 
-    if len(password) < 6:
-        return reject("The password must contain at least 6 characters.")
+    try:
+        validate_password(password, User(username=username, email=email, first_name=first_name, last_name=last_name))
+    except ValidationError as error:
+        return reject(" ".join(error.messages))
 
     if User.objects.filter(username=username).exists():
         return reject("That username is already in use. Choose a different username.")
@@ -189,11 +194,21 @@ def barangay_staff_edit(request, pk):
     role = request.POST.get("role", staff.role).strip()
     is_active = request.POST.get("is_active") == "on"
     password = request.POST.get("password", "").strip()
+    confirm_password = request.POST.get("confirm_password", "").strip()
 
     if not first_name or not last_name:
         return redirect("barangay_staff")
     if role not in dict(BarangayStaff.Role.choices):
         role = staff.role
+    if password != confirm_password:
+        messages.error(request, "Passwords do not match.")
+        return redirect("barangay_staff")
+    if password and staff.user_id:
+        try:
+            validate_password(password, staff.user)
+        except ValidationError as error:
+            messages.error(request, " ".join(error.messages))
+            return redirect("barangay_staff")
 
     staff.first_name = first_name
     staff.last_name = last_name

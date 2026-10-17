@@ -19,13 +19,13 @@ class BarangayAdminRegistrationForm(forms.ModelForm):
     username = forms.CharField(max_length=150)
     password1 = forms.CharField(
         label="Initial password",
-        widget=forms.PasswordInput,
+        widget=forms.PasswordInput(attrs={"minlength": 8}),
         required=False,
         help_text="Required when creating a registration. Leave blank when editing to keep the password.",
     )
     password2 = forms.CharField(
         label="Password confirmation",
-        widget=forms.PasswordInput,
+        widget=forms.PasswordInput(attrs={"minlength": 8}),
         required=False,
     )
     account_is_active = forms.BooleanField(

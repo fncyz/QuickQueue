@@ -5,6 +5,8 @@ import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/contexts/app-theme';
 import { appTypography } from '@/constants/typography';
+import { TutorialTargetId, useTutorial } from '@/contexts/tutorial';
+import { useCallback } from 'react';
 
 const items = {
   index: { label: 'Home', icon: 'home' as const, center: false },
@@ -23,11 +25,26 @@ export function ResidentTabBar({ state, navigation }: BottomTabBarProps) {
       if (!item) return null;
 
       const focused = state.index === index;
-      return <Pressable key={route.key} onPress={() => !focused && navigation.navigate(route.name)} style={[styles.item, item.center && styles.centerItem]} accessibilityRole="button" accessibilityState={focused ? { selected: true } : {}}>
-        <View style={[styles.iconWrap, item.center && styles.centerIcon]}><Ionicons name={item.icon} size={item.center ? 36 : 24} color={item.center ? '#FFFFFF' : focused ? colors.accent : colors.muted} /></View>{!item.center && <Text fixedFontSize={8} numberOfLines={1} style={[styles.label, { color: focused ? colors.accent : colors.muted }, focused && styles.labelActive]}>{item.label}</Text>}
-      </Pressable>;
+      const tutorialTarget = route.name === 'index' ? 'home' : route.name === 'booking' ? 'booking' : route.name === 'queue' ? 'queue' : route.name === 'transactions' ? 'transactions' : route.name === 'profile' ? 'profile' : null;
+      return <ResidentTabItem colors={colors} focused={focused} item={item} key={route.key} onPress={() => !focused && navigation.navigate(route.name)} tutorialTarget={tutorialTarget} />;
     })}
   </View></SafeAreaView>;
+}
+
+function ResidentTabItem({ colors, focused, item, onPress, tutorialTarget }: { colors: ReturnType<typeof useAppTheme>['colors']; focused: boolean; item: (typeof items)[keyof typeof items]; onPress: () => void; tutorialTarget: TutorialTargetId | null }) {
+  const { registerTarget } = useTutorial();
+  const itemTarget = useCallback((node: View | null) => {
+    if (tutorialTarget && tutorialTarget !== 'booking') registerTarget(tutorialTarget, node);
+  }, [registerTarget, tutorialTarget]);
+  const bookingTarget = useCallback((node: View | null) => {
+    if (tutorialTarget === 'booking') registerTarget('booking', node);
+  }, [registerTarget, tutorialTarget]);
+
+  return <Pressable onPress={onPress} style={[styles.item, item.center && styles.centerItem]} accessibilityRole="button" accessibilityState={focused ? { selected: true } : {}}>
+    {item.center
+      ? <View ref={bookingTarget} collapsable={false} style={[styles.iconWrap, styles.centerIcon]}><Ionicons name={item.icon} size={36} color="#FFFFFF" /></View>
+      : <View style={styles.targetContent}><View ref={itemTarget} collapsable={false} style={styles.iconWrap}><Ionicons name={item.icon} size={24} color={focused ? colors.accent : colors.muted} /></View><Text fixedFontSize={8} numberOfLines={1} style={[styles.label, { color: focused ? colors.accent : colors.muted }, focused && styles.labelActive]}>{item.label}</Text></View>}
+  </Pressable>;
 }
 
 const styles = StyleSheet.create({
@@ -37,6 +54,7 @@ const styles = StyleSheet.create({
   centerItem: { height: 90 },
   iconWrap: { alignItems: 'center', height: 28, justifyContent: 'center', width: 36 },
   centerIcon: { backgroundColor: '#0639B7', borderRadius: 37, height: 74, shadowColor: '#0A2D82', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2, width: 74 },
+  targetContent: { alignItems: 'center', gap: 4 },
   label: { ...appTypography.tabLabel, color: '#344158', fontSize: 8, lineHeight: 11 },
   labelActive: { color: '#073CB5', fontWeight: '800' },
   centerLabel: { color: '#073CB5', fontWeight: '800' },

@@ -44,6 +44,7 @@
                     </div>
                 </div>
             </header>
+            {% if messages %}{% for message in messages %}<div class="form-alert {{ message.tags }}" role="alert">{{ message }}</div>{% endfor %}{% endif %}
 
             <section class="stat-cards staff-stats">
                 <article class="stat-card">
@@ -269,19 +270,19 @@
                             Password <span class="req">*</span>
                             <span class="input-with-icon has-toggle">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-                                <input type="password" name="password" id="add-password" placeholder="Enter password" required minlength="6" autocomplete="new-password">
+                                <input type="password" name="password" id="add-password" placeholder="Enter password" required minlength="8" autocomplete="new-password">
                                 <button type="button" class="toggle-password" data-toggle-password="add-password" aria-label="Show password">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
                             </span>
                         <small class="field-error" aria-live="polite"></small>
                     </label>
-                    <p class="field-hint">Password must be at least 6 characters long.</p>
+                    <p class="field-hint">Password must be at least 8 characters.</p>
                     <label>
                             Confirm Password <span class="req">*</span>
                             <span class="input-with-icon has-toggle">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-                                <input type="password" name="confirm_password" id="add-confirm-password" placeholder="Confirm password" required minlength="6" autocomplete="new-password">
+                                <input type="password" name="confirm_password" id="add-confirm-password" placeholder="Confirm password" required minlength="8" autocomplete="new-password">
                                 <button type="button" class="toggle-password" data-toggle-password="add-confirm-password" aria-label="Show password">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
@@ -358,7 +359,8 @@
                             {% endfor %}
                         </select>
                     </label>
-                    <label>New Password <small>(optional)</small><input type="password" name="password" placeholder="Leave blank to keep current"></label>
+                    <label>New Password <small>(optional)</small><input type="password" name="password" minlength="8" placeholder="Leave blank to keep current"><small>Password must be at least 8 characters.</small></label>
+                    <label>Confirm New Password <input type="password" name="confirm_password" minlength="8" placeholder="Confirm new password"></label>
                     <label class="checkbox-row"><input type="checkbox" name="is_active" {% if member.is_active %}checked{% endif %}> Active account</label>
                 </div>
                 <footer>
@@ -449,8 +451,8 @@
 
                 var password = addForm.elements.password;
                 var confirmation = addForm.elements.confirm_password;
-                if (password.value && password.value.length < 6) {
-                    showFieldError(password, "Use at least 6 characters.");
+                if (password.value && password.value.length < 8) {
+                    showFieldError(password, "Password must be at least 8 characters.");
                     firstInvalid = firstInvalid || password;
                 }
                 if (confirmation.value && confirmation.value !== password.value) {

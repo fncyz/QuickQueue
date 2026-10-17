@@ -342,14 +342,6 @@ def set_initial_password_api(request):
     confirm_password = request.data.get("confirm_password", "")
     if new_password != confirm_password:
         return Response({"success": False, "message": "The new passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
-    if not (
-        len(new_password) >= 8
-        and re.search(r"[A-Z]", new_password)
-        and re.search(r"[a-z]", new_password)
-        and re.search(r"\d", new_password)
-        and re.search(r"[^A-Za-z0-9]", new_password)
-    ):
-        return Response({"success": False, "message": "Use at least 8 characters with uppercase, lowercase, a number, and a special character."}, status=status.HTTP_400_BAD_REQUEST)
     try:
         validate_password(new_password, request.user)
     except ValidationError as error:

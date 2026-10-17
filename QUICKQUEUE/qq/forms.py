@@ -48,8 +48,8 @@ class BarangayAdminCreateForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
     barangay = forms.ModelChoiceField(queryset=Barangay.objects.none())
-    password1 = forms.CharField(label="Password", widget=forms.PasswordInput)
-    password2 = forms.CharField(label="Confirm Password", widget=forms.PasswordInput)
+    password1 = forms.CharField(label="Password", help_text="Password must be at least 8 characters.", widget=forms.PasswordInput(attrs={"minlength": 8}))
+    password2 = forms.CharField(label="Confirm Password", widget=forms.PasswordInput(attrs={"minlength": 8}))
     is_active = forms.BooleanField(required=False, initial=True)
 
     def __init__(self, *args, **kwargs):
@@ -139,8 +139,8 @@ class SuperAdminProfileForm(forms.ModelForm):
 
 class AdministrativePasswordResetForm(forms.Form):
     superuser_password = forms.CharField(label="Your Super Admin Password", widget=forms.PasswordInput)
-    temporary_password1 = forms.CharField(label="Temporary Password", widget=forms.PasswordInput)
-    temporary_password2 = forms.CharField(label="Confirm Temporary Password", widget=forms.PasswordInput)
+    temporary_password1 = forms.CharField(label="Temporary Password", help_text="Password must be at least 8 characters.", widget=forms.PasswordInput(attrs={"minlength": 8}))
+    temporary_password2 = forms.CharField(label="Confirm Temporary Password", widget=forms.PasswordInput(attrs={"minlength": 8}))
 
     def __init__(self, *args, superuser, target_user, **kwargs):
         self.superuser = superuser

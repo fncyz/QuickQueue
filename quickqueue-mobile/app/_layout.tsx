@@ -16,6 +16,7 @@ import { AssistantPreferenceProvider } from '@/contexts/assistant-preference';
 import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
 import { AuthSessionProvider } from '@/contexts/auth-session';
 import { PushNotificationsProvider } from '@/contexts/push-notifications';
+import { TutorialProvider } from '@/contexts/tutorial';
 import '@/services/startup-loading';
 
 function AppNavigator() {
@@ -57,5 +58,5 @@ function AppNavigator() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
   if (!fontsLoaded) return <QuickQueueLoadingScreen />;
-  return <SafeAreaProvider initialMetrics={initialWindowMetrics}><AppThemeProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><PushNotificationsProvider><AppNavigator /></PushNotificationsProvider></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></AppThemeProvider></SafeAreaProvider>;
+  return <SafeAreaProvider initialMetrics={initialWindowMetrics}><AppThemeProvider><TutorialProvider><ConnectivityProvider><AssistantPreferenceProvider><AuthSessionProvider><PushNotificationsProvider><AppNavigator /></PushNotificationsProvider></AuthSessionProvider></AssistantPreferenceProvider></ConnectivityProvider></TutorialProvider></AppThemeProvider></SafeAreaProvider>;
 }
