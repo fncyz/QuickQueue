@@ -151,23 +151,24 @@ export const getAssistantHealth = async (accessToken: string) => {
   return response.data;
 };
 
-export const sendChatMessage = async (accessToken: string, message: string, history: ChatMessage[], sessionId?: string) => {
+export const sendChatMessage = async (accessToken: string, message: string, sessionId?: string, signal?: AbortSignal) => {
   const id = requestId();
   const started = Date.now();
   try {
     const currentAccessToken = await AsyncStorage.getItem("quickqueue.accessToken") || accessToken;
     const response = await api.post<ChatResponse>("chat/", {
       message,
-      history: history.slice(-6),
       session_id: sessionId,
     }, {
       headers: authenticatedHeaders(currentAccessToken, id),
-      // The backend may try both the primary and fallback AI models before
-      // returning its built-in guidance, so allow that response to complete.
-      timeout: 60000,
+      // Backend Gemini work is bounded to 25 seconds; leave a transport margin
+      // without making residents wait a full minute for a lost request.
+      timeout: 40000,
+      signal,
     });
     return response.data;
   } catch (error) {
+    if (axios.isCancel(error)) throw error;
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     console.warn("QuickQueue chat request failed", { durationMs: Date.now() - started, location: "chat_api", status: status ?? "network" });
     // Chat POSTs are intentionally not retried automatically: a late response

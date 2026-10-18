@@ -39,6 +39,15 @@ from qq.services.appointment_service import create_appointment, create_special_s
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
 from qq.services.notification_service import notify_barangay_staff, notify_resident
+from qq.services.assistant_data import (
+    assistant_data_for,
+    money_label,
+    office_hours,
+    queue_snapshot_for,
+    service_fee_for,
+)
+from qq.services.assistant_language import detect_language
+from qq.services.assistant_responses import deterministic_reply, provider_failure_reply
 from qq.gemini_service import GeminiUnavailable, ask_gemini, check_gemini_ready
 from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 
@@ -971,120 +980,101 @@ def push_devices_api(request):
     return Response({"success": True, "device_id": device.pk})
 
 
-def _chat_database_context(resident):
-    services = Service.objects.filter(
-        Q(is_temporary=False) | Q(barangay=resident.barangay), is_active=True
-    ).order_by("name")
-    configurations = {
-        item.service_id: item for item in BarangayServiceConfiguration.objects.filter(
-            barangay=resident.barangay, is_active=True
-        )
-    }
-    service_lines = []
-    for service in services:
-        configuration = configurations.get(service.pk)
-        duration = configuration.estimated_duration if configuration else service.estimated_duration
-        fee = configuration.fee if configuration else None
-        details = (
-            f"- {service.name}: description={service.description.strip() or 'not recorded'}; "
-            f"requirements={service.requirements.strip() or 'not recorded'}; "
-            f"fee={'PHP ' + format(fee, '.2f') if fee is not None else 'not recorded'}; "
-            f"estimated processing duration={duration} minutes"
-        )
-        if service.is_temporary:
-            details += (
-                f"; kind={service.get_temporary_type_display()}; location={service.location or 'not recorded'}; "
-                f"event dates={service.event_start_date or 'not recorded'} to {service.event_end_date or 'not recorded'}; "
-                f"booking period={service.booking_start_date or 'not recorded'} to {service.booking_end_date or 'not recorded'}; "
-                f"booking status={service.computed_status()}"
+def _chat_database_context(resident, message=""):
+    """Build a minimal context from authenticated, resident-scoped records."""
+    data = assistant_data_for(resident, message)
+    sections = [f"Resident barangay: {resident.barangay.name}"]
+
+    if "office" in data.intents:
+        sections.append(f"QuickQueue office hours: {office_hours()}")
+
+    if "services" in data.intents:
+        lines = []
+        for service in data.services:
+            configuration = data.service_configurations.get(service.pk)
+            duration = configuration.estimated_duration if configuration else service.estimated_duration
+            detail = (
+                f"- {service.name}: description={service.description.strip() or 'not recorded'}; "
+                f"requirements={service.requirements.strip() or 'not recorded'}; "
+                f"fee={money_label(service_fee_for(service, data.service_configurations))}; "
+                f"estimated processing duration={duration} minutes"
             )
-        service_lines.append(details)
+            if service.is_temporary:
+                detail += (
+                    f"; type={service.get_temporary_type_display()}; location={service.location or 'not recorded'}; "
+                    f"event dates={service.event_start_date or 'not recorded'} to {service.event_end_date or 'not recorded'}; "
+                    f"booking status={service.computed_status()}"
+                )
+            lines.append(detail)
+        sections.extend(["Available services for this barangay:", *(lines or ["- No active services are recorded."])])
 
-    knowledge = AssistantKnowledge.objects.filter(
-        Q(barangay__isnull=True) | Q(barangay=resident.barangay), is_approved=True
-    )
-    knowledge_lines = [f"- {item.title}: {item.content}" for item in knowledge[:20]]
-    recent_notifications = resident.notifications.order_by("-created_at")[:3]
-    notification_lines = [
-        f"- {item.title}: {item.message} (read={'yes' if item.is_read else 'no'})"
-        for item in recent_notifications
-    ]
-    active_appointments = list(resident.appointments.select_related(
-        "service", "barangay", "time_slot", "queue_ticket", "event_booking"
-    ).filter(
-        Q(appointment_date__gte=timezone.localdate()) | Q(appointment_date__isnull=True),
-        status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
-    ).order_by(
-        F("appointment_date").asc(nulls_last=True),
-        F("time_slot__start_time").asc(nulls_last=True),
-        "created_at",
-    )[:5])
-    appointment = active_appointments[0] if active_appointments else None
-
-    if appointment:
-        ticket = getattr(appointment, "queue_ticket", None)
-        queue = QueueTicket.objects.filter(
-            appointment__appointment_date=appointment.appointment_date,
-            appointment__barangay=appointment.barangay,
-            appointment__service=appointment.service,
-        ).select_related("appointment")
-        now_serving = queue.filter(status=QueueTicket.Status.NOW_SERVING).first()
-        people_ahead = queue.filter(
-            status__in=[QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING],
-            appointment__queue_number__lt=appointment.queue_number,
-        ).count()
-        appointment_date = (
-            appointment.appointment_date.isoformat()
-            if appointment.appointment_date
-            else "Date not assigned"
-        )
-        appointment_time = (
-            f"{appointment.time_slot.start_time.strftime('%I:%M %p')}-"
-            f"{appointment.time_slot.end_time.strftime('%I:%M %p')}"
-            if appointment.time_slot
-            else "Time not assigned"
-        )
-        appointment_context = (
-            f"Active appointment: ID QQ-{appointment.created_at.year}-{appointment.pk:05d}; "
-            f"service={appointment.service.name}; date={appointment_date}; "
-            f"time={appointment_time}; "
-            f"barangay={appointment.barangay.name}; "
-            f"queue number={appointment.queue_number or 'not assigned'}; "
-            f"appointment status={appointment.get_status_display()}; "
-            f"queue status={ticket.get_status_display() if ticket else 'not recorded'}; "
-            f"now serving={now_serving.queue_number if now_serving else 'not recorded'}; "
-            f"people ahead={people_ahead}; estimated wait={people_ahead * appointment.service.estimated_duration} minutes"
-        )
-        if len(active_appointments) > 1:
-            appointment_context += "\nOther active bookings (ask the resident which one before giving a specific answer):\n" + "\n".join(
-                f"- service={item.service.name}; "
-                f"kind={'event' if hasattr(item, 'event_booking') else 'regular appointment'}; "
-                f"date={item.appointment_date.isoformat() if item.appointment_date else 'not assigned'}; "
-                f"status={item.get_status_display()}"
-                for item in active_appointments[1:]
+    if data.intents & {"appointments", "queue", "documents"}:
+        appointment_lines = []
+        for index, appointment in enumerate(data.active_appointments):
+            snapshot = queue_snapshot_for(appointment, data.service_configurations)
+            prefix = (
+                f"Active appointment: ID QQ-{appointment.created_at.year}-{appointment.pk:05d}; "
+                if index == 0 else "- Other active booking: "
             )
-    else:
-        appointment_context = "Active appointment: none in the resident's QuickQueue record."
+            appointment_lines.append(
+                f"{prefix}service={appointment.service.name}; "
+                f"date={appointment.appointment_date.isoformat() if appointment.appointment_date else 'Date not assigned'}; "
+                f"time={appointment.time_slot.start_time.strftime('%I:%M %p') + '-' + appointment.time_slot.end_time.strftime('%I:%M %p') if appointment.time_slot else 'Time not assigned'}; "
+                f"status={appointment.get_status_display()}; queue number={snapshot.queue_number or 'not assigned'}; "
+                f"queue status={snapshot.status}; now serving={snapshot.now_serving or 'not recorded'}; "
+                f"people ahead={snapshot.people_ahead}; estimated wait={snapshot.estimated_wait_minutes} minutes"
+            )
+        sections.extend(appointment_lines or ["Active appointment: none in the resident's QuickQueue record."])
 
-    context = "\n".join([
-        f"Resident barangay: {resident.barangay.name}",
-        appointment_context,
-        "Available QuickQueue services:",
-        *(service_lines or ["- No active services are currently recorded."]),
-        "Recent QuickQueue notifications:",
-        *(notification_lines or ["- No recent notifications are recorded."]),
-        "Approved QuickQueue knowledge:",
-        *(knowledge_lines or ["- No additional approved knowledge is recorded."]),
-        f"QuickQueue office hours: {settings.QUICKQUEUE_OFFICE_HOURS}",
-        "Any fact marked not recorded must not be guessed.",
-    ])
-    return context, appointment, active_appointments
+    if data.transactions:
+        transaction_lines = []
+        for appointment in data.transactions:
+            snapshot = queue_snapshot_for(appointment, data.service_configurations)
+            transaction_lines.append(
+                f"- ID QQ-{appointment.created_at.year}-{appointment.pk:05d}; service={appointment.service.name}; "
+                f"appointment status={appointment.get_status_display()}; date={appointment.appointment_date or 'not assigned'}; "
+                f"queue status={snapshot.status}; document claim status={snapshot.claim_status or 'not recorded'}; "
+                f"document file available={'yes' if snapshot.document_available else 'no'}; "
+                f"additional document requirements={snapshot.requirements or 'none recorded'}"
+            )
+        sections.extend(["Resident transactions and document status:", *transaction_lines])
+
+    if "events" in data.intents:
+        event_lines = [
+            f"- {event.name}: location={event.location or 'not recorded'}; dates={event.event_start_date or 'not recorded'} to "
+            f"{event.event_end_date or 'not recorded'}; requirements={event.requirements.strip() or 'not recorded'}; "
+            f"booking status={event.computed_status()}"
+            for event in data.events
+        ]
+        registration_lines = [
+            f"- {booking.appointment.service.name}: booking reference={booking.booking_reference}; "
+            f"registration status={booking.get_status_display()}"
+            for booking in data.event_registrations
+        ]
+        sections.extend(["Events and temporary services for this barangay:", *(event_lines or ["- None recorded."])])
+        sections.extend(["Resident event registrations:", *(registration_lines or ["- None recorded."])])
+
+    if "notifications" in data.intents:
+        sections.extend([
+            "Resident recent notifications:",
+            *([f"- {item.title}: {item.message}" for item in data.notifications] or ["- None recorded."]),
+        ])
+
+    if "knowledge" in data.intents:
+        sections.extend([
+            "Approved QuickQueue knowledge:",
+            *([f"- {item.title}: {item.content}" for item in data.knowledge] or ["- None recorded."]),
+        ])
+
+    sections.append("Any fact absent or marked not recorded must not be guessed.")
+    return "\n".join(sections), data.primary_appointment, list(data.active_appointments), data
 
 
-def _built_in_chat_reply(message, resident, appointment):
+def _built_in_chat_reply(message, resident, appointment, data=None):
     """Provide safe QuickQueue guidance when the external AI provider is unavailable."""
     text = message.lower()
-    services = list(Service.objects.filter(is_active=True).order_by("name"))
+    data = data or assistant_data_for(resident, message)
+    services = list(data.services)
     appointment_topic = any(word in text for word in (
         "appointment", "queue", "check in", "check-in", "track", "status", "number", "wait", "cancel"
     ))
@@ -1152,7 +1142,29 @@ def _built_in_chat_reply(message, resident, appointment):
     if "notification" in text:
         return "Open Notifications to read the latest update. Use Queue when the notification requires a queue action, or Transactions to review the appointment details."
     if "office hour" in text or "opening hour" in text or "when are you open" in text:
-        return f"The office hours shown in QuickQueue are {settings.QUICKQUEUE_OFFICE_HOURS}"
+        return f"The office hours shown in QuickQueue are {office_hours()}"
+    if any(word in text for word in ("document", "processing", "pickup", "pick up", "claim", "ready")):
+        if not data.transactions:
+            return "You do not have a document transaction recorded in QuickQueue."
+        transaction = data.transactions[0]
+        snapshot = queue_snapshot_for(transaction, data.service_configurations)
+        if snapshot.claim_status:
+            detail = f"According to your QuickQueue record, the document status for {transaction.service.name} is {snapshot.claim_status}."
+            if snapshot.requirements:
+                detail += f" Additional requirements: {snapshot.requirements}."
+            return detail
+        return f"QuickQueue does not currently list a document pickup status for your {transaction.service.name} transaction."
+    if any(word in text for word in ("event", "special service", "temporary service", "registration", "qr pass", "booking reference")):
+        if data.event_registrations:
+            registration = data.event_registrations[0]
+            return (
+                f"According to your QuickQueue record, your registration for {registration.appointment.service.name} "
+                f"is {registration.get_status_display()} with booking reference {registration.booking_reference}."
+            )
+        if data.events:
+            names = ", ".join(event.name for event in data.events)
+            return f"The events and temporary services available for your barangay are: {names}."
+        return "QuickQueue does not currently list an event or temporary service for your barangay."
     if "requirement" in text or "clearance" in text:
         matching_service = _match_service_from_message(text, services)
         if matching_service:
@@ -1164,6 +1176,12 @@ def _built_in_chat_reply(message, resident, appointment):
         if names:
             return f"Which service do you need requirements for? The active services in QuickQueue are: {names}."
         return "QuickQueue does not currently list any active services. Please contact barangay staff for assistance."
+    if any(word in text for word in ("fee", "cost", "price")):
+        matching_service = _match_service_from_message(text, services)
+        if matching_service:
+            fee = service_fee_for(matching_service, data.service_configurations)
+            return f"According to QuickQueue, the fee for {matching_service.name} is {money_label(fee)}."
+        return "Which service fee would you like to check?"
     if "service" in text or "available" in text:
         names = ", ".join(service.name for service in services)
         if names:
@@ -1307,7 +1325,7 @@ def chat_api(request):
         session = session or ChatSession.objects.create(resident=resident)
         history = list(session.messages.order_by("-created_at")[:8].values("role", "text"))[::-1]
         ChatMessage.objects.create(session=session, role=ChatMessage.Role.RESIDENT, text=message)
-        database_context, appointment, active_appointments = _chat_database_context(resident)
+        database_context, appointment, active_appointments, assistant_data = _chat_database_context(resident, message)
     except DatabaseError:
         logger.error(
             "chat_request request_id=%s status=503 category=database location=context duration_ms=%d",
@@ -1318,28 +1336,18 @@ def chat_api(request):
             {"message": "QuickQueue is reconnecting to its records. Please retry in a moment.", "error_code": "database_unavailable", "retryable": True},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
-    personal_topic = any(word in message.lower() for word in ("my queue", "queue number", "queue status", "track my"))
-    regular_appointments = [item for item in active_appointments if not hasattr(item, "event_booking")]
-    used_ai = True
+    language = detect_language(message, history)
+    used_ai = False
     ai_error_code = None
-    if personal_topic and len(regular_appointments) > 1:
-        used_ai = False
-        choices = ", ".join(
-            f"{item.service.name} on {item.appointment_date.strftime('%B %d, %Y') if item.appointment_date else 'a date not assigned yet'}"
-            for item in regular_appointments
-        )
-        reply = f"You have multiple active appointments: {choices}. Which appointment are you asking about?"
-    elif personal_topic and (regular_appointments or appointment):
-        used_ai = False
-        reply = _built_in_chat_reply(message, resident, regular_appointments[0] if regular_appointments else appointment)
-    else:
+    reply = deterministic_reply(message, assistant_data, language, history)
+    if reply is None:
         try:
-            reply = ask_gemini(message, database_context, history)
+            reply = ask_gemini(message, database_context, history, language.name)
+            used_ai = True
         except GeminiUnavailable as error:
-            used_ai = False
             ai_error_code = error.code
             logger.warning("Gemini unavailable; using QuickQueue guidance fallback (%s)", error.code)
-            reply = _built_in_chat_reply(message, resident, appointment)
+            reply = provider_failure_reply(language)
     reply = _format_chat_instructions(reply)
     assistant_message = ChatMessage.objects.create(
         session=session, role=ChatMessage.Role.ASSISTANT, text=reply,

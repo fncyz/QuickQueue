@@ -49,7 +49,7 @@ export default function TabLayout() {
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
-    {!isTutorialActive && (assistantEnabled || pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index') && <FloatingAiAssistant />}
+    {!isTutorialActive && assistantEnabled && (pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index') && <FloatingAiAssistant />}
     {notice && <ConnectionStatusBanner />}
   </View>;
 }
