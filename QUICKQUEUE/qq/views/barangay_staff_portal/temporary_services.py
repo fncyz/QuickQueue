@@ -6,11 +6,12 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db.models.deletion import ProtectedError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_GET
 
 from qq.models import Appointment, BarangayStaff, EventBooking, Notification, Service
 import json
@@ -31,15 +32,35 @@ def _staff_for(user):
 @login_required(login_url="signin")
 def staff_temporary_services(request):
     staff = _staff_for(request.user)
-    offerings = Service.objects.filter(is_temporary=True, barangay=staff.barangay).order_by("-event_start_date")
+    offerings = Service.objects.filter(
+        is_temporary=True, barangay=staff.barangay,
+    ).annotate(
+        history_booking_count=Count("appointments", distinct=True),
+        current_booking_count=Count(
+            "appointments",
+            filter=~Q(
+                appointments__status__in=[
+                    Appointment.Status.CANCELLED,
+                    Appointment.Status.MISSED,
+                ]
+            ),
+            distinct=True,
+        ),
+    ).order_by("-event_start_date")
     selected = request.GET.get("status", "all")
     now = timezone.now()
     records = []
     for offering in offerings:
-        offering.has_booking_history = offering.appointments.exists()
-        count = offering.appointments.exclude(status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]).count()
+        offering.has_booking_history = offering.history_booking_count > 0
+        count = offering.current_booking_count
         offering.display_status = offering.computed_status(now, count)
         offering.booking_count = count
+        offering.has_participant_history = bool(
+            offering.temporary_type == Service.TemporaryType.EVENT
+            and offering.lifecycle != Service.Lifecycle.CANCELLED
+            and offering.event_end_date
+            and timezone.localdate(now) > offering.event_end_date
+        )
         if selected == "all" or offering.display_status == selected:
             records.append(offering)
     return render(request, "barangay_staff/temporary_services.html", {
@@ -220,10 +241,12 @@ def _attendance_payload(staff, event, request):
     paginator = Paginator(bookings, 10)
     page = paginator.get_page(request.GET.get("page", 1))
     participants = []
-    for booking in page.object_list:
+    first_number = (page.number - 1) * paginator.per_page
+    for index, booking in enumerate(page.object_list, start=1):
         resident = booking.appointment.resident
         name = " ".join(filter(None, [resident.first_name, resident.middle_name, resident.last_name, resident.suffix]))
         participants.append({
+            "number": first_number + index,
             "name": name,
             "booking_reference": booking.booking_reference,
             "contact_number": resident.contact_number,
@@ -319,3 +342,24 @@ def staff_event_scanner(request):
             return JsonResponse(payload)
     except EventBooking.DoesNotExist:
         return JsonResponse({"result": "not_found", "message": "Booking Not Found", "can_check_in": False}, status=404)
+
+
+@login_required(login_url="signin")
+@require_GET
+def staff_event_participant_history(request, pk):
+    staff = _staff_for(request.user)
+    event = get_object_or_404(
+        Service,
+        pk=pk,
+        is_temporary=True,
+        temporary_type=Service.TemporaryType.EVENT,
+        barangay=staff.barangay,
+    )
+    if _scanner_event_status(event, timezone.localdate()) != "completed":
+        raise Http404("Participant history is available after the event has ended.")
+    history = _attendance_payload(staff, event, request)
+    return render(request, "barangay_staff/event_participant_history.html", {
+        "active_page": "events", "staff": staff, "event_record": event,
+        "history": history, "search_query": request.GET.get("q", "").strip(),
+        "status_filter": request.GET.get("status", "all"),
+    })

@@ -1,7 +1,7 @@
 {% load static %}
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Documents | QuickQueue Staff</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{% static 'barangay_staff/css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_processing.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_workflow.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/completed_documents.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_tabs.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/documents-responsive.css' %}"></head><body>
+<link rel="stylesheet" href="{% static 'barangay_staff/css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_processing.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_workflow.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_preview_actions.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/completed_documents.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/document_tabs.css' %}"><link rel="stylesheet" href="{% static 'barangay_staff/css/documents-responsive.css' %}"></head><body>
 {% include 'barangay_staff/includes/sidebar.html' %}<main class="staff-main documents-page">
 <header class="topbar"><div><h1>Documents</h1><p>Process active requests and retrieve completed documents.</p></div><div class="user-tools"><a class="bell" href="{% url 'barangay_notifications' %}">♧{% if unread_notifications %}<i></i>{% endif %}</a><span class="avatar">{{ staff.initials }}</span><span><b>{{ staff.full_name }}</b><small>{{ staff.get_role_display }}</small></span></div></header>
 <div class="workspace">{% if messages %}<div class="messages">{% for message in messages %}<p class="{{ message.tags }}">{{ message }}</p>{% endfor %}</div>{% endif %}<nav class="document-tabs"><a class="{% if document_tab == 'processing' %}active{% endif %}" href="?tab=processing">For Processing</a><a class="{% if document_tab == 'completed' %}active{% endif %}" href="?tab=completed">Completed</a></nav>{% if document_tab == 'processing' %}
@@ -17,7 +17,8 @@
 <div class="workflow-grid"><div><section class="workflow-card"><h3>Resident Information</h3><dl><dt>Full Name</dt><dd>{{ ticket.appointment.resident }}</dd><dt>Address</dt><dd>{{ ticket.appointment.sitio|default:'—' }}, Barangay {{ barangay.name }}</dd><dt>Contact Number</dt><dd>{{ ticket.appointment.resident.contact_number }}</dd></dl></section><section class="workflow-card"><h3>Appointment Information</h3><dl><dt>Schedule</dt><dd>{{ ticket.appointment.appointment_date|date:'M j, Y' }} · {{ ticket.appointment.time_slot.start_time|time:'g:i A' }}</dd><dt>Purpose</dt><dd>{{ ticket.appointment.purpose|default:'Official document request' }}</dd></dl></section></div>
 <section class="workflow-card checklist"><h3>Document Checklist</h3><article><i>✓</i><span><b>Service identified</b><small>{{ ticket.appointment.service.name }}</small></span></article><article><i>✓</i><span><b>Active template matched</b><small>{{ ticket.appointment.service.name }} Template</small></span></article><article><i>✓</i><span><b>Required information complete</b><small>Resident and appointment fields available</small></span></article><div class="generated-note"><b>Document generated</b><small>Review the document before completing.</small></div><button type="button" class="preview-generated" data-preview="document-preview-{{ ticket.pk }}">Preview Generated Document</button></section></div></div>
 <form class="workflow-actions" method="post" action="{% url 'staff_document_action' ticket.pk %}">{% csrf_token %}<button type="button" class="save-close">Save &amp; Close</button><button name="action" value="archive" class="complete-archive">Complete &amp; Archive</button></form></dialog>
-<dialog class="document-preview-modal" id="document-preview-{{ ticket.pk }}"><header><div><small>DOCUMENT PREVIEW · DOC-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.pk|stringformat:'06d' }}</small><h2>{{ ticket.appointment.service.name }}</h2></div><button type="button" class="preview-close" aria-label="Close">&times;</button></header><iframe title="Generated {{ ticket.appointment.service.name }}" data-src="{% url 'staff_processing_document_preview' ticket.pk %}"></iframe><footer><a href="{% url 'staff_processing_document_preview' ticket.pk %}?download=1">⇩ &nbsp; Download</a><button type="button" class="print-generated">Print Document</button></footer></dialog>
+<dialog class="document-preview-modal" id="document-preview-{{ ticket.pk }}"><header><div><small>DOCUMENT PREVIEW · DOC-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.pk|stringformat:'06d' }}</small><h2>{{ ticket.appointment.service.name }}</h2></div><button type="button" class="preview-close" aria-label="Close">&times;</button></header><iframe title="Generated {{ ticket.appointment.service.name }}" data-src="{% url 'staff_processing_document_preview' ticket.pk %}?embedded=1"></iframe><footer><button type="button" class="edit-generated">Edit</button><a href="{% url 'staff_processing_document_preview' ticket.pk %}?download=1">Download</a><button type="button" class="print-generated">Print</button><button type="button" class="done-generated" data-confirm="document-completion-{{ ticket.pk }}">Done</button></footer></dialog>
+<dialog class="document-completion-modal" id="document-completion-{{ ticket.pk }}"><section><h2>Complete Document Processing?</h2><p>Are you done processing this document? It will be marked as Ready for Pickup.</p></section><form class="complete-document-form" method="post" action="{% url 'staff_processing_document_preview' ticket.pk %}">{% csrf_token %}<input type="hidden" name="action" value="complete"><footer><button type="button" class="completion-no">No</button><button type="submit" class="completion-yes">Yes</button></footer></form></dialog>
 {% endif %}{% endfor %}
 <script>
 document.addEventListener('click', function(event) {
@@ -29,5 +30,40 @@ document.addEventListener('click', function(event) {
   if (closeButton) closeButton.closest('dialog').close();
   var printButton = event.target.closest('.print-generated');
   if (printButton) printButton.closest('dialog').querySelector('iframe').contentWindow.print();
+  var editButton = event.target.closest('.edit-generated');
+  if (editButton) {
+    var editFrame = editButton.closest('dialog').querySelector('iframe');
+    editFrame.setAttribute('src', editFrame.dataset.src + '&edit=1');
+  }
+  var doneButton = event.target.closest('.done-generated');
+  if (doneButton) {
+    var confirmation = document.getElementById(doneButton.dataset.confirm);
+    if (confirmation) confirmation.showModal();
+  }
+  var noButton = event.target.closest('.completion-no');
+  if (noButton) noButton.closest('dialog').close();
+});
+document.querySelectorAll('.complete-document-form').forEach(function(form) {
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    var yesButton = form.querySelector('.completion-yes');
+    if (yesButton.disabled) return;
+    yesButton.disabled = true;
+    yesButton.textContent = 'Processing…';
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    }).then(function(response) {
+      if (!response.ok) throw new Error('Unable to complete this document.');
+      return response.json();
+    }).then(function() {
+      window.location.reload();
+    }).catch(function(error) {
+      yesButton.disabled = false;
+      yesButton.textContent = 'Yes';
+      window.alert(error.message);
+    });
+  });
 });
 </script></body></html>

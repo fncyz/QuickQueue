@@ -1,9 +1,10 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from qq.models import Appointment, BarangayStaff, Notification, QueueTicket
+from qq.models import Appointment, BarangayStaff, QueueTicket, Service
 from qq.services.notification_service import unread_count_for_user
 
 
@@ -40,19 +41,10 @@ def staff_dashboard(request):
     for position, ticket in enumerate(waiting_tickets):
         ticket.estimated_minutes = position * 14 if position else 0
 
-    ready_documents = list(
-        tickets.filter(claim_status=QueueTicket.ClaimStatus.READY)
-        .order_by("completed_at", "updated_at")[:8]
-    )
-    notified_ids = set(
-        Notification.objects.filter(
-            appointment__queue_ticket__in=ready_documents,
-        notification_type=Notification.NotificationType.QUEUE_UPDATE,
-        title="Document Ready for Claiming",
-        ).values_list("appointment_id", flat=True)
-    )
+    ready_documents_query = tickets.filter(claim_status=QueueTicket.ClaimStatus.READY)
+    ready_count = ready_documents_query.count()
+    ready_documents = list(ready_documents_query.order_by("-updated_at")[:6])
     for ticket in ready_documents:
-        ticket.resident_notified = ticket.appointment_id in notified_ids
         ready_date = (ticket.completed_at or ticket.updated_at).date()
         ticket.processing_days = max((today - ready_date).days, 1)
 
@@ -60,7 +52,42 @@ def staff_dashboard(request):
         appointment_date__gt=today,
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
     ).order_by("appointment_date", "time_slot__start_time")[:3]
-    notified_ready = sum(ticket.resident_notified for ticket in ready_documents)
+    event_services = list(
+        Service.objects.filter(
+            barangay=barangay,
+            is_temporary=True,
+            is_active=True,
+            lifecycle=Service.Lifecycle.SCHEDULED,
+            event_end_date__gte=today,
+        )
+        .annotate(
+            dashboard_booking_count=Count(
+                "appointments",
+                filter=~Q(
+                    appointments__status__in=[
+                        Appointment.Status.CANCELLED,
+                        Appointment.Status.MISSED,
+                    ]
+                ),
+                distinct=True,
+            )
+        )
+        .order_by("event_start_date", "name")[:4]
+    )
+    status_labels = {
+        "upcoming": "Upcoming",
+        "active": "Active",
+        "ending_soon": "Ending Soon",
+        "fully_booked": "Fully Booked",
+        "booking_closed": "Booking Closed",
+    }
+    for offering in event_services:
+        offering.display_status = offering.computed_status(
+            now, offering.dashboard_booking_count
+        )
+        offering.dashboard_status = status_labels.get(
+            offering.display_status, offering.get_lifecycle_display()
+        )
     greeting = "Good morning" if now.hour < 12 else "Good afternoon" if now.hour < 17 else "Good evening"
 
     return render(request, "barangay_staff/dashboard.html", {
@@ -73,13 +100,12 @@ def staff_dashboard(request):
         "waiting": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
         "waiting_tickets": waiting_tickets,
         "ready_documents": ready_documents,
-        "ready_count": len(ready_documents),
-        "notified_ready": notified_ready,
-        "to_notify": len(ready_documents) - notified_ready,
+        "ready_count": ready_count,
         "pending_appointments": appointments.filter(status=Appointment.Status.PENDING).count(),
         "processing_documents": tickets.filter(
             claim_status=QueueTicket.ClaimStatus.PROCESSING
         ).count(),
         "upcoming_appointments": upcoming,
+        "event_services": event_services,
         "unread_notifications": unread_count_for_user(request.user),
     })

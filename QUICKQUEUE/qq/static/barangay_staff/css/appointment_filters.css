@@ -4,6 +4,40 @@
 .review-layout-full .filters .date-filter { width: 170px; min-width: 150px; }
 .embedded-history { margin: 18px; }
 .embedded-history-table { border: 0; border-radius: 0; }
+.embedded-history-table .table-scroll {
+  width: 100%;
+  overflow-x: visible;
+}
+.embedded-history-table table {
+  width: 100%;
+  table-layout: fixed;
+}
+.embedded-history-table th,
+.embedded-history-table td {
+  padding: 12px 10px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  vertical-align: middle;
+}
+.embedded-history-table th:nth-child(1) { width: 19%; }
+.embedded-history-table th:nth-child(2) { width: 11%; }
+.embedded-history-table th:nth-child(3) { width: 17%; }
+.embedded-history-table th:nth-child(4) { width: 13%; }
+.embedded-history-table th:nth-child(5) { width: 15%; }
+.embedded-history-table th:nth-child(6) { width: 10%; }
+.embedded-history-table th:nth-child(7) { width: 15%; }
+.embedded-history-table .resident {
+  min-width: 0;
+}
+.embedded-history-table .resident > span {
+  min-width: 0;
+}
+.embedded-history-table .history-btn {
+  width: 100%;
+  padding: 9px 8px;
+  line-height: 1.35;
+  white-space: normal;
+}
 #appointment-list th.status-column,
 #appointment-list td.status-column {
   text-align: center;
@@ -24,4 +58,14 @@
   justify-content: center;
   white-space: nowrap;
 }
-@media (max-width: 780px) { .review-layout-full .filters > label, .review-layout-full .filters select, .review-layout-full .filters .date-filter { width: 100%; min-width: 0; } }
+@media (max-width: 1100px) {
+  .embedded-history-table .table-scroll { overflow-x: auto; }
+  .embedded-history-table table { min-width: 880px; }
+}
+@media (max-width: 780px) {
+  .review-layout-full .filters > label,
+  .review-layout-full .filters select,
+  .review-layout-full .filters .date-filter { width: 100%; min-width: 0; }
+  .tabs { overflow-x: auto; align-items: stretch; }
+  .tabs a { display: flex; align-items: center; flex: 0 0 auto; white-space: nowrap; }
+}

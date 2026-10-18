@@ -75,7 +75,7 @@ def _resolve_slot(barangay, slot_id, today, now_time):
 
 
 def _annotate_wait_estimates(tickets, duration_by_service=None):
-    """Attach AI wait estimates using each service's estimated duration."""
+    """Attach deterministic wait estimates using each service's configured duration."""
     cumulative = 0
     previous_number = None
     serving = next(
@@ -466,7 +466,7 @@ def barangay_queue_skip(request):
 @login_required(login_url="signin")
 @require_POST
 def barangay_update_service_times(request):
-    """Update default estimated service durations used by AI waiting estimates."""
+    """Update default service durations used by deterministic waiting estimates."""
     _barangay_for(request.user)
     updated = 0
     for service in Service.objects.filter(is_active=True):

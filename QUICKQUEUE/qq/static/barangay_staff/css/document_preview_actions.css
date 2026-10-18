@@ -1,0 +1,101 @@
+.document-preview-modal > footer .print-generated {
+  border-color: #1769e8;
+  background: #1769e8;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(23, 105, 232, .24);
+}
+
+.document-preview-modal > footer .edit-generated {
+  box-shadow: none;
+}
+
+.document-preview-modal > footer .edit-generated {
+  border-color: #a9c8f8;
+  background: #fff;
+  color: #1559b7;
+}
+
+.document-preview-modal > footer .done-generated {
+  border-color: #15915f;
+  background: #15915f;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(21, 145, 95, .2);
+}
+
+.document-completion-modal {
+  width: min(470px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #12264c;
+  font-family: Poppins, sans-serif;
+  box-shadow: 0 28px 80px rgba(7, 24, 58, .34);
+}
+
+.document-completion-modal::backdrop {
+  background: rgba(16, 34, 69, .64);
+  backdrop-filter: blur(4px);
+}
+
+.document-completion-modal > section {
+  padding: 26px;
+}
+
+.document-completion-modal h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+}
+
+.document-completion-modal p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.document-completion-modal footer {
+  padding: 17px 26px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #dce4f1;
+}
+
+.document-completion-modal button {
+  min-width: 90px;
+  padding: 11px 17px;
+  border: 1px solid #cbd9ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #405676;
+  font: 600 13px Poppins, sans-serif;
+  cursor: pointer;
+}
+
+.document-completion-modal .completion-yes {
+  border-color: #155eef;
+  background: #155eef;
+  color: #fff;
+}
+
+.document-completion-modal .completion-yes:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+@media (max-width: 760px) {
+  .document-preview-modal > footer {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .document-preview-modal > footer > * {
+    flex: 1 1 calc(50% - 6px);
+    text-align: center;
+  }
+
+  .document-preview-modal iframe {
+    height: calc(88vh - 225px);
+  }
+}
