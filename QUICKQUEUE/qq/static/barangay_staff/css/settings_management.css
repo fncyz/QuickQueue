@@ -16,5 +16,12 @@
 .closed-dates article > span { display: grid; }
 .closed-dates form { padding: 0; }
 .settings-empty { padding: 18px 0; color: var(--muted); }
+.booking-settings { max-width: 680px; }
+.booking-capacity-field { display: grid; gap: 8px; }
+.booking-capacity-field label { font-size: 11px; font-weight: 700; }
+.booking-capacity-field input { width: 100%; height: 50px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; color: #425982; font: inherit; }
+.booking-capacity-field input:focus { border-color: #1268e8; outline: 0; box-shadow: 0 0 0 3px #1268e81a; }
+.booking-capacity-field small { color: var(--muted); line-height: 1.6; }
+.settings-messages .warning { background: #fff5df; color: #96620b; }
 @media (max-width: 1100px) { .service-settings-row { grid-template-columns: 1fr 1fr; } .service-settings-row > span { grid-column: 1 / -1; } }
 @media (max-width: 950px) { .settings-layout > nav { flex-wrap: wrap; } .service-settings-row { grid-template-columns: 1fr; } }

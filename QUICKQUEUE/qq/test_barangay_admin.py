@@ -1,11 +1,13 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from qq.models import Barangay, BarangayAdminRegistration, BarangayStaff, Resident
+from qq.models import Appointment, Barangay, BarangayAdminRegistration, BarangayStaff, DocumentTemplate, Resident, Service
 
 
 class BarangayAdminRegistrationManagementTests(TestCase):
@@ -45,6 +47,161 @@ class BarangayAdminRegistrationManagementTests(TestCase):
         barangay = Barangay.objects.get(name="Cambang-ug")
         self.assertFalse(BarangayAdminRegistration.objects.filter(barangay=barangay).exists())
         self.assertTrue(Barangay.objects.filter(pk=self.barangay.pk, name="Poblacion").exists())
+
+    def test_admin_template_header_is_clean_and_upload_trigger_is_preserved(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+
+        templates_page = self.client.get(reverse("barangay_document_templates"))
+
+        self.assertEqual(templates_page.status_code, 200)
+        self.assertContains(templates_page, "Document Templates")
+        self.assertContains(
+            templates_page,
+            "Upload and manage the source document for each barangay service.",
+        )
+        self.assertContains(templates_page, 'id="open-upload"', count=1)
+        self.assertContains(templates_page, 'id="template-search"', count=1)
+        self.assertContains(templates_page, 'placeholder="Search document templates..."')
+        self.assertContains(templates_page, 'class="template-grid"')
+        self.assertContains(templates_page, "qq/js/document_templates.js")
+        self.assertNotContains(templates_page, "<table")
+        self.assertNotContains(templates_page, "Service document library")
+        self.assertNotContains(templates_page, "template-intro")
+        self.assertNotContains(templates_page, "alert-bell")
+        self.assertNotContains(templates_page, "qq-notification-root")
+
+        dashboard = self.client.get(reverse("barangay_dashboard"))
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertNotContains(dashboard, "alert-bell")
+        self.assertNotContains(dashboard, "qq-notification-root")
+
+    @override_settings(
+        STORAGES={
+            "default": {
+                "BACKEND": "django.core.files.storage.FileSystemStorage",
+            },
+            "staticfiles": {
+                "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+            },
+        },
+        MEDIA_URL="/media/",
+    )
+    def test_document_template_api_returns_safe_card_metadata_for_assigned_barangay(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        service = Service.objects.filter(is_temporary=False).first()
+        own_template = DocumentTemplate.objects.create(
+            barangay=self.barangay,
+            service=service,
+            name="Poblacion Clearance Template",
+            template_file="document_templates/poblacion-clearance.pdf",
+        )
+        DocumentTemplate.objects.create(
+            barangay=self.other_barangay,
+            service=service,
+            name="Private Bato Template",
+            template_file="document_templates/private-bato.docx",
+        )
+
+        response = self.client.get(reverse("api_document_templates"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["id"], own_template.pk)
+        self.assertEqual(payload[0]["file_name"], "poblacion-clearance.pdf")
+        self.assertEqual(payload[0]["file_type"], "PDF")
+        self.assertEqual(payload[0]["service_name"], service.name)
+        self.assertNotContains(response, "Private Bato Template")
+
+    def test_admin_dashboard_special_services_are_scoped_current_and_read_only(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        today = timezone.localdate()
+        active = Service.objects.create(
+            code="EVT9",
+            name="Phase 9 Community Event",
+            description="Dashboard visibility test",
+            estimated_duration=15,
+            is_temporary=True,
+            temporary_type=Service.TemporaryType.EVENT,
+            barangay=self.barangay,
+            location="Poblacion Covered Court",
+            event_start_date=today,
+            event_end_date=today,
+            booking_start_date=today,
+            booking_end_date=today,
+            capacity=10,
+        )
+        Service.objects.create(
+            code="OTH9",
+            name="Other Barangay Event",
+            description="Must remain isolated",
+            estimated_duration=15,
+            is_temporary=True,
+            temporary_type=Service.TemporaryType.EVENT,
+            barangay=self.other_barangay,
+            location="Other Hall",
+            event_start_date=today,
+            event_end_date=today,
+            booking_start_date=today,
+            booking_end_date=today,
+            capacity=20,
+        )
+        Service.objects.create(
+            code="OLD9",
+            name="Expired Barangay Event",
+            description="Must remain historical",
+            estimated_duration=15,
+            is_temporary=True,
+            temporary_type=Service.TemporaryType.EVENT,
+            barangay=self.barangay,
+            event_start_date=today - timedelta(days=2),
+            event_end_date=today - timedelta(days=1),
+            booking_start_date=today - timedelta(days=5),
+            booking_end_date=today - timedelta(days=1),
+            capacity=10,
+        )
+        resident_user = User.objects.create_user("phase9-resident", password="secret")
+        resident = Resident.objects.create(
+            user=resident_user,
+            first_name="Phase",
+            last_name="Nine",
+            birthdate="1990-01-01",
+            sex=Resident.Sex.FEMALE,
+            contact_number="09179999999",
+            barangay=self.barangay,
+        )
+        Appointment.objects.create(
+            resident=resident,
+            barangay=self.barangay,
+            service=active,
+            appointment_date=today,
+            status=Appointment.Status.CONFIRMED,
+        )
+
+        response = self.client.get(reverse("barangay_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item.pk for item in response.context["special_services"]], [active.pk])
+        self.assertEqual(response.context["special_services"][0].dashboard_booking_count, 1)
+        self.assertEqual(response.context["special_services"][0].remaining_capacity, 9)
+        self.assertEqual(response.context["today_total"], 0)
+        self.assertEqual(response.context["month_total"], 0)
+        self.assertContains(response, "Phase 9 Community Event")
+        self.assertContains(response, "Poblacion Covered Court")
+        self.assertContains(response, "9</b> of 10 slots available")
+        self.assertNotContains(response, "Other Barangay Event")
+        self.assertNotContains(response, "Expired Barangay Event")
+        self.assertNotContains(response, "Create Event")
+        self.assertNotContains(response, "Edit Event")
+        self.assertNotContains(response, "QR Scanner")
+
+        active.is_active = False
+        active.save(update_fields=["is_active", "updated_at"])
+        empty_response = self.client.get(reverse("barangay_dashboard"))
+        self.assertContains(empty_response, "No special services available.")
 
     def test_registration_admin_creates_approved_hashed_account_without_terms(self):
         response = self._create_registration()

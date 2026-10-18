@@ -3,6 +3,8 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -26,7 +28,7 @@ def staff_settings(request):
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         return redirect("barangay_settings")
     active_tab = request.GET.get("tab", "services")
-    if active_tab not in {"services", "calendar", "profile", "password"}:
+    if active_tab not in {"services", "booking", "calendar", "profile", "password"}:
         active_tab = "profile"
     if request.method == "POST":
         action = request.POST.get("action")
@@ -42,6 +44,9 @@ def staff_settings(request):
         elif action == "calendar":
             _update_calendar(request, staff)
             active_tab = "calendar"
+        elif action == "booking":
+            _update_booking_capacity(request, staff)
+            active_tab = "booking"
         return redirect(f"/barangay/staff/settings/?tab={active_tab}")
     services = list(Service.objects.filter(is_temporary=False).order_by("name"))
     configurations = {
@@ -59,11 +64,52 @@ def staff_settings(request):
     return render(request, "barangay_staff/settings.html", {
         "active_page": "settings", "active_tab": active_tab,
         "staff": staff, "barangay": staff.barangay,
+        "daily_booking_capacity": staff.barangay.daily_booking_capacity,
         "today": today, "service_rows": service_rows,
         "closed_dates": ClosedAppointmentDate.objects.filter(
             barangay=staff.barangay, date__gte=today
         ).order_by("date"),
     })
+
+
+@transaction.atomic
+def _update_booking_capacity(request, staff):
+    raw_capacity = request.POST.get("daily_booking_capacity", "").strip()
+    if not raw_capacity.isascii() or not raw_capacity.isdecimal():
+        messages.error(request, "Daily booking capacity must be a positive whole number.")
+        return
+    capacity = int(raw_capacity)
+    if capacity < 1 or capacity > 2147483647:
+        messages.error(request, "Daily booking capacity must be a positive whole number.")
+        return
+
+    from qq.models import Barangay
+
+    barangay = Barangay.objects.select_for_update().get(pk=staff.barangay_id)
+    busiest_day = (
+        Appointment.objects.filter(
+            barangay=barangay,
+            service__is_temporary=False,
+            time_slot__isnull=False,
+            appointment_date__gte=timezone.localdate(),
+        )
+        .exclude(status=Appointment.Status.CANCELLED)
+        .values("appointment_date")
+        .annotate(booked=Count("id"))
+        .order_by("-booked", "appointment_date")
+        .first()
+    )
+    barangay.daily_booking_capacity = capacity
+    barangay.save(update_fields=["daily_booking_capacity", "updated_at"])
+
+    if busiest_day and busiest_day["booked"] > capacity:
+        messages.warning(
+            request,
+            f"Capacity saved. {busiest_day['booked']} existing appointments on "
+            f"{busiest_day['appointment_date']:%B %d, %Y} were preserved and exceed the new limit.",
+        )
+    else:
+        messages.success(request, "Daily booking capacity updated.")
 
 
 def _update_service_configuration(request, staff):

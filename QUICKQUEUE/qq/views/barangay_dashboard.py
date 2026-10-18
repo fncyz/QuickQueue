@@ -23,9 +23,16 @@ def barangay_dashboard(request):
         barangay = staff.barangay
 
     today = timezone.localdate()
-    appointments = Appointment.objects.filter(barangay=barangay).select_related("service", "resident")
+    appointments = Appointment.objects.filter(
+        barangay=barangay,
+        service__is_temporary=False,
+    ).select_related("service", "resident")
     today_appointments = appointments.filter(appointment_date=today)
-    tickets = QueueTicket.objects.filter(appointment__barangay=barangay, appointment__appointment_date=today).select_related(
+    tickets = QueueTicket.objects.filter(
+        appointment__barangay=barangay,
+        appointment__appointment_date=today,
+        appointment__service__is_temporary=False,
+    ).select_related(
         "appointment__resident", "appointment__service"
     )
     ticket_totals = tickets.aggregate(
@@ -49,6 +56,7 @@ def barangay_dashboard(request):
     month_total = month_appointments.count()
     month_tickets = QueueTicket.objects.filter(
         appointment__barangay=barangay,
+        appointment__service__is_temporary=False,
         appointment__appointment_date__gte=month_start,
         appointment__appointment_date__lte=today,
     )
@@ -71,27 +79,40 @@ def barangay_dashboard(request):
             barangay=barangay,
             is_active=True,
             lifecycle=Service.Lifecycle.SCHEDULED,
-            booking_start_date__lte=today,
-            booking_end_date__gte=today,
             event_end_date__gte=today,
         )
         .annotate(
-            count=Count(
+            dashboard_booking_count=Count(
                 "appointments",
                 filter=Q(appointments__barangay=barangay)
                 & ~Q(appointments__status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]),
                 distinct=True,
             )
         )
-        .order_by("-count", "name")
+        .order_by("event_start_date", "name")
     )
-    special_services = [
-        {"service__name": service.name, "count": service.count}
-        for service in special_service_records
-        if service.accepts_bookings(booking_count=service.count)
-    ]
+    special_services = []
+    status_labels = {
+        "upcoming": "Upcoming",
+        "active": "Registration Open",
+        "ending_soon": "Registration Ending Soon",
+        "fully_booked": "Fully Booked",
+        "booking_closed": "Registration Closed",
+    }
+    for service in special_service_records:
+        display_status = service.computed_status(
+            booking_count=service.dashboard_booking_count
+        )
+        if display_status in {"expired", "cancelled", "deactivated", "archived"}:
+            continue
+        service.dashboard_status = status_labels.get(display_status, service.get_lifecycle_display())
+        service.dashboard_status_code = display_status
+        service.remaining_capacity = (
+            max(service.capacity - service.dashboard_booking_count, 0)
+            if service.capacity is not None else None
+        )
+        special_services.append(service)
     regular_services = service_breakdown(month_appointments.filter(service__is_temporary=False))
-    max_special_service_count = max((item["count"] for item in special_services), default=1)
     max_regular_service_count = max((item["count"] for item in regular_services), default=1)
 
     running_total = 0
@@ -117,7 +138,6 @@ def barangay_dashboard(request):
         "queue_chart": queue_chart,
         "special_services": special_services,
         "regular_services": regular_services,
-        "max_special_service_count": max_special_service_count,
         "max_regular_service_count": max_regular_service_count,
         "registered_residents": barangay.residents.count(),
         "month_total": month_total,

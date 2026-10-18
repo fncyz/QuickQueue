@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Avg, ExpressionWrapper, F, DurationField
+from django.db.models import Avg, DurationField, ExpressionWrapper, F
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,6 +12,7 @@ from django.views.decorators.http import require_POST
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, ServiceWindow, TimeSlot
 from qq.services.configuration_service import service_configuration_map
 from qq.services.notification_service import notify_resident
+from qq.services.queue_service import CHECKED_IN_NOTE, live_queue_participation_q
 
 
 def _barangay_for(user):
@@ -39,6 +41,16 @@ def _service_window_for_user(user, barangay):
             barangay=barangay, assigned_staff=user.staff_profile, is_active=True,
         ).first()
     return ServiceWindow.objects.filter(barangay=barangay, is_active=True).order_by("number").first()
+
+
+def _require_queue_operator(user):
+    """Keep the Admin monitor read-only while preserving Staff queue controls."""
+    try:
+        staff = user.staff_profile
+    except BarangayStaff.DoesNotExist as error:
+        raise PermissionDenied("The Live Queue Monitor is read-only for administrator accounts.") from error
+    if hasattr(user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
+        raise PermissionDenied("The Live Queue Monitor is read-only for administrator accounts.")
 
 
 def _resolve_slot(barangay, slot_id, today, now_time):
@@ -116,6 +128,7 @@ def _annotate_wait_estimates(tickets, duration_by_service=None):
 def _ticket_queryset(barangay, today, slot):
     return (
         QueueTicket.objects.filter(
+            live_queue_participation_q(),
             appointment__barangay=barangay,
             appointment__appointment_date=today,
             appointment__time_slot=slot,
@@ -181,7 +194,7 @@ def barangay_live_queue(request):
             list(_ticket_queryset(barangay, today, current_slot)), duration_by_service
         )
         now_serving = next(
-            (ticket for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING and (not service_window or ticket.service_window_id == service_window.id)),
+            (ticket for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING),
             None,
         )
         waiting_count = sum(1 for ticket in tickets if ticket.status == QueueTicket.Status.WAITING)
@@ -198,6 +211,7 @@ def barangay_live_queue(request):
             next_wait_minutes = next_in_line[0].wait_minutes
 
     today_tickets = QueueTicket.objects.filter(
+        live_queue_participation_q(),
         appointment__barangay=barangay,
         appointment__appointment_date=today,
         appointment__service__is_temporary=False,
@@ -277,6 +291,7 @@ def barangay_live_queue(request):
 @require_POST
 def barangay_queue_call_next(request):
     """Move the first waiting ticket to Now Serving."""
+    _require_queue_operator(request.user)
     barangay = _barangay_for(request.user)
     today = timezone.localdate()
     slot_id = request.POST.get("slot")
@@ -319,6 +334,7 @@ def barangay_queue_call_next(request):
                 appointment__time_slot=current_slot,
                 appointment__service__is_temporary=False,
                 status=QueueTicket.Status.WAITING,
+                notes=CHECKED_IN_NOTE,
             )
             .order_by("queue_number")
             .first()
@@ -375,6 +391,7 @@ def barangay_queue_call_next(request):
 @require_POST
 def barangay_queue_complete(request, pk):
     """Mark a now-serving ticket as completed."""
+    _require_queue_operator(request.user)
     barangay = _barangay_for(request.user)
     ticket = get_object_or_404(
         QueueTicket.objects.select_related(
@@ -419,6 +436,7 @@ def barangay_queue_complete(request, pk):
 @require_POST
 def barangay_queue_skip(request):
     """Skip the currently serving ticket and mark it as missed."""
+    _require_queue_operator(request.user)
     barangay = _barangay_for(request.user)
     today = timezone.localdate()
     slot_id = request.POST.get("slot")

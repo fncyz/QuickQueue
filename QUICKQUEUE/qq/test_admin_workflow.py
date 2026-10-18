@@ -8,8 +8,9 @@ from rest_framework.test import APIClient
 
 from qq.models import (
     Appointment, Barangay, BarangayStaff, EventBooking, Notification, QueueTicket, Resident,
-    PushDevice, Service, TimeSlot,
+    PushDevice, Service, ServiceWindow, TimeSlot,
 )
+from qq.services.queue_service import CHECKED_IN_NOTE
 
 
 class AdminStaffWorkflowTests(TestCase):
@@ -23,7 +24,7 @@ class AdminStaffWorkflowTests(TestCase):
         self.barangay.user = self.admin_user
         self.barangay.save(update_fields=["user", "updated_at"])
         self.staff_user = User.objects.create_user(username="workflow-staff", password="secret")
-        BarangayStaff.objects.create(
+        self.staff = BarangayStaff.objects.create(
             barangay=self.barangay,
             user=self.staff_user,
             first_name="Workflow",
@@ -51,7 +52,7 @@ class AdminStaffWorkflowTests(TestCase):
         )
         self.client.force_login(self.staff_user)
 
-    def _ticket(self, username, first_name, service, queue_number):
+    def _ticket(self, username, first_name, service, queue_number, *, checked_in=False):
         user = User.objects.create_user(username=username, password="secret")
         resident = Resident.objects.create(
             user=user,
@@ -71,7 +72,12 @@ class AdminStaffWorkflowTests(TestCase):
             queue_number=queue_number,
             status=Appointment.Status.CONFIRMED,
         )
-        return QueueTicket.objects.create(appointment=appointment, queue_number=queue_number)
+        return QueueTicket.objects.create(
+            appointment=appointment,
+            queue_number=queue_number,
+            served_by=self.staff,
+            notes=CHECKED_IN_NOTE if checked_in else "",
+        )
 
     def test_staff_dashboard_uses_direct_staff_workflow_links(self):
         response = self.client.get("/barangay/staff/dashboard/")
@@ -170,6 +176,66 @@ class AdminStaffWorkflowTests(TestCase):
         bell_markup = refreshed.content.decode().split('class="bell"', 1)[1].split("</a>", 1)[0]
         self.assertIn("<i></i>", bell_markup)
 
+    def test_staff_notification_dropdown_compact_and_expanded_history_are_scoped(self):
+        Notification.objects.bulk_create([
+            Notification(
+                recipient=self.staff_user,
+                recipient_role=Notification.RecipientRole.STAFF,
+                barangay=self.barangay,
+                notification_type=Notification.NotificationType.STAFF_ALERT,
+                title=f"Staff history {index}",
+                message=f"Notification history item {index}",
+                event_key=f"staff-dropdown:{self.staff_user.pk}:{index}",
+            )
+            for index in range(55)
+        ])
+        other_user = User.objects.create_user(username="dropdown-other", password="secret")
+        BarangayStaff.objects.create(
+            barangay=self.barangay,
+            user=other_user,
+            first_name="Dropdown",
+            last_name="Other",
+            username="dropdown-other",
+            role=BarangayStaff.Role.STAFF,
+        )
+        Notification.objects.create(
+            recipient=other_user,
+            recipient_role=Notification.RecipientRole.STAFF,
+            barangay=self.barangay,
+            notification_type=Notification.NotificationType.STAFF_ALERT,
+            title="Private other-staff notification",
+            message="Must never enter this staff member's dropdown.",
+            event_key=f"staff-dropdown:{other_user.pk}:private",
+        )
+
+        compact = self.client.get(
+            "/barangay/notifications/?format=json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(compact.status_code, 200)
+        self.assertEqual(compact.json()["total_count"], 55)
+        self.assertEqual(compact.json()["unread_count"], 55)
+        self.assertEqual(len(compact.json()["notifications"]), 6)
+        self.assertNotContains(compact, "Private other-staff notification")
+
+        expanded_first = self.client.get(
+            "/barangay/notifications/?format=json&expanded=1&page=1",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(len(expanded_first.json()["notifications"]), 50)
+        self.assertEqual(expanded_first.json()["page_count"], 2)
+        self.assertTrue(expanded_first.json()["has_next"])
+        expanded_second = self.client.get(
+            "/barangay/notifications/?format=json&expanded=1&page=2",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(len(expanded_second.json()["notifications"]), 5)
+        self.assertFalse(expanded_second.json()["has_next"])
+        self.assertEqual(
+            Notification.objects.filter(recipient=self.staff_user, is_read=False).count(),
+            55,
+        )
+
     def test_staff_dashboard_lists_only_its_upcoming_and_active_offerings(self):
         today = timezone.localdate()
         other_barangay = Barangay.objects.create(
@@ -235,7 +301,7 @@ class AdminStaffWorkflowTests(TestCase):
     def test_special_service_registrations_are_isolated_from_regular_staff_workflows(self):
         today = timezone.localdate()
         regular_ticket = self._ticket(
-            "regular-isolation", "Regular Isolation", self.service, "C17"
+            "regular-isolation", "Regular Isolation", self.service, "C17", checked_in=True
         )
         special_service = Service.objects.create(
             code="EVS",
@@ -252,7 +318,7 @@ class AdminStaffWorkflowTests(TestCase):
             capacity=20,
         )
         event_ticket = self._ticket(
-            "event-isolation", "Event Isolation", special_service, "EV17"
+            "event-isolation", "Event Isolation", special_service, "EV17", checked_in=True
         )
         event_booking = EventBooking.objects.create(appointment=event_ticket.appointment)
         event_ticket.appointment.status = Appointment.Status.PENDING
@@ -535,8 +601,8 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertContains(response, 'href="/barangay/queue/live/"', count=3)
 
     def test_staff_queue_filters_by_resident_and_service(self):
-        matching = self._ticket("ana", "Ana", self.service, "C01")
-        self._ticket("ben", "Ben", self.other_service, "I01")
+        matching = self._ticket("ana", "Ana", self.service, "C01", checked_in=True)
+        self._ticket("ben", "Ben", self.other_service, "I01", checked_in=True)
 
         response = self.client.get(
             f"/barangay/staff/queue/live/?slot={self.slot.pk}&q=Ana&service={self.service.pk}"
@@ -547,8 +613,8 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertEqual(response.context["filters"], {"q": "Ana", "service": str(self.service.pk)})
 
     def test_staff_queue_uses_deterministic_estimated_time_as_queue_progresses(self):
-        first = self._ticket("estimate-first", "First", self.service, "C01")
-        second = self._ticket("estimate-second", "Second", self.service, "C02")
+        first = self._ticket("estimate-first", "First", self.service, "C01", checked_in=True)
+        second = self._ticket("estimate-second", "Second", self.service, "C02", checked_in=True)
         url = f"/barangay/staff/queue/live/?slot={self.slot.pk}"
 
         response = self.client.get(url)
@@ -583,6 +649,134 @@ class AdminStaffWorkflowTests(TestCase):
             f"/barangay/staff/queue/live/?slot={self.slot.pk}",
             fetch_redirect_response=False,
         )
+
+    def test_admin_live_monitor_shows_only_checked_in_regular_queue_tickets(self):
+        checked_in = self._ticket(
+            "monitor-checked", "Checked", self.service, "C10", checked_in=True
+        )
+        unchecked = self._ticket("monitor-booked", "Booked", self.service, "C11")
+        temporary_service = Service.objects.create(
+            code="EVT-MON",
+            name="Monitor Event",
+            description="Event registrations stay outside the regular queue.",
+            estimated_duration=15,
+            is_temporary=True,
+            barangay=self.barangay,
+            event_start_date=timezone.localdate(),
+            event_end_date=timezone.localdate(),
+        )
+        event_ticket = self._ticket(
+            "monitor-event", "Event", temporary_service, "E10", checked_in=True
+        )
+        other_barangay = Barangay.objects.create(
+            name="Foreign Monitor Barangay",
+            address="Toledo City",
+            contact_number="09128888888",
+        )
+        other_slot = TimeSlot.objects.create(
+            barangay=other_barangay,
+            start_time=time(8),
+            end_time=time(9),
+            max_appointments=5,
+        )
+        other_user = User.objects.create_user("foreign-monitor", password="secret")
+        other_resident = Resident.objects.create(
+            user=other_user,
+            first_name="Foreign",
+            last_name="Monitor",
+            birthdate=date(2000, 1, 1),
+            sex=Resident.Sex.MALE,
+            contact_number="09128888889",
+            barangay=other_barangay,
+        )
+        other_appointment = Appointment.objects.create(
+            resident=other_resident,
+            barangay=other_barangay,
+            service=self.service,
+            appointment_date=timezone.localdate(),
+            time_slot=other_slot,
+            queue_number="F10",
+            status=Appointment.Status.CONFIRMED,
+        )
+        QueueTicket.objects.create(
+            appointment=other_appointment,
+            queue_number="F10",
+            notes=CHECKED_IN_NOTE,
+        )
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([ticket.pk for ticket in response.context["tickets"]], [checked_in.pk])
+        self.assertContains(response, "Checked Resident")
+        self.assertContains(response, "8:00 AM")
+        self.assertContains(response, "Waiting")
+        self.assertNotContains(response, unchecked.queue_number)
+        self.assertNotContains(response, event_ticket.queue_number)
+        self.assertNotContains(response, "Foreign Monitor")
+        self.assertNotContains(response, "Call Next")
+        self.assertNotContains(response, ">Complete<")
+        self.assertNotContains(response, ">Skip<")
+        self.assertContains(response, "Read-only monitor")
+        self.assertContains(response, "qq/js/barangay_live_queue.js")
+
+    def test_admin_monitor_tracks_staff_status_and_assigned_window(self):
+        window = ServiceWindow.objects.create(
+            barangay=self.barangay,
+            number=2,
+            name="Window 2",
+            assigned_staff=self.staff,
+        )
+        ticket = self._ticket(
+            "monitor-serving", "Serving", self.service, "C12", checked_in=True
+        )
+        called = self.client.post("/barangay/queue/call-next/", {"slot": self.slot.pk})
+        self.assertRedirects(
+            called,
+            f"/barangay/staff/queue/live/?slot={self.slot.pk}",
+            fetch_redirect_response=False,
+        )
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, QueueTicket.Status.NOW_SERVING)
+        self.assertEqual(ticket.service_window_id, window.pk)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+
+        self.assertEqual(response.context["now_serving"].pk, ticket.pk)
+        self.assertContains(response, "Serving Resident")
+        self.assertContains(response, "Window 2")
+        self.assertContains(response, "Now Serving")
+
+        forbidden = self.client.post("/barangay/queue/skip/", {"slot": self.slot.pk})
+        self.assertEqual(forbidden.status_code, 403)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, QueueTicket.Status.NOW_SERVING)
+
+    def test_resident_check_in_is_idempotent_and_activates_existing_ticket(self):
+        ticket = self._ticket("monitor-resident", "Mobile", self.service, "C13")
+        resident_client = APIClient()
+        resident_client.force_authenticate(ticket.appointment.resident.user)
+
+        first = resident_client.post(
+            "/api/queue-status/",
+            {"appointment_id": ticket.appointment_id, "action": "check_in"},
+            format="json",
+        )
+        second = resident_client.post(
+            "/api/queue-status/",
+            {"appointment_id": ticket.appointment_id, "action": "check_in"},
+            format="json",
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.notes, CHECKED_IN_NOTE)
+        self.client.force_login(self.admin_user)
+        monitor = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+        self.assertEqual([item.pk for item in monitor.context["tickets"]], [ticket.pk])
 
     def test_staff_documents_are_consolidated_with_processing_and_completed_tabs(self):
         response = self.client.get("/barangay/staff/documents/")
@@ -881,6 +1075,112 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertIn("at most 500 characters", ajax_response.json()["error"])
         ticket.appointment.refresh_from_db()
         self.assertEqual(ticket.appointment.purpose, "Original purpose")
+
+    def test_only_assigned_staff_can_edit_and_complete_document(self):
+        ticket = self._ticket("assigned-document", "Assigned", self.service, "C18")
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        ticket.appointment.purpose = "Original assigned purpose"
+        ticket.appointment.save(update_fields=["purpose", "updated_at"])
+        preview_url = f"/barangay/staff/documents/{ticket.pk}/preview/"
+
+        staff_b_user = User.objects.create_user(username="workflow-staff-b", password="secret")
+        staff_b = BarangayStaff.objects.create(
+            barangay=self.barangay,
+            user=staff_b_user,
+            first_name="Second",
+            last_name="Staff",
+            username="workflow-staff-b",
+            role=BarangayStaff.Role.STAFF,
+        )
+        self.client.force_login(staff_b_user)
+
+        documents = self.client.get("/barangay/staff/documents/")
+        self.assertContains(documents, self.staff.full_name)
+        self.assertContains(documents, "This document is assigned to another staff member.")
+        self.assertContains(documents, "View Document")
+        self.assertNotContains(documents, 'class="workflow-purpose-edit"')
+        self.assertNotContains(documents, 'class="done-workflow"')
+
+        read_only_preview = self.client.get(preview_url)
+        self.assertEqual(read_only_preview.status_code, 200)
+        self.assertContains(read_only_preview, "This document is assigned to another staff member.")
+        self.assertContains(read_only_preview, "View Only")
+        self.assertNotContains(read_only_preview, 'class="edit-purpose"')
+        self.assertNotContains(read_only_preview, 'class="done-action"')
+
+        unauthorized_edit = self.client.post(
+            preview_url,
+            {"purpose": "Unauthorized edit"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(unauthorized_edit.status_code, 403)
+        unauthorized_done = self.client.post(
+            preview_url,
+            {"action": "complete"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(unauthorized_done.status_code, 403)
+        unauthorized_legacy_ready = self.client.post(
+            f"/barangay/staff/documents/{ticket.pk}/action/",
+            {"action": "ready"},
+            follow=True,
+        )
+        self.assertContains(
+            unauthorized_legacy_ready,
+            "This document is assigned to another staff member.",
+        )
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+        self.assertEqual(ticket.appointment.purpose, "Original assigned purpose")
+        self.assertEqual(ticket.served_by, self.staff)
+
+        self.client.force_login(self.staff_user)
+        assigned_preview = self.client.get(preview_url)
+        self.assertContains(assigned_preview, 'class="edit-purpose"')
+        self.assertContains(assigned_preview, 'class="done-action"')
+        assigned_edit = self.client.post(
+            preview_url,
+            {"purpose": "Updated by assigned staff"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(assigned_edit.status_code, 200)
+        with self.captureOnCommitCallbacks(execute=True):
+            assigned_done = self.client.post(
+                preview_url,
+                {"action": "complete"},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+        self.assertEqual(assigned_done.status_code, 200)
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.READY)
+        self.assertEqual(ticket.appointment.purpose, "Updated by assigned staff")
+        self.assertEqual(ticket.served_by, self.staff)
+        self.assertEqual(
+            Notification.objects.filter(
+                appointment=ticket.appointment,
+                title="Document Ready for Pickup",
+            ).count(),
+            1,
+        )
+
+        self.client.force_login(staff_b_user)
+        claimed = self.client.post(
+            f"/barangay/staff/dashboard/documents/{ticket.pk}/claim/",
+            follow=True,
+        )
+        self.assertEqual(claimed.status_code, 200)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.CLAIMED)
+        self.assertEqual(ticket.served_by, self.staff)
+        completed = self.client.get("/barangay/staff/documents/?tab=completed")
+        completed_table = completed.content.decode().split(
+            '<section class="archive-table">', 1
+        )[1].split("</section>", 1)[0]
+        self.assertIn(self.staff.full_name, completed_table)
+        self.assertNotIn(staff_b.full_name, completed_table)
 
     def test_document_done_marks_ready_once_and_notifies_resident(self):
         ticket = self._ticket("done-preview", "Done", self.service, "C12")

@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -43,7 +43,7 @@ def completed_documents_context(request, staff):
         appointment__barangay=staff.barangay,
         appointment__service__is_temporary=False,
         claim_status=QueueTicket.ClaimStatus.CLAIMED,
-    ).select_related("appointment__resident", "appointment__service")
+    ).select_related("appointment__resident", "appointment__service", "served_by")
     search = request.GET.get("q", "").strip()
     service = request.GET.get("service", "")
     date_filter = request.GET.get("date", "")
@@ -66,7 +66,7 @@ def completed_documents_context(request, staff):
     return {
         "documents": filtered.order_by("-claimed_at", "-updated_at"),
         "total_archived": base.count(), "completed_today": base.filter(claimed_at__date=today).count(),
-        "processed_by_you": 0,
+        "processed_by_you": base.filter(served_by=staff).count(),
         "services": Service.objects.filter(
             is_active=True, is_temporary=False,
         ).order_by("name"),
@@ -80,7 +80,9 @@ def staff_document_preview(request, pk):
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         raise Http404("This document is available in the staff archive only.")
     ticket = get_object_or_404(
-        QueueTicket.objects.select_related("appointment__resident", "appointment__service", "appointment__barangay"),
+        QueueTicket.objects.select_related(
+            "appointment__resident", "appointment__service", "appointment__barangay", "served_by",
+        ),
         pk=pk,
         appointment__barangay=staff.barangay,
         appointment__service__is_temporary=False,
@@ -90,6 +92,12 @@ def staff_document_preview(request, pk):
             QueueTicket.ClaimStatus.CLAIMED,
         ],
     )
+    can_process = ticket.served_by_id == staff.pk
+    if request.method == "POST" and not can_process:
+        message = "This document is assigned to another staff member."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "error": message}, status=403)
+        return HttpResponseForbidden(message)
     if request.method == "POST" and request.POST.get("action") == "complete":
         with transaction.atomic():
             locked_ticket = get_object_or_404(
@@ -97,6 +105,7 @@ def staff_document_preview(request, pk):
                 pk=ticket.pk,
                 appointment__barangay=staff.barangay,
                 appointment__service__is_temporary=False,
+                served_by=staff,
             )
             if locked_ticket.claim_status == QueueTicket.ClaimStatus.READY:
                 changed = False
@@ -161,9 +170,12 @@ def staff_document_preview(request, pk):
         "staff": staff, "barangay": staff.barangay, "ticket": ticket,
         "auto_print": request.GET.get("print") == "1",
         "embedded": request.GET.get("embedded") == "1",
-        "edit_mode": request.method == "POST" or request.GET.get("edit") == "1",
+        "edit_mode": can_process and (
+            request.method == "POST" or request.GET.get("edit") == "1"
+        ),
         "edit_form": edit_form,
-        "can_complete": ticket.claim_status == QueueTicket.ClaimStatus.PROCESSING,
+        "can_process": can_process,
+        "can_complete": can_process and ticket.claim_status == QueueTicket.ClaimStatus.PROCESSING,
         "is_ready": ticket.claim_status == QueueTicket.ClaimStatus.READY,
         "is_archived": ticket.claim_status == QueueTicket.ClaimStatus.CLAIMED,
     })

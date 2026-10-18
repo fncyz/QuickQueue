@@ -55,7 +55,7 @@ def staff_document_processing(request):
             Appointment.Status.CONFIRMED, Appointment.Status.ONGOING, Appointment.Status.COMPLETED,
         ],
     ).exclude(claim_status=QueueTicket.ClaimStatus.CLAIMED).select_related(
-        "appointment__resident", "appointment__service", "appointment__time_slot"
+        "appointment__resident", "appointment__service", "appointment__time_slot", "served_by"
     )
     search = request.GET.get("q", "").strip()
     service = request.GET.get("service", "")
@@ -86,6 +86,7 @@ def staff_document_processing(request):
     today = timezone.localdate()
     for ticket in tickets:
         ticket.is_expired = _is_expired_document(ticket, today=today)
+        ticket.can_process = ticket.served_by_id == staff.pk
     context = {
         "active_page": "documents", "staff": staff, "barangay": staff.barangay,
         "document_tab": active_tab,
@@ -117,6 +118,9 @@ def staff_document_action(request, pk):
         appointment__service__is_temporary=False,
     )
     action = request.POST.get("action")
+    if action in {"start", "ready"} and ticket.served_by_id != staff.pk:
+        messages.error(request, "This document is assigned to another staff member.")
+        return redirect("staff_document_processing")
     if action == "archive_expired":
         with transaction.atomic():
             locked_ticket = get_object_or_404(

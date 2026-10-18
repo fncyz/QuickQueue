@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, Service, TimeSlot
-from qq.services.timeslot_service import regular_slot_capacity
+from qq.services.timeslot_service import regular_slot_capacities
 from qq.services.notification_service import notify_resident
 
 
@@ -38,7 +38,8 @@ def _queue_series(queue_number):
 
 
 def _slot_availability(barangay, day):
-    slots = TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time")
+    slots = list(TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"))
+    slot_capacities = regular_slot_capacities(barangay, slots)
     booked_map = {
         row["time_slot_id"]: row["count"]
         for row in Appointment.objects.filter(
@@ -53,7 +54,7 @@ def _slot_availability(barangay, day):
     availability = []
     for slot in slots:
         booked = booked_map.get(slot.id, 0)
-        capacity = regular_slot_capacity(slot)
+        capacity = slot_capacities.get(slot.pk, 0)
         remaining = max(capacity - booked, 0)
         percent = round((booked / capacity) * 100) if capacity else 0
 

@@ -32,6 +32,12 @@ class Barangay(models.Model):
         default=True
     )
 
+    daily_booking_capacity = models.PositiveIntegerField(
+        default=30,
+        editable=False,
+        help_text="Maximum number of regular appointments residents may book per day.",
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )

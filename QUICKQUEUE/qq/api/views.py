@@ -37,8 +37,9 @@ import uuid
 from qq.models import Appointment, AssistantKnowledge, BarangayServiceConfiguration, BarangayStaff, ChatFeedback, ChatMessage, ChatQuestionTopic, ChatSession, ClosedAppointmentDate, DocumentTemplate, EventBooking, GeneratedDocument, Notification, PushDelivery, PushDevice, QueueTicket, Service, TimeSlot
 from qq.services.appointment_service import create_appointment, create_special_service_booking
 from qq.services.configuration_service import effective_service_duration, effective_service_fee
-from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacity
+from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacities
 from qq.services.notification_service import notify_barangay_staff, notify_resident
+from qq.services.queue_service import CHECKED_IN_NOTE, live_queue_participation_q
 from qq.services.assistant_data import (
     assistant_data_for,
     money_label,
@@ -448,10 +449,12 @@ def appointments_api(request):
             filter=~Q(appointments__status=Appointment.Status.CANCELLED),
         )
     ).order_by("name")
-    time_slots = TimeSlot.objects.filter(
+    time_slots = list(TimeSlot.objects.filter(
         barangay=resident.barangay,
         is_active=True,
-    ).order_by("start_time")
+    ).order_by("start_time"))
+    time_slots_by_id = {slot.pk: slot for slot in time_slots}
+    slot_capacities = regular_slot_capacities(resident.barangay, time_slots)
     service_configurations = {
         item.service_id: item
         for item in BarangayServiceConfiguration.objects.filter(
@@ -489,7 +492,7 @@ def appointments_api(request):
 
     def serialize_time_slot(slot):
         booked = occupied_by_slot.get(slot.pk, 0)
-        capacity = regular_slot_capacity(slot)
+        capacity = slot_capacities.get(slot.pk, 0)
         daily_booked = sum(occupied_by_slot.values())
         is_past = availability_date is not None and availability_date < today
         cutoff_passed = (
@@ -606,7 +609,13 @@ def appointments_api(request):
         if service.is_temporary:
             appointment = create_special_service_booking(resident, service)
         else:
-            time_slot = time_slots.get(pk=request.data.get("time_slot"))
+            try:
+                time_slot_id = int(request.data.get("time_slot"))
+            except (TypeError, ValueError):
+                raise TimeSlot.DoesNotExist
+            time_slot = time_slots_by_id.get(time_slot_id)
+            if time_slot is None:
+                raise TimeSlot.DoesNotExist
             appointment_date = date.fromisoformat(request.data.get("appointment_date", ""))
             if appointment_date < timezone.localdate():
                 raise ValueError("Please choose today or a future appointment date.")
@@ -689,11 +698,26 @@ def queue_status_api(request):
         if action == "check_in":
             if appointment.appointment_date != timezone.localdate():
                 return Response({"message": "Check-in is only available on your appointment date."}, status=status.HTTP_400_BAD_REQUEST)
-            ticket = QueueTicket.objects.filter(appointment=appointment).first()
-            if ticket:
-                if ticket.notes == "Resident checked in and is waiting at the barangay.":
+            if appointment.service.is_temporary:
+                return Response(
+                    {"message": "Special Service attendance uses the event check-in process."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            with transaction.atomic():
+                ticket = QueueTicket.objects.select_for_update().filter(appointment=appointment).first()
+                if not ticket:
+                    return Response(
+                        {"message": "A valid queue ticket is required before check-in."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if ticket.notes == CHECKED_IN_NOTE:
                     return Response({"success": True, "message": "You are already checked in."})
-                ticket.notes = "Resident checked in and is waiting at the barangay."
+                if appointment.status != Appointment.Status.CONFIRMED or ticket.status != QueueTicket.Status.WAITING:
+                    return Response(
+                        {"message": "This appointment is not eligible for check-in."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                ticket.notes = CHECKED_IN_NOTE
                 ticket.save(update_fields=["notes", "updated_at"])
             notify_barangay_staff(
                 appointment=appointment,
@@ -716,6 +740,7 @@ def queue_status_api(request):
         return Response({"appointment": None})
 
     queue = QueueTicket.objects.filter(
+        live_queue_participation_q(),
         appointment__appointment_date=appointment.appointment_date,
         appointment__barangay=appointment.barangay,
         appointment__service=appointment.service,

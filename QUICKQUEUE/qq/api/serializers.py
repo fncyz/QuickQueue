@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from rest_framework import serializers
 
 from qq.models import DocumentTemplate, Resident
@@ -6,10 +8,12 @@ from qq.models import DocumentTemplate, Resident
 class DocumentTemplateSerializer(serializers.ModelSerializer):
     service_name = serializers.CharField(source="service.name", read_only=True)
     file_url = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+    file_type = serializers.SerializerMethodField()
 
     class Meta:
         model = DocumentTemplate
-        fields = ("id", "service", "service_name", "name", "template_file", "file_url", "version", "is_active", "created_at", "updated_at")
+        fields = ("id", "service", "service_name", "name", "template_file", "file_url", "file_name", "file_type", "version", "is_active", "created_at", "updated_at")
         read_only_fields = ("id", "version", "created_at", "updated_at")
         extra_kwargs = {"template_file": {"write_only": True}}
 
@@ -19,6 +23,12 @@ class DocumentTemplateSerializer(serializers.ModelSerializer):
             return None
         url = obj.template_file.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_file_name(self, obj):
+        return Path(obj.template_file.name).name if obj.template_file else ""
+
+    def get_file_type(self, obj):
+        return Path(obj.template_file.name).suffix.lstrip(".").upper() if obj.template_file else ""
 
     def validate_template_file(self, value):
         allowed = {".pdf", ".doc", ".docx", ".odt", ".html", ".txt"}

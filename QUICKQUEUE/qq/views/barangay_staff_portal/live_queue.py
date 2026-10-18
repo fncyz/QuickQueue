@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from qq.models import BarangayStaff, QueueTicket, Service
 from qq.services.configuration_service import service_configuration_map
+from qq.services.queue_service import live_queue_participation_q
 from qq.views.barangay_live_queue import (
     _annotate_wait_estimates, _resolve_slot, _service_window_for_user, _ticket_queryset,
 )
@@ -59,6 +60,7 @@ def staff_live_queue(request):
             next_wait_minutes = next_in_line[0].wait_minutes
 
     today_tickets = QueueTicket.objects.filter(
+        live_queue_participation_q(),
         appointment__barangay=barangay,
         appointment__appointment_date=today,
         appointment__service__is_temporary=False,

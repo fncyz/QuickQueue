@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, ClosedAppointmentDate, Notification, Service, TimeSlot
 from qq.services.notification_service import notify_resident
-from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacity
+from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacities
 from qq.views.barangay_staff_portal.resident_logbook import resident_history_context
 
 ACTIVE_STATUSES = [Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING]
@@ -52,10 +52,8 @@ def staff_appointments(request):
     confirmed_today = today_active.filter(status__in=[Appointment.Status.CONFIRMED, Appointment.Status.ONGOING])
     tomorrow_count = base.filter(appointment_date=today + timedelta(days=1), status__in=ACTIVE_STATUSES).count()
     slots = list(TimeSlot.objects.filter(barangay=barangay, is_active=True).order_by("start_time"))
-    daily_capacity = min(
-        sum(regular_slot_capacity(slot) for slot in slots),
-        regular_daily_capacity(barangay),
-    )
+    slot_capacities = regular_slot_capacities(barangay, slots)
+    daily_capacity = regular_daily_capacity(barangay)
 
     month_start = selected_date.replace(day=1)
     month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -96,7 +94,7 @@ def staff_appointments(request):
     selected_slots = []
     for slot in slots:
         booked = slot_counts.get(slot.pk, 0)
-        capacity = regular_slot_capacity(slot)
+        capacity = slot_capacities.get(slot.pk, 0)
         selected_slots.append({"slot": slot, "booked": booked, "capacity": capacity,
                                "remaining": max(capacity - booked, 0),
                                "percent": round(booked / capacity * 100) if capacity else 0})

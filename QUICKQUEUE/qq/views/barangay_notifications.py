@@ -61,11 +61,27 @@ def barangay_notifications(request):
         notifications = notifications.filter(is_read=False)
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.GET.get("format") == "json":
-        items = notifications[:20]
+        if is_regular_staff:
+            expanded = request.GET.get("expanded") == "1"
+            page_size = 50 if expanded else 6
+            dropdown_page = Paginator(notifications, page_size).get_page(
+                request.GET.get("page", 1)
+            )
+            items = dropdown_page.object_list
+            page_number = dropdown_page.number
+            page_count = dropdown_page.paginator.num_pages
+            has_next = dropdown_page.has_next()
+        else:
+            items = notifications[:20]
+            page_number = page_count = 1
+            has_next = False
         return JsonResponse({
             "total_count": all_count,
             "unread_count": notifications_for_user(request.user, role).filter(barangay=barangay, is_read=False).count(),
             "history_url": request.path,
+            "page": page_number,
+            "page_count": page_count,
+            "has_next": has_next,
             "notifications": [{
                 "id": item.pk, "type": item.notification_type, "title": item.title,
                 "message": item.message, "is_read": item.is_read,

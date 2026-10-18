@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 
 from qq.models import Appointment, Barangay, BarangayStaff, QueueTicket, Resident, Service, ServiceWindow, TimeSlot
+from qq.services.queue_service import CHECKED_IN_NOTE
 
 
 class WindowManagementTests(TestCase):
@@ -36,7 +37,11 @@ class WindowManagementTests(TestCase):
         resident_user = User.objects.create_user("window-resident", password="secret")
         resident = Resident.objects.create(user=resident_user, first_name="Window", last_name="Resident", birthdate=date(2000, 1, 1), sex=Resident.Sex.MALE, contact_number="09121111111", barangay=self.barangay)
         appointment = Appointment.objects.create(resident=resident, barangay=self.barangay, service=service, appointment_date=date.today(), time_slot=slot, queue_number="W-001", status=Appointment.Status.CONFIRMED)
-        ticket = QueueTicket.objects.create(appointment=appointment, queue_number="W-001")
+        ticket = QueueTicket.objects.create(
+            appointment=appointment,
+            queue_number="W-001",
+            notes=CHECKED_IN_NOTE,
+        )
         self.client.force_login(self.staff_user)
         response = self.client.post("/barangay/queue/call-next/", {"slot": slot.pk})
         self.assertEqual(response.status_code, 302)

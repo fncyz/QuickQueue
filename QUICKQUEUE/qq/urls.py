@@ -44,6 +44,7 @@ from qq.views.barangay_waiting_time import (
 from qq.views.barangay_settings import barangay_settings
 from qq.views.barangay_notifications import barangay_notifications
 from qq.views.barangay_document_templates import barangay_document_templates
+from qq.views.barangay_admin_details import barangay_admin_record_detail
 from qq.views.superadmin_dashboard import (
     superadmin_barangay_add,
     superadmin_barangay_detail,
@@ -127,6 +128,11 @@ urlpatterns = [
     path("barangay/staff/<int:pk>/edit/", barangay_staff_edit, name="barangay_staff_edit"),
     path("barangay/settings/", barangay_settings, name="barangay_settings"),
     path("barangay/document-templates/", barangay_document_templates, name="barangay_document_templates"),
+    path(
+        "barangay/details/<str:record_type>/<int:pk>/",
+        barangay_admin_record_detail,
+        name="barangay_admin_record_detail",
+    ),
     path("barangay/notifications/", barangay_notifications, name="barangay_notifications"),
     path("barangay/waiting-time/", barangay_waiting_time, name="barangay_waiting_time"),
     path(

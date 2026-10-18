@@ -6,14 +6,38 @@ REGULAR_TIME_SLOT_CAPACITY = 5
 REGULAR_DAILY_CAPACITY = 30
 
 
-def regular_slot_capacity(time_slot):
-    """Return the enforced resident-booking capacity for a regular slot."""
-    return min(time_slot.max_appointments, REGULAR_TIME_SLOT_CAPACITY)
+def regular_slot_capacities(barangay, time_slots=None):
+    """Distribute the barangay's regular daily capacity across active slots."""
+    if time_slots is None:
+        time_slots = TimeSlot.objects.filter(
+            barangay=barangay,
+            is_active=True,
+        ).order_by("start_time", "pk")
+    slots = sorted(
+        (slot for slot in time_slots if slot.is_active),
+        key=lambda slot: (slot.start_time, slot.pk),
+    )
+    if not slots:
+        return {}
+    base, remainder = divmod(regular_daily_capacity(barangay), len(slots))
+    return {
+        slot.pk: base + (1 if index < remainder else 0)
+        for index, slot in enumerate(slots)
+    }
+
+
+def regular_slot_capacity(time_slot, capacities=None):
+    """Return the configured share of daily capacity for one regular slot."""
+    if not time_slot.is_active:
+        return 0
+    if capacities is None:
+        capacities = regular_slot_capacities(time_slot.barangay)
+    return capacities.get(time_slot.pk, 0)
 
 
 def regular_daily_capacity(barangay):
-    """Return the fixed regular daily capacity."""
-    return REGULAR_DAILY_CAPACITY
+    """Return the persisted regular daily capacity, retaining the legacy default."""
+    return getattr(barangay, "daily_booking_capacity", REGULAR_DAILY_CAPACITY)
 
 
 DEFAULT_TIME_SLOTS = (

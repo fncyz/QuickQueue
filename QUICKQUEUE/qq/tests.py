@@ -20,6 +20,7 @@ from qq.models import (
     TimeSlot,
 )
 from qq.services.appointment_service import check_duplicate_appointment, check_timeslot_capacity
+from qq.services.timeslot_service import ensure_default_time_slots
 
 
 class RegistrationSecurityFlowTests(APITestCase):
@@ -270,11 +271,11 @@ class ResidentAppointmentApiTests(APITestCase):
             description="Test service",
             estimated_duration=15,
         )
-        self.time_slot = TimeSlot.objects.create(
+        ensure_default_time_slots(self.barangay)
+        self.time_slot = TimeSlot.objects.get(
             barangay=self.barangay,
             start_time=time(9, 0),
             end_time=time(10, 0),
-            max_appointments=5,
         )
         self.client.force_authenticate(user=self.user)
 
@@ -336,8 +337,8 @@ class ResidentAppointmentApiTests(APITestCase):
         completed.save(update_fields=["status", "updated_at"])
         self.assertTrue(check_duplicate_appointment(self.resident, booking_date, self.time_slot))
 
-        self.time_slot.max_appointments = 1
-        self.time_slot.save(update_fields=["max_appointments", "updated_at"])
+        self.barangay.daily_booking_capacity = 6
+        self.barangay.save(update_fields=["daily_booking_capacity", "updated_at"])
         self.assertFalse(check_timeslot_capacity(booking_date, self.time_slot))
 
     def test_cancelled_appointment_releases_its_slot(self):
@@ -440,7 +441,7 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(day["count"], 2)
         self.assertEqual(day["level"], "closed")
         self.assertContains(response, "Closed")
-        self.assertContains(response, "2/5")
+        self.assertContains(response, "2/30")
 
     def test_regular_booking_rejects_weekends(self):
         saturday = date.today() + timedelta(days=(5 - date.today().weekday()) % 7)
