@@ -62,6 +62,7 @@ def _resolve_slot(barangay, slot_id, today, now_time):
             appointment__barangay=barangay,
             appointment__appointment_date=today,
             appointment__time_slot__in=slots,
+            appointment__service__is_temporary=False,
             status__in=[QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING],
         )
         .values_list("appointment__time_slot_id", flat=True)
@@ -118,6 +119,7 @@ def _ticket_queryset(barangay, today, slot):
             appointment__barangay=barangay,
             appointment__appointment_date=today,
             appointment__time_slot=slot,
+            appointment__service__is_temporary=False,
         )
         .exclude(status=QueueTicket.Status.CANCELLED)
         .select_related(
@@ -198,6 +200,7 @@ def barangay_live_queue(request):
     today_tickets = QueueTicket.objects.filter(
         appointment__barangay=barangay,
         appointment__appointment_date=today,
+        appointment__service__is_temporary=False,
     ).exclude(status=QueueTicket.Status.CANCELLED)
 
     completed_today = today_tickets.filter(status=QueueTicket.Status.COMPLETED)
@@ -295,6 +298,7 @@ def barangay_queue_call_next(request):
                 appointment__barangay=barangay,
                 appointment__appointment_date=today,
                 appointment__time_slot=current_slot,
+                appointment__service__is_temporary=False,
                 status=QueueTicket.Status.NOW_SERVING,
                 service_window=service_window,
             )
@@ -313,6 +317,7 @@ def barangay_queue_call_next(request):
                 appointment__barangay=barangay,
                 appointment__appointment_date=today,
                 appointment__time_slot=current_slot,
+                appointment__service__is_temporary=False,
                 status=QueueTicket.Status.WAITING,
             )
             .order_by("queue_number")
@@ -343,6 +348,7 @@ def barangay_queue_call_next(request):
                 appointment__barangay=barangay,
                 appointment__appointment_date=today,
                 appointment__time_slot=current_slot,
+                appointment__service__is_temporary=False,
                 status=QueueTicket.Status.WAITING,
             )
             .select_related("appointment__resident__user", "appointment__barangay")
@@ -376,6 +382,7 @@ def barangay_queue_complete(request, pk):
         ),
         pk=pk,
         appointment__barangay=barangay,
+        appointment__service__is_temporary=False,
     )
     service_window = _service_window_for_user(request.user, barangay)
     is_regular_staff = hasattr(request.user, "staff_profile") and request.user.staff_profile.role != BarangayStaff.Role.ADMIN
@@ -431,6 +438,7 @@ def barangay_queue_skip(request):
             appointment__barangay=barangay,
             appointment__appointment_date=today,
             appointment__time_slot=current_slot,
+            appointment__service__is_temporary=False,
             status=QueueTicket.Status.NOW_SERVING,
             service_window=service_window,
         )
@@ -469,7 +477,7 @@ def barangay_update_service_times(request):
     """Update default service durations used by deterministic waiting estimates."""
     _barangay_for(request.user)
     updated = 0
-    for service in Service.objects.filter(is_active=True):
+    for service in Service.objects.filter(is_active=True, is_temporary=False):
         raw = request.POST.get(f"service_{service.pk}", "").strip()
         if not raw:
             continue

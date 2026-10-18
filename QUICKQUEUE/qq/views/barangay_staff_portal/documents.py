@@ -50,6 +50,7 @@ def staff_document_processing(request):
         active_tab = "processing"
     base = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
         appointment__status__in=[
             Appointment.Status.CONFIRMED, Appointment.Status.ONGOING, Appointment.Status.COMPLETED,
         ],
@@ -93,7 +94,9 @@ def staff_document_processing(request):
         "waiting_count": base.filter(claim_status=QueueTicket.ClaimStatus.NONE).count(),
         "processing_count": base.filter(claim_status=QueueTicket.ClaimStatus.PROCESSING).count(),
         "ready_count": base.filter(claim_status=QueueTicket.ClaimStatus.READY).count(),
-        "services": Service.objects.filter(is_active=True).order_by("name"),
+        "services": Service.objects.filter(
+            is_active=True, is_temporary=False,
+        ).order_by("name"),
         "filters": {"q": search, "service": service, "date": date_filter, "status": status_filter},
     }
     if active_tab == "completed":
@@ -109,7 +112,9 @@ def staff_document_action(request, pk):
         raise Http404("This action is available to barangay staff accounts only.")
     ticket = get_object_or_404(
         QueueTicket.objects.select_related("appointment__resident", "appointment__service"),
-        pk=pk, appointment__barangay=staff.barangay,
+        pk=pk,
+        appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
     )
     action = request.POST.get("action")
     if action == "archive_expired":
@@ -118,6 +123,7 @@ def staff_document_action(request, pk):
                 QueueTicket.objects.select_for_update().select_related("appointment"),
                 pk=ticket.pk,
                 appointment__barangay=staff.barangay,
+                appointment__service__is_temporary=False,
             )
             if not _is_expired_document(locked_ticket):
                 messages.error(request, "Only overdue, unfinished appointments can be archived.")

@@ -41,7 +41,10 @@ def staff_appointments(request):
             selected_date = timezone.datetime.strptime(request.GET["date"], "%Y-%m-%d").date()
     except ValueError:
         pass
-    base = Appointment.objects.filter(barangay=barangay).select_related("resident", "service", "time_slot")
+    base = Appointment.objects.filter(
+        barangay=barangay,
+        service__is_temporary=False,
+    ).select_related("resident", "service", "time_slot")
     today_active = base.filter(appointment_date=today).exclude(
         status__in=[Appointment.Status.CANCELLED, Appointment.Status.MISSED]
     )
@@ -139,7 +142,9 @@ def staff_appointments(request):
         "selected_is_past": selected_date < today,
         "selected_is_closed": selected_date < today or selected_date in closed_dates,
         "appointments": table_qs.order_by("appointment_date", "time_slot__start_time")[:50],
-        "tab": tab, "services": Service.objects.filter(is_active=True).order_by("name"),
+        "tab": tab, "services": Service.objects.filter(
+            is_active=True, is_temporary=False,
+        ).order_by("name"),
         "filters": {"q": search, "service": service, "filter_date": date_filter},
     }
     if tab == "history":
@@ -158,6 +163,7 @@ def staff_review_appointment(request, pk):
         Appointment.objects.select_related("resident", "service", "time_slot"),
         pk=pk,
         barangay=staff.barangay,
+        service__is_temporary=False,
     )
     if appointment.status != Appointment.Status.PENDING:
         messages.error(request, "Only pending appointments can be reviewed.")

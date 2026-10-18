@@ -33,10 +33,15 @@ def staff_dashboard(request):
     barangay = staff.barangay
     today = timezone.localdate()
     now = timezone.localtime()
-    appointments = Appointment.objects.filter(barangay=barangay).select_related(
+    appointments = Appointment.objects.filter(
+        barangay=barangay, service__is_temporary=False,
+    ).select_related(
         "resident", "service", "time_slot"
     )
-    tickets = QueueTicket.objects.filter(appointment__barangay=barangay).select_related(
+    tickets = QueueTicket.objects.filter(
+        appointment__barangay=barangay,
+        appointment__service__is_temporary=False,
+    ).select_related(
         "appointment__resident", "appointment__service", "appointment__time_slot"
     )
     today_tickets = tickets.filter(appointment__appointment_date=today)
@@ -129,6 +134,7 @@ def staff_dashboard_mark_claimed(request, pk):
             QueueTicket.objects.select_for_update(),
             pk=pk,
             appointment__barangay=staff.barangay,
+            appointment__service__is_temporary=False,
         )
         if ticket.claim_status != QueueTicket.ClaimStatus.READY:
             messages.error(request, "Only documents that are ready for pickup can be marked as claimed.")

@@ -28,6 +28,7 @@ def staff_resident_logbook(request):
 def resident_history_context(request, staff):
     tickets = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
         claim_status=QueueTicket.ClaimStatus.CLAIMED,
     ).select_related("appointment__resident", "appointment__service").order_by(
         "appointment__resident__last_name", "appointment__resident__first_name", "-claimed_at"

@@ -41,6 +41,7 @@ def staff_completed_documents(request):
 def completed_documents_context(request, staff):
     base = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
         claim_status=QueueTicket.ClaimStatus.CLAIMED,
     ).select_related("appointment__resident", "appointment__service")
     search = request.GET.get("q", "").strip()
@@ -66,7 +67,9 @@ def completed_documents_context(request, staff):
         "documents": filtered.order_by("-claimed_at", "-updated_at"),
         "total_archived": base.count(), "completed_today": base.filter(claimed_at__date=today).count(),
         "processed_by_you": 0,
-        "services": Service.objects.filter(is_active=True).order_by("name"),
+        "services": Service.objects.filter(
+            is_active=True, is_temporary=False,
+        ).order_by("name"),
         "completed_filters": {"q": search, "service": service, "date": date_filter},
     }
 
@@ -80,6 +83,7 @@ def staff_document_preview(request, pk):
         QueueTicket.objects.select_related("appointment__resident", "appointment__service", "appointment__barangay"),
         pk=pk,
         appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
         claim_status__in=[
             QueueTicket.ClaimStatus.PROCESSING,
             QueueTicket.ClaimStatus.READY,
@@ -92,6 +96,7 @@ def staff_document_preview(request, pk):
                 QueueTicket.objects.select_for_update(),
                 pk=ticket.pk,
                 appointment__barangay=staff.barangay,
+                appointment__service__is_temporary=False,
             )
             if locked_ticket.claim_status == QueueTicket.ClaimStatus.READY:
                 changed = False

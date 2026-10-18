@@ -232,6 +232,97 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertNotContains(response, "Other Barangay Private Event")
         self.assertNotContains(response, "Expired Staff Event")
 
+    def test_special_service_registrations_are_isolated_from_regular_staff_workflows(self):
+        today = timezone.localdate()
+        regular_ticket = self._ticket(
+            "regular-isolation", "Regular Isolation", self.service, "C17"
+        )
+        special_service = Service.objects.create(
+            code="EVS",
+            name="Isolated Community Event",
+            description="Managed only through Events & Temporary Services",
+            estimated_duration=15,
+            is_temporary=True,
+            temporary_type=Service.TemporaryType.EVENT,
+            barangay=self.barangay,
+            event_start_date=today,
+            event_end_date=today + timedelta(days=1),
+            booking_start_date=today - timedelta(days=1),
+            booking_end_date=today,
+            capacity=20,
+        )
+        event_ticket = self._ticket(
+            "event-isolation", "Event Isolation", special_service, "EV17"
+        )
+        event_booking = EventBooking.objects.create(appointment=event_ticket.appointment)
+        event_ticket.appointment.status = Appointment.Status.PENDING
+        event_ticket.appointment.save(update_fields=["status", "updated_at"])
+        event_ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        event_ticket.save(update_fields=["claim_status", "updated_at"])
+
+        appointments = self.client.get(
+            f"/barangay/staff/appointments/?date={today.isoformat()}"
+        )
+        self.assertEqual(appointments.context["today_total"], 1)
+        self.assertEqual(appointments.context["selected_count"], 1)
+        self.assertEqual(
+            list(appointments.context["appointments"].values_list("pk", flat=True)),
+            [regular_ticket.appointment_id],
+        )
+        self.assertNotContains(appointments, special_service.name)
+
+        dashboard = self.client.get("/barangay/staff/dashboard/")
+        self.assertEqual(dashboard.context["pending_appointments"], 0)
+        self.assertEqual(dashboard.context["processing_documents"], 0)
+        self.assertContains(dashboard, special_service.name)
+        self.assertNotIn(event_ticket, dashboard.context["waiting_tickets"])
+
+        live_queue = self.client.get(
+            f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+        )
+        self.assertEqual(
+            [ticket.pk for ticket in live_queue.context["tickets"]],
+            [regular_ticket.pk],
+        )
+        self.assertNotContains(live_queue, special_service.name)
+
+        documents = self.client.get("/barangay/staff/documents/")
+        self.assertEqual(documents.context["processing_count"], 0)
+        self.assertNotContains(documents, special_service.name)
+        blocked_preview = self.client.get(
+            f"/barangay/staff/documents/{event_ticket.pk}/preview/"
+        )
+        self.assertEqual(blocked_preview.status_code, 404)
+
+        events = self.client.get("/barangay/staff/events/")
+        self.assertContains(events, special_service.name)
+        attendance = self.client.get(
+            f"/barangay/staff/events/scanner/?event={special_service.pk}&format=json"
+        )
+        self.assertEqual(attendance.status_code, 200)
+        self.assertEqual(attendance.json()["stats"]["registered"], 1)
+        self.assertEqual(attendance.json()["participants"][0]["booking_reference"], event_booking.booking_reference)
+
+        now = timezone.now()
+        regular_ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
+        regular_ticket.claimed_at = now
+        regular_ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
+        event_ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
+        event_ticket.claimed_at = now
+        event_ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
+        history = self.client.get("/barangay/staff/appointments/?tab=history")
+        resident_rows = history.context["resident_rows"]
+        self.assertEqual([row["latest"].pk for row in resident_rows], [regular_ticket.pk])
+        self.assertNotContains(history, special_service.name)
+
+        blocked_review = self.client.post(
+            f"/barangay/staff/appointments/{event_ticket.appointment_id}/review/",
+            {"decision": "approve"},
+        )
+        self.assertEqual(blocked_review.status_code, 404)
+        event_ticket.appointment.refresh_from_db()
+        self.assertEqual(event_ticket.appointment.status, Appointment.Status.PENDING)
+
     def test_completed_event_history_preserves_attendance_and_barangay_isolation(self):
         today = timezone.localdate()
         completed = Service.objects.create(

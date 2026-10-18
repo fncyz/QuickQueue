@@ -59,7 +59,9 @@ def staff_live_queue(request):
             next_wait_minutes = next_in_line[0].wait_minutes
 
     today_tickets = QueueTicket.objects.filter(
-        appointment__barangay=barangay, appointment__appointment_date=today
+        appointment__barangay=barangay,
+        appointment__appointment_date=today,
+        appointment__service__is_temporary=False,
     ).exclude(status=QueueTicket.Status.CANCELLED)
     completed_today = today_tickets.filter(status=QueueTicket.Status.COMPLETED)
     avg_duration = completed_today.exclude(called_at=None).exclude(completed_at=None).annotate(
@@ -83,7 +85,9 @@ def staff_live_queue(request):
         "completed_count": completed_count, "serving_count": serving_count,
         "slot_capacity": current_slot.max_appointments if current_slot else 0,
         "next_in_line": next_in_line, "next_wait_minutes": next_wait_minutes, "next_slot": next_slot,
-        "services": _configured_services(Service.objects.filter(is_active=True).order_by("name"), configuration_map),
+        "services": _configured_services(Service.objects.filter(
+            is_active=True, is_temporary=False,
+        ).order_by("name"), configuration_map),
         "filters": {"q": search, "service": service_id},
         "stats": {"average_service_minutes": average_minutes, "completed_today": completed_today.count(),
                   "waiting_today": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),

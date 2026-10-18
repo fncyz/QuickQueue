@@ -24,6 +24,7 @@ def staff_document_notifications(request):
     staff = _staff(request.user)
     ready = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
+        appointment__service__is_temporary=False,
         claim_status=QueueTicket.ClaimStatus.READY,
     ).select_related("appointment__resident", "appointment__service")
 

@@ -481,6 +481,7 @@ def appointments_api(request):
                 barangay=resident.barangay,
                 appointment_date=availability_date,
                 time_slot__isnull=False,
+                service__is_temporary=False,
             ).exclude(status=Appointment.Status.CANCELLED)
             .values("time_slot_id")
             .annotate(count=Count("id"))
