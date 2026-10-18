@@ -641,11 +641,12 @@ class ResidentAppointmentApiTests(APITestCase):
 
     def test_expired_and_cancelled_temporary_services_are_hidden(self):
         today = timezone.localdate()
+        expired = None
         for suffix, lifecycle, booking_end, event_end in (
             ("Expired", Service.Lifecycle.SCHEDULED, today - timedelta(days=2), today - timedelta(days=1)),
             ("Cancelled", Service.Lifecycle.CANCELLED, today + timedelta(days=1), today + timedelta(days=2)),
         ):
-            Service.objects.create(
+            offering = Service.objects.create(
                 code="EVT", name=f"Hidden Event {suffix}", description="Hidden",
                 estimated_duration=15, is_temporary=True,
                 temporary_type=Service.TemporaryType.EVENT, barangay=self.barangay,
@@ -653,10 +654,28 @@ class ResidentAppointmentApiTests(APITestCase):
                 booking_start_date=today - timedelta(days=2), booking_end_date=booking_end,
                 capacity=10, lifecycle=lifecycle,
             )
+            if suffix == "Expired":
+                expired = offering
+        historical_appointment = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=expired,
+            appointment_date=expired.event_start_date, time_slot=None, queue_number="",
+            status=Appointment.Status.CONFIRMED,
+        )
+        historical_booking = EventBooking.objects.create(appointment=historical_appointment)
         summary = self.client.get("/api/appointments/?summary=1")
         names = {item["name"] for item in summary.data["temporary_services"]}
         self.assertNotIn("Hidden Event Expired", names)
         self.assertNotIn("Hidden Event Cancelled", names)
+        service_names = {item["name"] for item in summary.data["services"]}
+        self.assertNotIn("Hidden Event Expired", service_names)
+        self.assertIn(self.service.name, service_names)
+
+        rejected = self.client.post("/api/appointments/", {"service": expired.pk}, format="json")
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(rejected.data["message"], "This Special Service has expired.")
+        self.assertTrue(Appointment.objects.filter(pk=historical_appointment.pk).exists())
+        historical_booking.refresh_from_db()
+        self.assertEqual(historical_booking.status, EventBooking.Status.CONFIRMED)
 
     def test_staff_event_qr_checkin_is_atomic_and_cannot_be_reused(self):
         today = timezone.localdate()

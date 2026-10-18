@@ -272,8 +272,13 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertIn("Ready Resident", priority_section)
         self.assertIn(self.service.name, priority_section)
         self.assertIn("Ready for Pickup", priority_section)
-        preview_link = f'/barangay/staff/documents/{ready.pk}/preview/'
-        self.assertContains(response, preview_link, count=1)
+        claim_link = f'/barangay/staff/dashboard/documents/{ready.pk}/claim/'
+        self.assertContains(response, claim_link, count=1)
+        self.assertContains(response, "Mark as Claimed")
+        self.assertContains(response, "Mark Document as Claimed?")
+        self.assertContains(response, "Are you sure this document has been claimed by the resident?")
+        self.assertContains(response, "dashboard-action-icon", count=2)
+        self.assertNotContains(response, "Open Document")
         self.assertContains(response, "/barangay/staff/documents/?status=R")
         self.assertNotIn("Processing Resident", priority_section)
         self.assertNotIn("Claimed Resident", priority_section)
@@ -284,6 +289,62 @@ class AdminStaffWorkflowTests(TestCase):
             notification_type=Notification.NotificationType.DOCUMENT_UPDATE,
             title="Document Ready for Pickup",
         ).exists())
+
+    def test_dashboard_claim_action_is_locked_scoped_and_idempotent(self):
+        ready = self._ticket("claim-ready", "Claim Ready", self.service, "D05")
+        ready.claim_status = QueueTicket.ClaimStatus.READY
+        ready.save(update_fields=["claim_status", "updated_at"])
+        original_queue_status = ready.status
+        original_appointment_status = ready.appointment.status
+        notification_count = Notification.objects.count()
+        claim_url = f"/barangay/staff/dashboard/documents/{ready.pk}/claim/"
+
+        get_response = self.client.get(claim_url)
+        self.assertEqual(get_response.status_code, 405)
+        ready.refresh_from_db()
+        self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.READY)
+
+        claimed = self.client.post(claim_url, follow=True)
+        self.assertRedirects(claimed, "/barangay/staff/dashboard/")
+        self.assertContains(claimed, "was marked as claimed")
+        ready.refresh_from_db()
+        ready.appointment.refresh_from_db()
+        self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.CLAIMED)
+        self.assertIsNotNone(ready.claimed_at)
+        self.assertEqual(ready.status, original_queue_status)
+        self.assertEqual(ready.appointment.status, original_appointment_status)
+        self.assertEqual(Notification.objects.count(), notification_count)
+        claimed_priority = claimed.content.decode().split('<section class="priority"', 1)[1].split(
+            '<section class="lower">', 1
+        )[0]
+        self.assertNotIn("Claim Ready Resident", claimed_priority)
+        self.assertEqual(claimed.context["ready_count"], 0)
+
+        completed = self.client.get("/barangay/staff/documents/?tab=completed")
+        self.assertContains(completed, "Claim Ready Resident")
+
+        claimed_at = ready.claimed_at
+        repeated = self.client.post(claim_url, follow=True)
+        self.assertContains(repeated, "Only documents that are ready for pickup")
+        ready.refresh_from_db()
+        self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.CLAIMED)
+        self.assertEqual(ready.claimed_at, claimed_at)
+        self.assertEqual(Notification.objects.count(), notification_count)
+
+        foreign = self._ticket("claim-foreign", "Claim Foreign", self.service, "D06")
+        foreign.claim_status = QueueTicket.ClaimStatus.READY
+        foreign.save(update_fields=["claim_status", "updated_at"])
+        other_barangay = Barangay.objects.create(
+            name="Claim Other Barangay", address="Toledo City", contact_number="09550000000",
+        )
+        foreign.appointment.barangay = other_barangay
+        foreign.appointment.save(update_fields=["barangay", "updated_at"])
+        foreign_response = self.client.post(
+            f"/barangay/staff/dashboard/documents/{foreign.pk}/claim/"
+        )
+        self.assertEqual(foreign_response.status_code, 404)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.claim_status, QueueTicket.ClaimStatus.READY)
 
     def test_admin_dashboard_opens_live_queue_directly(self):
         self.client.force_login(self.admin_user)
@@ -414,6 +475,115 @@ class AdminStaffWorkflowTests(TestCase):
         ticket.refresh_from_db()
         self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
 
+    def test_documents_marks_only_overdue_unfinished_appointments_expired(self):
+        today = timezone.localdate()
+        expired = self._ticket("expired-document", "Expired", self.service, "X01")
+        current = self._ticket("current-document", "Current", self.service, "X02")
+        future = self._ticket("future-document", "Future", self.service, "X03")
+        ready = self._ticket("ready-past-document", "Ready Past", self.service, "X04")
+        claimed = self._ticket("claimed-past-document", "Claimed Past", self.service, "X05")
+        completed = self._ticket("completed-past-document", "Completed Past", self.service, "X06")
+        expired.appointment.appointment_date = today - timedelta(days=1)
+        expired.appointment.save(update_fields=["appointment_date", "updated_at"])
+        future.appointment.appointment_date = today + timedelta(days=1)
+        future.appointment.save(update_fields=["appointment_date", "updated_at"])
+        for protected in (ready, claimed, completed):
+            protected.appointment.appointment_date = today - timedelta(days=1)
+            protected.appointment.save(update_fields=["appointment_date", "updated_at"])
+        ready.claim_status = QueueTicket.ClaimStatus.READY
+        ready.save(update_fields=["claim_status", "updated_at"])
+        claimed.claim_status = QueueTicket.ClaimStatus.CLAIMED
+        claimed.save(update_fields=["claim_status", "updated_at"])
+        completed.appointment.status = Appointment.Status.COMPLETED
+        completed.appointment.save(update_fields=["status", "updated_at"])
+
+        response = self.client.get("/barangay/staff/documents/")
+
+        self.assertEqual(response.status_code, 200)
+        tickets = {ticket.pk: ticket for ticket in response.context["tickets"]}
+        self.assertTrue(tickets[expired.pk].is_expired)
+        self.assertFalse(tickets[current.pk].is_expired)
+        self.assertFalse(tickets[future.pk].is_expired)
+        self.assertFalse(tickets[ready.pk].is_expired)
+        self.assertFalse(tickets[completed.pk].is_expired)
+        self.assertNotIn(claimed.pk, tickets)
+        self.assertContains(response, '<b class="pill expired">Expired</b>', count=1)
+        self.assertContains(response, "Archive Expired Appointment?")
+        self.assertContains(
+            response,
+            "Are you sure you want to archive this expired appointment? Its records will remain available in history.",
+        )
+        self.assertContains(response, "Yes, Archive")
+
+    def test_expired_document_archive_is_scoped_idempotent_and_notification_free(self):
+        ticket = self._ticket("archive-expired", "Archive Expired", self.service, "X07")
+        ticket.appointment.appointment_date = timezone.localdate() - timedelta(days=1)
+        ticket.appointment.save(update_fields=["appointment_date", "updated_at"])
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        archive_url = f"/barangay/staff/documents/{ticket.pk}/action/"
+        original_queue_status = ticket.status
+        notification_count = Notification.objects.count()
+
+        archived = self.client.post(archive_url, {"action": "archive_expired"}, follow=True)
+
+        self.assertRedirects(archived, "/barangay/staff/documents/")
+        self.assertContains(archived, "Archived expired appointment X07")
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.status, Appointment.Status.MISSED)
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+        self.assertEqual(ticket.status, original_queue_status)
+        self.assertEqual(Notification.objects.count(), notification_count)
+        history = self.client.get("/barangay/staff/appointments/?tab=rejected")
+        self.assertContains(history, "Archive Expired Resident")
+
+        repeated = self.client.post(archive_url, {"action": "archive_expired"}, follow=True)
+        self.assertContains(repeated, "Only overdue, unfinished appointments can be archived.")
+        self.assertEqual(Notification.objects.count(), notification_count)
+
+        ready = self._ticket("archive-ready", "Archive Ready", self.service, "X08")
+        ready.appointment.appointment_date = timezone.localdate() - timedelta(days=1)
+        ready.appointment.save(update_fields=["appointment_date", "updated_at"])
+        ready.claim_status = QueueTicket.ClaimStatus.READY
+        ready.save(update_fields=["claim_status", "updated_at"])
+        protected = self.client.post(
+            f"/barangay/staff/documents/{ready.pk}/action/",
+            {"action": "archive_expired"},
+            follow=True,
+        )
+        self.assertContains(protected, "Only overdue, unfinished appointments can be archived.")
+        ready.refresh_from_db()
+        ready.appointment.refresh_from_db()
+        self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.READY)
+        self.assertEqual(ready.appointment.status, Appointment.Status.CONFIRMED)
+        self.assertEqual(Notification.objects.count(), notification_count)
+        legacy_archive = self.client.post(
+            f"/barangay/staff/documents/{ready.pk}/action/",
+            {"action": "archive"},
+            follow=True,
+        )
+        self.assertContains(legacy_archive, "That document action is not available.")
+        ready.refresh_from_db()
+        self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.READY)
+        self.assertEqual(Notification.objects.count(), notification_count)
+
+        foreign = self._ticket("archive-foreign", "Archive Foreign", self.service, "X09")
+        foreign.appointment.appointment_date = timezone.localdate() - timedelta(days=1)
+        other_barangay = Barangay.objects.create(
+            name="Archive Other Barangay", address="Toledo City", contact_number="09440000000",
+        )
+        foreign.appointment.barangay = other_barangay
+        foreign.appointment.save(update_fields=["appointment_date", "barangay", "updated_at"])
+        foreign_response = self.client.post(
+            f"/barangay/staff/documents/{foreign.pk}/action/",
+            {"action": "archive_expired"},
+        )
+        self.assertEqual(foreign_response.status_code, 404)
+        foreign.appointment.refresh_from_db()
+        self.assertEqual(foreign.appointment.status, Appointment.Status.CONFIRMED)
+        self.assertEqual(Notification.objects.count(), notification_count)
+
     def test_document_preview_actions_and_edit_use_latest_saved_details(self):
         ticket = self._ticket("preview-resident", "Preview", self.service, "C10")
         ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
@@ -425,6 +595,8 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertEqual(preview.status_code, 200)
         for label in ("Edit", "Download", "Print", "Done"):
             self.assertContains(preview, label)
+        self.assertContains(preview, "Appointment Information")
+        self.assertContains(preview, 'class="edit-purpose"')
         self.assertContains(preview, 'class="done-action"')
         self.assertContains(preview, "Complete Document Processing?")
         self.assertContains(
@@ -432,17 +604,20 @@ class AdminStaffWorkflowTests(TestCase):
             "Are you done processing this document? It will be marked as Ready for Pickup.",
         )
         documents_page = self.client.get("/barangay/staff/documents/")
-        self.assertContains(documents_page, 'class="edit-generated"')
+        self.assertNotContains(documents_page, 'class="edit-generated"')
         self.assertContains(documents_page, 'class="print-generated"')
         self.assertContains(documents_page, 'class="done-generated"')
+        self.assertContains(documents_page, 'class="done-workflow"')
+        self.assertNotContains(documents_page, "Complete &amp; Archive")
         self.assertContains(documents_page, "Complete Document Processing?")
         self.assertContains(documents_page, f"{preview_url}?embedded=1")
 
         edit = self.client.get(f"{preview_url}?embedded=1&edit=1")
-        self.assertContains(edit, "Edit Document Details")
+        self.assertContains(edit, "Appointment Information")
         self.assertContains(edit, "Save")
         self.assertContains(edit, "Cancel")
         self.assertNotContains(edit, 'name="resident"')
+        self.assertNotContains(edit, 'name="sitio"')
 
         original_status = ticket.claim_status
         saved = self.client.post(
@@ -459,15 +634,17 @@ class AdminStaffWorkflowTests(TestCase):
         ticket.appointment.refresh_from_db()
         self.assertEqual(ticket.claim_status, original_status)
         self.assertEqual(ticket.appointment.purpose, "Updated employment requirement")
-        self.assertEqual(ticket.appointment.sitio, "Purok 7")
+        self.assertNotEqual(ticket.appointment.sitio, "Purok 7")
 
         refreshed = self.client.get(preview_url)
         self.assertContains(refreshed, "Updated employment requirement")
-        self.assertContains(refreshed, "Purok 7")
         downloaded = self.client.get(f"{preview_url}?download=1")
         self.assertEqual(downloaded["Content-Type"], "text/plain")
         self.assertContains(downloaded, "Purpose: Updated employment requirement")
-        self.assertContains(downloaded, "Purok / Sitio: Purok 7")
+        self.assertContains(
+            downloaded,
+            f"Purok / Sitio: {ticket.appointment.sitio or 'Not provided'}",
+        )
         printed = self.client.get(f"{preview_url}?print=1")
         self.assertContains(printed, "Updated employment requirement")
         self.assertContains(printed, "window.print()")
@@ -483,11 +660,11 @@ class AdminStaffWorkflowTests(TestCase):
 
         response = self.client.post(
             preview_url,
-            {"purpose": "Still unsaved", "sitio": "x" * 101},
+            {"purpose": "x" * 501},
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Ensure this value has at most 100 characters")
+        self.assertContains(response, "Ensure this value has at most 500 characters")
         ticket.appointment.refresh_from_db()
         self.assertEqual(ticket.appointment.purpose, "Original purpose")
         self.assertEqual(ticket.appointment.sitio, "Original sitio")

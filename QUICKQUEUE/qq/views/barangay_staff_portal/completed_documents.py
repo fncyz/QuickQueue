@@ -16,9 +16,6 @@ class DocumentPreviewEditForm(forms.Form):
         label="Purpose", max_length=500, required=False, strip=True,
         widget=forms.Textarea(attrs={"rows": 4}),
     )
-    sitio = forms.CharField(
-        label="Purok / Sitio", max_length=100, required=False, strip=True,
-    )
 
 
 def _regular_staff(user):
@@ -122,16 +119,12 @@ def staff_document_preview(request, pk):
         return redirect(reverse("staff_processing_document_preview", args=[ticket.pk]))
     edit_form = DocumentPreviewEditForm(
         request.POST or None,
-        initial={
-            "purpose": ticket.appointment.purpose,
-            "sitio": ticket.appointment.sitio,
-        },
+        initial={"purpose": ticket.appointment.purpose},
     )
     if request.method == "POST" and edit_form.is_valid():
         appointment = ticket.appointment
         appointment.purpose = edit_form.cleaned_data["purpose"]
-        appointment.sitio = edit_form.cleaned_data["sitio"]
-        appointment.save(update_fields=["purpose", "sitio", "updated_at"])
+        appointment.save(update_fields=["purpose", "updated_at"])
         preview_url = reverse("staff_processing_document_preview", args=[ticket.pk])
         if request.GET.get("embedded") == "1":
             preview_url += "?embedded=1"

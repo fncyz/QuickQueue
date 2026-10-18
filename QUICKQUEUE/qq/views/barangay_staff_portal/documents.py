@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,6 +10,26 @@ from django.views.decorators.http import require_POST
 from qq.models import Appointment, BarangayStaff, Notification, QueueTicket, Service
 from qq.views.barangay_staff_portal.completed_documents import completed_documents_context
 from qq.services.notification_service import notify_resident
+
+
+EXPIRED_DOCUMENT_APPOINTMENT_STATUSES = (
+    Appointment.Status.CONFIRMED,
+    Appointment.Status.ONGOING,
+)
+EXPIRED_DOCUMENT_CLAIM_STATUSES = (
+    QueueTicket.ClaimStatus.NONE,
+    QueueTicket.ClaimStatus.PROCESSING,
+)
+
+
+def _is_expired_document(ticket, *, today=None):
+    today = today or timezone.localdate()
+    return (
+        ticket.appointment.appointment_date is not None
+        and ticket.appointment.appointment_date < today
+        and ticket.appointment.status in EXPIRED_DOCUMENT_APPOINTMENT_STATUSES
+        and ticket.claim_status in EXPIRED_DOCUMENT_CLAIM_STATUSES
+    )
 
 
 def _staff_for(user):
@@ -58,10 +79,16 @@ def staff_document_processing(request):
             pass
     if status_filter and status_filter in dict(QueueTicket.ClaimStatus.choices):
         filtered = filtered.filter(claim_status=status_filter)
+    tickets = list(filtered.order_by(
+        "appointment__appointment_date", "appointment__time_slot__start_time"
+    ))
+    today = timezone.localdate()
+    for ticket in tickets:
+        ticket.is_expired = _is_expired_document(ticket, today=today)
     context = {
         "active_page": "documents", "staff": staff, "barangay": staff.barangay,
         "document_tab": active_tab,
-        "tickets": filtered.order_by("appointment__appointment_date", "appointment__time_slot__start_time"),
+        "tickets": tickets,
         "total_count": base.count(),
         "waiting_count": base.filter(claim_status=QueueTicket.ClaimStatus.NONE).count(),
         "processing_count": base.filter(claim_status=QueueTicket.ClaimStatus.PROCESSING).count(),
@@ -88,7 +115,24 @@ def staff_document_action(request, pk):
         pk=pk, appointment__barangay=staff.barangay,
     )
     action = request.POST.get("action")
-    if action == "start" and ticket.claim_status == QueueTicket.ClaimStatus.NONE:
+    if action == "archive_expired":
+        with transaction.atomic():
+            locked_ticket = get_object_or_404(
+                QueueTicket.objects.select_for_update().select_related("appointment"),
+                pk=ticket.pk,
+                appointment__barangay=staff.barangay,
+            )
+            if not _is_expired_document(locked_ticket):
+                messages.error(request, "Only overdue, unfinished appointments can be archived.")
+                return redirect("staff_document_processing")
+            appointment = locked_ticket.appointment
+            appointment.status = Appointment.Status.MISSED
+            appointment.save(update_fields=["status", "updated_at"])
+        messages.success(
+            request,
+            f"Archived expired appointment {ticket.queue_number}. Its records remain available in history.",
+        )
+    elif action == "start" and ticket.claim_status == QueueTicket.ClaimStatus.NONE:
         ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
         ticket.save(update_fields=["claim_status", "updated_at"])
         messages.success(request, f"Started processing {ticket.queue_number}.")
@@ -103,27 +147,6 @@ def staff_document_action(request, pk):
             event_key=f"ticket:{ticket.pk}:document-ready",
         )
         messages.success(request, f"{ticket.queue_number} is ready for claiming.")
-    elif action == "archive" and ticket.claim_status in (
-        QueueTicket.ClaimStatus.PROCESSING,
-        QueueTicket.ClaimStatus.READY,
-    ):
-        ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
-        ticket.claimed_at = timezone.now()
-        ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
-        if ticket.appointment.status != Appointment.Status.COMPLETED:
-            ticket.appointment.status = Appointment.Status.COMPLETED
-            ticket.appointment.save(update_fields=["status", "updated_at"])
-        Notification.objects.create(
-            resident=ticket.appointment.resident,
-            appointment=ticket.appointment,
-            notification_type=Notification.NotificationType.APPOINTMENT_COMPLETED,
-            title="Document Processing Completed",
-            message=(
-                f"Your {ticket.appointment.service.name} transaction has been completed "
-                "and the document has been archived."
-            ),
-        )
-        messages.success(request, f"Completed and archived {ticket.queue_number}.")
     else:
         messages.error(request, "That document action is not available.")
     return redirect("staff_document_processing")

@@ -1,11 +1,23 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, QueueTicket, Service
 from qq.services.notification_service import unread_count_for_user
+
+
+def _staff_for_dashboard(user):
+    if hasattr(user, "barangay_profile"):
+        return None
+    try:
+        return user.staff_profile
+    except BarangayStaff.DoesNotExist as error:
+        raise Http404("This page is available to barangay staff accounts only.") from error
 
 
 @login_required(login_url="signin")
@@ -13,12 +25,9 @@ def staff_dashboard(request):
     """Daily operational workspace for linked barangay staff accounts."""
     # Barangay-owner accounts can also have a staff record. Their ownership
     # profile takes precedence so they always remain in the admin portal.
-    if hasattr(request.user, "barangay_profile"):
+    staff = _staff_for_dashboard(request.user)
+    if staff is None:
         return redirect("barangay_dashboard")
-    try:
-        staff = request.user.staff_profile
-    except BarangayStaff.DoesNotExist as error:
-        raise Http404("This page is available to barangay staff accounts only.") from error
     if staff.role == BarangayStaff.Role.ADMIN:
         return redirect("barangay_dashboard")
 
@@ -109,3 +118,25 @@ def staff_dashboard(request):
         "event_services": event_services,
         "unread_notifications": unread_count_for_user(request.user),
     })
+
+
+@login_required(login_url="signin")
+@require_POST
+def staff_dashboard_mark_claimed(request, pk):
+    staff = _staff_for_dashboard(request.user)
+    if staff is None or staff.role == BarangayStaff.Role.ADMIN:
+        raise Http404("This action is available to barangay staff accounts only.")
+    with transaction.atomic():
+        ticket = get_object_or_404(
+            QueueTicket.objects.select_for_update(),
+            pk=pk,
+            appointment__barangay=staff.barangay,
+        )
+        if ticket.claim_status != QueueTicket.ClaimStatus.READY:
+            messages.error(request, "Only documents that are ready for pickup can be marked as claimed.")
+            return redirect("staff_dashboard")
+        ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
+        ticket.claimed_at = timezone.now()
+        ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
+    messages.success(request, f"{ticket.queue_number} was marked as claimed.")
+    return redirect("staff_dashboard")

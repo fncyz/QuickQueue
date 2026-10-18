@@ -1,4 +1,17 @@
 .review-layout-full { grid-template-columns: minmax(0, 1fr); }
+.appointments,
+.appointments button,
+.appointments input,
+.appointments select,
+.appointments textarea {
+  font-family: Poppins, Arial, sans-serif;
+}
+.appointments .topbar h1 { font-size: 23px; line-height: 1.25; }
+.appointments .topbar p { font-size: 13px; line-height: 1.5; }
+.appointments .tabs a { font-size: 12px; line-height: 1.5; }
+.appointments table { font-size: 11px; line-height: 1.45; }
+.appointments th { font-size: 10px; font-weight: 700; letter-spacing: .025em; }
+.appointments td { font-weight: 400; }
 .review-layout-full .filters > label { min-width: 260px; }
 .review-layout-full .filters select { width: 210px; min-width: 170px; }
 .review-layout-full .filters .date-filter { width: 170px; min-width: 150px; }
@@ -14,18 +27,18 @@
 }
 .embedded-history-table th,
 .embedded-history-table td {
-  padding: 12px 10px;
+  padding: 12px 9px;
   overflow-wrap: anywhere;
   white-space: normal;
   vertical-align: middle;
 }
-.embedded-history-table th:nth-child(1) { width: 19%; }
-.embedded-history-table th:nth-child(2) { width: 11%; }
-.embedded-history-table th:nth-child(3) { width: 17%; }
+.embedded-history-table th:nth-child(1) { width: 18%; }
+.embedded-history-table th:nth-child(2) { width: 10%; }
+.embedded-history-table th:nth-child(3) { width: 16%; }
 .embedded-history-table th:nth-child(4) { width: 13%; }
-.embedded-history-table th:nth-child(5) { width: 15%; }
-.embedded-history-table th:nth-child(6) { width: 10%; }
-.embedded-history-table th:nth-child(7) { width: 15%; }
+.embedded-history-table th:nth-child(5) { width: 14%; }
+.embedded-history-table th:nth-child(6) { width: 11%; }
+.embedded-history-table th:nth-child(7) { width: 18%; }
 .embedded-history-table .resident {
   min-width: 0;
 }
@@ -33,10 +46,31 @@
   min-width: 0;
 }
 .embedded-history-table .history-btn {
-  width: 100%;
-  padding: 9px 8px;
-  line-height: 1.35;
-  white-space: normal;
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  align-items: center;
+  justify-content: center;
+  font-family: Poppins, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+.embedded-history-table .complete {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 6px 10px;
+  align-items: center;
+  justify-content: center;
+  font-family: Poppins, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 #appointment-list th.status-column,
 #appointment-list td.status-column {

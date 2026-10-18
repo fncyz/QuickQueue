@@ -598,7 +598,10 @@ def appointments_api(request):
         })
 
     try:
-        service = services.get(pk=request.data.get("service"))
+        service = Service.objects.filter(is_active=True).filter(
+            Q(is_temporary=False)
+            | Q(is_temporary=True, barangay=resident.barangay)
+        ).get(pk=request.data.get("service"))
         if service.is_temporary:
             appointment = create_special_service_booking(resident, service)
         else:

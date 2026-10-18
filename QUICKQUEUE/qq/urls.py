@@ -5,7 +5,8 @@ from django.urls import reverse_lazy
 from qq.views import landing, signin, staff_logout
 from qq.views.barangay_dashboard import barangay_dashboard
 from qq.views.barangay_staff_portal import (
-    staff_appointments, staff_review_appointment, staff_dashboard, staff_document_action,
+    staff_appointments, staff_review_appointment, staff_dashboard, staff_dashboard_mark_claimed,
+    staff_document_action,
     staff_document_processing, staff_live_queue,
     staff_completed_documents, staff_document_preview,
     staff_resident_logbook,
@@ -93,6 +94,7 @@ urlpatterns = [
     path("superadmin/system-settings/", superadmin_settings, name="superadmin_system_settings"),
     path("barangay/dashboard/", barangay_dashboard, name="barangay_dashboard"),
     path("barangay/staff/dashboard/", staff_dashboard, name="staff_dashboard"),
+    path("barangay/staff/dashboard/documents/<int:pk>/claim/", staff_dashboard_mark_claimed, name="staff_dashboard_mark_claimed"),
     path("barangay/staff/appointments/", staff_appointments, name="staff_appointments"),
     path("barangay/staff/appointments/<int:pk>/review/", staff_review_appointment, name="staff_review_appointment"),
     path("barangay/staff/queue/live/", staff_live_queue, name="staff_live_queue"),

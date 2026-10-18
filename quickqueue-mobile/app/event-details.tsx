@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/Typography';
 import { useAppTheme } from '@/contexts/app-theme';
+import { eventHasExpired } from '@/services/event-expiration';
 
 type EventDetails = { id: number; name: string; description: string; requirements?: string[]; type: string; location: string; event_start_date: string; event_end_date: string; booking_start_date: string; booking_end_date: string; status: string; capacity: number | null; remaining_capacity: number | null; can_book: boolean; is_event?: boolean; is_booked?: boolean; event_booking_id?: number | null };
 
@@ -23,6 +24,7 @@ function formatDateRange(startValue: string, endValue: string) {
 export default function EventDetailsScreen() {
   const { colors } = useAppTheme(); const params = useLocalSearchParams<{ event?: string }>(); let event: EventDetails | null = null;
   try { event = params.event ? JSON.parse(params.event) : null; } catch { event = null; }
+  if (event && eventHasExpired(event)) event = null;
   if (!event) return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]}><View style={s.empty}><Text style={{ color: colors.text }}>This event/service is no longer available.</Text><Pressable onPress={() => router.back()} style={s.button}><Text style={s.buttonText}>Go Back</Text></Pressable></View></SafeAreaView>;
   const bookingStart = new Date(`${event.booking_start_date}T00:00:00`); const label = event.status === 'active' ? 'AVAILABLE NOW' : event.status.replace('_', ' ').toUpperCase();
   const unavailable = event.status === 'fully_booked' ? 'Fully Booked' : event.status === 'upcoming' ? `Booking opens ${bookingStart.toLocaleDateString()}` : event.status === 'expired' ? 'Booking has closed' : null;

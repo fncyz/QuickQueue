@@ -1,4 +1,4 @@
-from .dashboard import staff_dashboard
+from .dashboard import staff_dashboard, staff_dashboard_mark_claimed
 from .temporary_services import (
     staff_event_participant_history, staff_event_scanner, staff_temporary_service_action,
     staff_temporary_service_form, staff_temporary_services,
@@ -12,7 +12,7 @@ from .settings import staff_settings
 from .notifications import staff_document_notifications
 
 __all__ = [
-    "staff_dashboard", "staff_appointments", "staff_review_appointment", "staff_live_queue",
+    "staff_dashboard", "staff_dashboard_mark_claimed", "staff_appointments", "staff_review_appointment", "staff_live_queue",
     "staff_document_processing", "staff_document_action",
     "staff_completed_documents", "staff_document_preview",
     "staff_resident_logbook",

@@ -17,6 +17,7 @@ import { residentLayout } from '@/constants/resident-layout';
 import { useConnectivity } from '@/contexts/connectivity';
 import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/services/offline-cache';
 import { useTutorial } from '@/contexts/tutorial';
+import { activeTemporaryListings } from '@/services/event-expiration';
 
 const quickQueueLogo = require('../assets/images/qqlogo.png');
 const toledoLogo = require('../assets/images/toledo.png');
@@ -37,16 +38,8 @@ type ActiveAppointment = {
 };
 type DashboardCache = { activeAppointment: ActiveAppointment | null; residentName: string; services: Service[]; temporaryServices?: TemporaryService[]; unreadNotifications: number; username: string };
 
-const manilaDateKey = () => {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
-};
-
 const safeCachedTemporaryServices = (items: TemporaryService[]) => {
-  const today = manilaDateKey();
-  return items
-    .filter((item) => item.event_end_date >= today && !['expired', 'cancelled', 'deactivated', 'archived'].includes(item.status))
+  return activeTemporaryListings(items)
     .map((item) => ({ ...item, can_book: false }));
 };
 
@@ -91,6 +84,7 @@ export function ResidentDashboard() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    void refreshRevision;
     let isActive = true;
     const loadDashboard = async () => {
       if (loadInFlight.current) return;
@@ -117,7 +111,7 @@ export function ResidentDashboard() {
         setResidentName(profileResponse.data.first_name);
         setUnreadNotifications(notificationResponse.data.unread_count);
         setServices(bookingResponse.data.services);
-        setTemporaryServices(bookingResponse.data.temporary_services || []);
+        setTemporaryServices(activeTemporaryListings(bookingResponse.data.temporary_services || []));
         setActiveAppointment(queueResponse.data.appointment);
         lastFreshLoad.current = Date.now();
         const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`);

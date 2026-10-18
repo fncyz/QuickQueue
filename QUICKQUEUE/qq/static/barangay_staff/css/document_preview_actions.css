@@ -5,14 +5,16 @@
   box-shadow: 0 5px 12px rgba(23, 105, 232, .24);
 }
 
-.document-preview-modal > footer .edit-generated {
-  box-shadow: none;
+.pill.expired {
+  background: #fde8e8;
+  color: #b4232f;
 }
 
-.document-preview-modal > footer .edit-generated {
-  border-color: #a9c8f8;
-  background: #fff;
-  color: #1559b7;
+.workflow-actions .done-workflow {
+  border-color: #1769e8;
+  background: #1769e8;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(23, 105, 232, .24);
 }
 
 .document-preview-modal > footer .done-generated {
@@ -77,6 +79,17 @@
   border-color: #155eef;
   background: #155eef;
   color: #fff;
+}
+
+.document-completion-modal .archive-yes {
+  border-color: #b4232f;
+  background: #b4232f;
+  color: #fff;
+}
+
+.document-completion-modal .archive-yes:disabled {
+  opacity: .65;
+  cursor: wait;
 }
 
 .document-completion-modal .completion-yes:disabled {

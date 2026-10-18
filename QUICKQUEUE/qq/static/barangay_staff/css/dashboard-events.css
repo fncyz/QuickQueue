@@ -40,6 +40,17 @@
   color: #8649eb;
 }
 
+.dashboard-action-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .dashboard-actions span {
   display: grid;
   min-width: 0;
@@ -212,17 +223,54 @@
   white-space: nowrap;
 }
 
-.open-document {
-  display: inline-block;
+.claim-document {
+  display: inline-flex;
   padding: 10px 13px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: 7px;
   background: #155eef;
   color: #fff;
+  cursor: pointer;
+  font-family: Poppins, Arial, sans-serif;
   font-size: 10px;
   font-weight: 700;
-  text-decoration: none;
   white-space: nowrap;
 }
+
+.dashboard-messages p {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  background: #e9f7ef;
+  color: #087b50;
+}
+
+.dashboard-messages p.error {
+  background: #ffe9eb;
+  color: #bd3541;
+}
+
+.claim-confirmation {
+  width: min(440px, calc(100% - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  color: var(--ink);
+  font-family: Poppins, Arial, sans-serif;
+  box-shadow: 0 24px 70px rgb(5 25 65 / 30%);
+}
+
+.claim-confirmation::backdrop { background: rgb(3 15 42 / 55%); }
+.claim-confirmation section { padding: 24px 24px 16px; }
+.claim-confirmation h2 { margin-bottom: 8px; font-size: 20px; }
+.claim-confirmation p { margin: 0; color: var(--muted); line-height: 1.6; }
+.claim-confirmation footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px 22px; }
+.claim-confirmation button { min-width: 88px; padding: 10px 16px; border-radius: 8px; cursor: pointer; font: 600 12px Poppins,Arial,sans-serif; }
+.claim-confirmation .claim-no { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.claim-confirmation .claim-yes { border: 1px solid #155eef; background: #155eef; color: #fff; }
+.claim-confirmation .claim-yes:disabled { cursor: wait; opacity: .65; }
 
 @media (max-width: 760px) {
   .priority > header {

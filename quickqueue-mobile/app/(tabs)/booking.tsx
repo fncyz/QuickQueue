@@ -17,6 +17,7 @@ import { useConnectivity } from '@/contexts/connectivity';
 import { readOfflineCache, removeOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
+import { availableResidentServices } from '@/services/event-expiration';
 
 type Choice = { id: number; name?: string; label?: string; is_temporary?: boolean; event_start_date?: string | null; event_end_date?: string | null; booking_start_date?: string | null; booking_end_date?: string | null; location?: string; remaining_capacity?: number | null; occupied?: number; capacity?: number; remaining?: number; is_fully_booked?: boolean; is_available?: boolean };
 type BookingProfile = {
@@ -110,11 +111,13 @@ export default function BookingScreen() {
         readOfflineCache<BookingFormData>('bookingForm'),
         readOfflineCache<BookingDraft>('bookingDraft'),
       ]);
+      const cachedServices = availableResidentServices(savedForm?.value.services || []);
       if (savedForm && isActive) {
-        setProfile(savedForm.value.resident); setServices(savedForm.value.services); setTimeSlots(savedForm.value.time_slots);
+        setProfile(savedForm.value.resident); setServices(cachedServices); setTimeSlots(savedForm.value.time_slots);
       }
       if (savedDraft && isActive) {
-        setService(savedDraft.value.service); setTimeSlot(savedDraft.value.timeSlot); setSitio(savedDraft.value.sitio); setPurpose(savedDraft.value.purpose);
+        const cachedServiceIsValid = !savedDraft.value.service || cachedServices.some((item) => item.id === savedDraft.value.service);
+        setService(cachedServiceIsValid ? savedDraft.value.service : ''); setTimeSlot(savedDraft.value.timeSlot); setSitio(savedDraft.value.sitio); setPurpose(savedDraft.value.purpose);
         setDate(savedDraft.value.date ? new Date(`${savedDraft.value.date}T00:00:00`) : null); setHasDraft(true);
       }
       if (!isOnline) { if (isActive) { setDraftReady(true); setLoading(false); } return; }
@@ -128,17 +131,18 @@ export default function BookingScreen() {
         if (!isActive) return;
         setToken(accessToken);
         setProfile(response.data.resident);
-        setServices(response.data.services);
+        const currentServices = availableResidentServices(response.data.services as Choice[]);
+        setServices(currentServices);
         setTimeSlots(response.data.time_slots);
         await writeOfflineCache('bookingForm', response.data as BookingFormData);
         if (savedDraft) {
-          const validService = !savedDraft.value.service || response.data.services.some((item: Choice) => item.id === savedDraft.value.service);
+          const validService = !savedDraft.value.service || currentServices.some((item: Choice) => item.id === savedDraft.value.service);
           const validSlot = !savedDraft.value.timeSlot || response.data.time_slots.some((item: Choice) => item.id === savedDraft.value.timeSlot);
           if (!validService) setService('');
           if (!validSlot) setTimeSlot('');
           if (!validService || !validSlot) Alert.alert('Draft needs review', 'A saved service or time slot is no longer available. Please select another option.');
         }
-        if (params.serviceId && response.data.services.some((item: Choice) => item.id === Number(params.serviceId))) setService(Number(params.serviceId));
+        if (params.serviceId && currentServices.some((item: Choice) => item.id === Number(params.serviceId))) setService(Number(params.serviceId));
       } catch (error: any) {
         if (!savedForm) Alert.alert('Unable to load booking', error?.response?.data?.message || 'Please check your connection and try again.');
       } finally {
