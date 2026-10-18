@@ -63,3 +63,39 @@ class WindowManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["stats"]["active_windows"], 2)
         self.assertContains(response, "Active Windows")
+
+    def test_idle_monitor_lists_only_active_assigned_barangay_windows(self):
+        second_user = User.objects.create_user("window-staff-two", password="secret")
+        second_staff = BarangayStaff.objects.create(
+            barangay=self.barangay,
+            user=second_user,
+            first_name="Second",
+            last_name="Staff",
+            username="window-staff-two",
+            role=BarangayStaff.Role.STAFF,
+        )
+        ServiceWindow.objects.create(
+            barangay=self.barangay, number=1, name="Records Window",
+            assigned_staff=self.staff, is_active=True,
+        )
+        ServiceWindow.objects.create(
+            barangay=self.barangay, number=2, name="Payment Window",
+            assigned_staff=second_staff, is_active=True,
+        )
+        ServiceWindow.objects.create(
+            barangay=self.barangay, number=3, name="Unstaffed Window",
+            is_active=True,
+        )
+
+        response = self.client.get("/barangay/queue/live/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Records Window")
+        self.assertContains(response, "Payment Window")
+        self.assertNotContains(response, "Unstaffed Window")
+
+    def test_idle_monitor_has_clear_empty_window_state(self):
+        response = self.client.get("/barangay/queue/live/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No Available Window")

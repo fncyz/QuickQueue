@@ -50,30 +50,55 @@ def _appointment_details(barangay, pk):
         pk=pk,
     )
     booking = getattr(appointment, "event_booking", None)
+    is_special_service = appointment.service.is_temporary
     status_label = booking.get_status_display() if booking else appointment.get_status_display()
+    appointment_fields = [
+        {"label": "Resident", "value": str(appointment.resident)},
+        {"label": "Service", "value": appointment.service.name},
+        {"label": "Appointment Date", "value": _date(appointment.appointment_date)},
+        {"label": "Time Slot", "value": _slot_label(appointment.time_slot)},
+    ]
+    if is_special_service:
+        appointment_fields.append(
+            {
+                "label": "Booking Reference",
+                "value": booking.booking_reference if booking else "Not available",
+            }
+        )
+    else:
+        appointment_fields.append(
+            {"label": "Queue Number", "value": _value(appointment.queue_number)}
+        )
+    appointment_fields.append({"label": "Status", "value": status_label})
+
+    request_fields = []
+    if not is_special_service:
+        request_fields.extend(
+            [
+                {"label": "Purpose", "value": _value(appointment.purpose)},
+                {"label": "Sitio / Purok", "value": _value(appointment.sitio)},
+            ]
+        )
+    request_fields.extend(
+        [
+            {"label": "Booked On", "value": _date(appointment.created_at, True)},
+            {
+                "label": "Booking Type",
+                "value": "Special Service" if is_special_service else "Regular Service",
+            },
+        ]
+    )
     return {
         "title": "Appointment Details",
         "subtitle": appointment.queue_number or appointment.service.name,
         "sections": [
             {
                 "heading": "Appointment Information",
-                "fields": [
-                    {"label": "Resident", "value": str(appointment.resident)},
-                    {"label": "Service", "value": appointment.service.name},
-                    {"label": "Appointment Date", "value": _date(appointment.appointment_date)},
-                    {"label": "Time Slot", "value": _slot_label(appointment.time_slot)},
-                    {"label": "Queue Number", "value": _value(appointment.queue_number)},
-                    {"label": "Status", "value": status_label},
-                ],
+                "fields": appointment_fields,
             },
             {
                 "heading": "Request Details",
-                "fields": [
-                    {"label": "Purpose", "value": _value(appointment.purpose)},
-                    {"label": "Sitio / Purok", "value": _value(appointment.sitio)},
-                    {"label": "Booked On", "value": _date(appointment.created_at, True)},
-                    {"label": "Booking Type", "value": "Special Service" if appointment.service.is_temporary else "Regular Service"},
-                ],
+                "fields": request_fields,
             },
         ],
     }

@@ -19,3 +19,9 @@
 .live-monitor-page:fullscreen .monitor-logo-slot{width:clamp(72px,5vw,94px);height:clamp(72px,5vw,94px)}
 .live-monitor-page:fullscreen .monitor-logo-slot img{width:100%;height:100%;max-width:none}
 @media(max-width:700px){.monitor-logo-slot{width:38px;height:38px}.monitor-logo-slot img,.monitor-logo-slot img:first-child{width:100%;height:100%}}
+
+/* Keep queue metrics legible and separated from the recent history panel. */
+.serving-metrics .time-slot-value{font-size:clamp(16px,1.4vw,23px);white-space:nowrap}
+.serving-metrics .available-window-list{max-width:190px;font-size:clamp(15px,1.25vw,21px);line-height:1.25;white-space:normal}
+.recently-served{margin-top:24px}
+@media(max-width:700px){.serving-metrics .available-window-list{max-width:none}.serving-metrics .time-slot-value{font-size:clamp(15px,4vw,20px)}}

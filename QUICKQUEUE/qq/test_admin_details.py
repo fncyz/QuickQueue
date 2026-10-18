@@ -10,6 +10,7 @@ from qq.models import (
     Appointment,
     Barangay,
     BarangayStaff,
+    EventBooking,
     QueueTicket,
     Resident,
     Service,
@@ -105,6 +106,57 @@ class BarangayAdminDetailsTests(TestCase):
         self.assertEqual(queue.status_code, 200)
         self.assertIn("Records Window", str(queue.json()["sections"]))
         self.assertIn("Detail Staff", str(queue.json()["sections"]))
+
+    def test_special_service_details_use_booking_reference_and_omit_regular_fields(self):
+        special_service = Service.objects.create(
+            code="EVENT",
+            name="Community Event",
+            description="Special service details",
+            estimated_duration=10,
+            is_temporary=True,
+            barangay=self.barangay,
+        )
+        appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=special_service,
+            appointment_date=timezone.localdate(),
+            queue_number="",
+            purpose="Must not be shown",
+            sitio="Must not be shown",
+            status=Appointment.Status.CONFIRMED,
+        )
+        booking = EventBooking.objects.create(appointment=appointment)
+
+        response = self.client.get(self.detail_url("appointment", appointment.pk))
+
+        self.assertEqual(response.status_code, 200)
+        fields = [
+            field
+            for section in response.json()["sections"]
+            for field in section["fields"]
+        ]
+        labels = {field["label"] for field in fields}
+        values = {field["value"] for field in fields}
+        self.assertIn("Booking Reference", labels)
+        self.assertIn(booking.booking_reference, values)
+        self.assertNotIn("Queue Number", labels)
+        self.assertNotIn("Purpose", labels)
+        self.assertNotIn("Sitio / Purok", labels)
+
+    def test_regular_service_details_keep_queue_purpose_and_sitio(self):
+        response = self.client.get(self.detail_url("appointment", self.appointment.pk))
+
+        fields = [
+            field
+            for section in response.json()["sections"]
+            for field in section["fields"]
+        ]
+        labels = {field["label"] for field in fields}
+        self.assertIn("Queue Number", labels)
+        self.assertIn("Purpose", labels)
+        self.assertIn("Sitio / Purok", labels)
+        self.assertNotIn("Booking Reference", labels)
 
     def test_detail_endpoint_rejects_cross_barangay_records_and_regular_staff(self):
         foreign_user = User.objects.create_user("foreign-detail", password="secret")

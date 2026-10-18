@@ -187,7 +187,15 @@ def barangay_live_queue(request):
     next_in_line = []
     next_wait_minutes = None
     service_window = _service_window_for_user(request.user, barangay)
-    window = service_window.number if service_window else "Unassigned"
+    available_windows = list(
+        ServiceWindow.objects.filter(
+            barangay=barangay,
+            is_active=True,
+            assigned_staff__isnull=False,
+        )
+        .select_related("assigned_staff")
+        .order_by("number")
+    )
 
     if current_slot:
         tickets = _annotate_wait_estimates(
@@ -258,8 +266,8 @@ def barangay_live_queue(request):
             "today": today,
             "current_slot": current_slot,
             "slots": slots,
-            "window_label": window,
             "service_window": service_window,
+            "available_windows": available_windows,
             "tickets": tickets,
             "now_serving": now_serving,
             "waiting_count": waiting_count,
