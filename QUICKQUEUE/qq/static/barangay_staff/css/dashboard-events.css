@@ -145,6 +145,17 @@
   font-style: normal;
 }
 
+.event-list > a > i svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .event-list > a > span {
   display: grid;
   min-width: 0;
@@ -212,6 +223,7 @@
 .priority-tools {
   display: flex;
   align-items: center;
+  margin-left: auto;
   gap: 12px;
 }
 
@@ -277,5 +289,9 @@
     align-items: flex-start;
     gap: 14px;
     flex-direction: column;
+  }
+
+  .priority-tools {
+    align-self: flex-end;
   }
 }

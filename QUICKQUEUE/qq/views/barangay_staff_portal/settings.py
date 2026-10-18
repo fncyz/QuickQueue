@@ -12,7 +12,6 @@ from qq.models import (
     BarangayServiceConfiguration,
     BarangayStaff,
     ClosedAppointmentDate,
-    Notification,
     Service,
 )
 from qq.views.barangay_settings import _update_password, _update_profile
@@ -64,9 +63,6 @@ def staff_settings(request):
         "closed_dates": ClosedAppointmentDate.objects.filter(
             barangay=staff.barangay, date__gte=today
         ).order_by("date"),
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=staff.barangay, admin_is_read=False
-        ).count(),
     })
 
 

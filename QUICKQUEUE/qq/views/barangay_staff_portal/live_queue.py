@@ -4,7 +4,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from qq.models import BarangayStaff, Notification, QueueTicket, Service
+from qq.models import BarangayStaff, QueueTicket, Service
 from qq.services.configuration_service import service_configuration_map
 from qq.views.barangay_live_queue import (
     _annotate_wait_estimates, _resolve_slot, _service_window_for_user, _ticket_queryset,
@@ -88,9 +88,6 @@ def staff_live_queue(request):
         "stats": {"average_service_minutes": average_minutes, "completed_today": completed_today.count(),
                   "waiting_today": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
                   "total_today": today_tickets.count()},
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=barangay, admin_is_read=False
-        ).count(),
     })
 
 

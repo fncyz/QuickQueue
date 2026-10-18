@@ -8,7 +8,6 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from qq.models import Appointment, BarangayStaff, QueueTicket, Service
-from qq.services.notification_service import unread_count_for_user
 
 
 def _staff_for_dashboard(user):
@@ -116,7 +115,6 @@ def staff_dashboard(request):
         ).count(),
         "upcoming_appointments": upcoming,
         "event_services": event_services,
-        "unread_notifications": unread_count_for_user(request.user),
     })
 
 

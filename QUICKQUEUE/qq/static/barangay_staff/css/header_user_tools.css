@@ -1,0 +1,12 @@
+.event-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .event-topbar-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+}

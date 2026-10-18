@@ -17,7 +17,7 @@
   <main class="staff-main event-page">
     <header class="topbar">
       <div><h1>{% if offering %}Edit{% else %}Add{% endif %} Event/Service</h1><p>Set the event dates, booking period, and total participant capacity.</p></div>
-      <a class="secondary" href="{% url 'staff_temporary_services' %}">Back</a>
+      <div class="event-topbar-actions"><a class="secondary" href="{% url 'staff_temporary_services' %}">Back</a>{% include 'barangay_staff/includes/header_user_tools.html' %}</div>
     </header>
     <div class="workspace">
       {% for message in messages %}<div class="flash error">{{ message }}</div>{% endfor %}

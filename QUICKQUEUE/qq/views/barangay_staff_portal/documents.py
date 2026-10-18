@@ -95,9 +95,6 @@ def staff_document_processing(request):
         "ready_count": base.filter(claim_status=QueueTicket.ClaimStatus.READY).count(),
         "services": Service.objects.filter(is_active=True).order_by("name"),
         "filters": {"q": search, "service": service, "date": date_filter, "status": status_filter},
-        "unread_notifications": Notification.objects.filter(
-            appointment__barangay=staff.barangay, admin_is_read=False
-        ).count(),
     }
     if active_tab == "completed":
         context.update(completed_documents_context(request, staff))

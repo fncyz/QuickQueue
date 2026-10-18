@@ -37,6 +37,7 @@ def barangay_notifications(request):
         request.user, role,
     ).filter(barangay=barangay).select_related("resident", "appointment").order_by("-created_at")
     all_count = notifications.count()
+    unread_count = notifications.filter(is_read=False).count()
 
     if request.method == "POST":
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -46,9 +47,9 @@ def barangay_notifications(request):
                 return JsonResponse({"error": "Invalid request."}, status=400)
             notification_id = payload.get("notification_id")
             target = notifications.filter(pk=notification_id) if notification_id else notifications
-            updated = target.filter(is_read=False).update(is_read=True, admin_is_read=True)
+            updated = target.filter(is_read=False).update(is_read=True)
             return JsonResponse({"updated": updated, "unread_count": notifications.filter(is_read=False).count()})
-        updated = notifications.filter(is_read=False).update(is_read=True, admin_is_read=True)
+        updated = notifications.filter(is_read=False).update(is_read=True)
         messages.success(request, f"Marked {updated} notification{'s' if updated != 1 else ''} as read.")
         return redirect("barangay_notifications")
 
@@ -89,5 +90,5 @@ def barangay_notifications(request):
         "is_regular_staff": is_regular_staff,
         "search": search,
         "active_filter": "unread" if unread_only else "all",
-        "unread_notifications": notifications.filter(is_read=False).count(),
+        "unread_notifications": unread_count,
     })

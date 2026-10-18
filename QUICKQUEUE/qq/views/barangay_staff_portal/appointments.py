@@ -141,7 +141,6 @@ def staff_appointments(request):
         "appointments": table_qs.order_by("appointment_date", "time_slot__start_time")[:50],
         "tab": tab, "services": Service.objects.filter(is_active=True).order_by("name"),
         "filters": {"q": search, "service": service, "filter_date": date_filter},
-        "unread_notifications": Notification.objects.filter(appointment__barangay=barangay, admin_is_read=False).count(),
     }
     if tab == "history":
         context.update(resident_history_context(request, staff))

@@ -86,6 +86,90 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Pickup Notifications")
 
+    def test_staff_notification_read_state_is_recipient_scoped_across_portal_pages(self):
+        notification = Notification.objects.create(
+            recipient=self.staff_user,
+            recipient_role=Notification.RecipientRole.STAFF,
+            barangay=self.barangay,
+            notification_type=Notification.NotificationType.STAFF_ALERT,
+            title="Staff workflow alert",
+            message="A test notification for this staff account.",
+        )
+        other_user = User.objects.create_user(username="notification-other-staff", password="secret")
+        BarangayStaff.objects.create(
+            barangay=self.barangay,
+            user=other_user,
+            first_name="Other",
+            last_name="Staff",
+            username="notification-other-staff",
+            role=BarangayStaff.Role.STAFF,
+        )
+        other_notification = Notification.objects.create(
+            recipient=other_user,
+            recipient_role=Notification.RecipientRole.STAFF,
+            barangay=self.barangay,
+            notification_type=Notification.NotificationType.STAFF_ALERT,
+            title="Other staff alert",
+            message="This notification must remain private.",
+        )
+        portal_urls = (
+            "/barangay/staff/dashboard/",
+            "/barangay/staff/appointments/",
+            "/barangay/staff/queue/live/",
+            "/barangay/staff/documents/",
+            "/barangay/staff/events/",
+            "/barangay/staff/events/scanner/",
+            "/barangay/staff/settings/",
+        )
+
+        for url in portal_urls:
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200, url)
+            self.assertEqual(response.context["unread_notifications"], 1, url)
+            bell_markup = response.content.decode().split('class="bell"', 1)[1].split("</a>", 1)[0]
+            self.assertIn("<i></i>", bell_markup, url)
+
+        forbidden = self.client.post(
+            "/barangay/notifications/",
+            data={"notification_id": other_notification.pk},
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forbidden.status_code, 200)
+        self.assertJSONEqual(forbidden.content, {"updated": 0, "unread_count": 1})
+        other_notification.refresh_from_db()
+        self.assertFalse(other_notification.is_read)
+
+        marked = self.client.post(
+            "/barangay/notifications/",
+            data={"notification_id": notification.pk},
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(marked.status_code, 200)
+        self.assertJSONEqual(marked.content, {"updated": 1, "unread_count": 0})
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
+
+        for url in portal_urls:
+            response = self.client.get(url)
+            self.assertEqual(response.context["unread_notifications"], 0, url)
+            bell_markup = response.content.decode().split('class="bell"', 1)[1].split("</a>", 1)[0]
+            self.assertNotIn("<i></i>", bell_markup, url)
+
+        Notification.objects.create(
+            recipient=self.staff_user,
+            recipient_role=Notification.RecipientRole.STAFF,
+            barangay=self.barangay,
+            notification_type=Notification.NotificationType.STAFF_ALERT,
+            title="New staff alert",
+            message="A newly unread notification.",
+        )
+        refreshed = self.client.get("/barangay/staff/settings/")
+        self.assertEqual(refreshed.context["unread_notifications"], 1)
+        bell_markup = refreshed.content.decode().split('class="bell"', 1)[1].split("</a>", 1)[0]
+        self.assertIn("<i></i>", bell_markup)
+
     def test_staff_dashboard_lists_only_its_upcoming_and_active_offerings(self):
         today = timezone.localdate()
         other_barangay = Barangay.objects.create(
@@ -141,6 +225,9 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, visible.name)
         self.assertContains(response, f'/barangay/staff/events/{visible.pk}/edit/')
+        self.assertContains(response, 'class="event-row-icon"')
+        self.assertContains(response, '<svg viewBox="0 0 24 24">')
+        self.assertNotContains(response, "◇")
         self.assertContains(response, "Upcoming")
         self.assertNotContains(response, "Other Barangay Private Event")
         self.assertNotContains(response, "Expired Staff Event")
@@ -279,6 +366,7 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertContains(response, "Are you sure this document has been claimed by the resident?")
         self.assertContains(response, "dashboard-action-icon", count=2)
         self.assertNotContains(response, "Open Document")
+        self.assertNotContains(response, 'class="count"')
         self.assertContains(response, "/barangay/staff/documents/?status=R")
         self.assertNotIn("Processing Resident", priority_section)
         self.assertNotIn("Claimed Resident", priority_section)
