@@ -14,7 +14,7 @@
 <dialog class="document-workflow-modal" id="document-workflow-{{ ticket.pk }}">
 <header class="workflow-head"><div><small>DOCUMENT PROCESSING · QQ-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.appointment_id|stringformat:'06d' }}</small><h2>{{ ticket.appointment.service.name }}</h2></div><button type="button" class="workflow-close" aria-label="Close">&times;</button></header>
 <div class="workflow-body"><div class="assignment"><span class="workflow-avatar">{{ staff.initials }}</span><span><b>Assigned to {{ staff.full_name }}</b><small>Other staff can see that this appointment is being handled.</small></span><em>Processing</em></div>
-<div class="workflow-grid"><div><section class="workflow-card"><h3>Resident Information</h3><dl><dt>Full Name</dt><dd>{{ ticket.appointment.resident }}</dd><dt>Address</dt><dd>{{ ticket.appointment.sitio|default:'—' }}, Barangay {{ barangay.name }}</dd><dt>Contact Number</dt><dd>{{ ticket.appointment.resident.contact_number }}</dd></dl></section><section class="workflow-card"><h3>Appointment Information</h3><dl><dt>Schedule</dt><dd>{{ ticket.appointment.appointment_date|date:'M j, Y' }} · {{ ticket.appointment.time_slot.start_time|time:'g:i A' }}</dd><dt>Purpose</dt><dd>{{ ticket.appointment.purpose|default:'Official document request' }}</dd></dl></section></div>
+<div class="workflow-grid"><div><section class="workflow-card"><h3>Resident Information</h3><dl><dt>Full Name</dt><dd>{{ ticket.appointment.resident }}</dd><dt>Address</dt><dd>{{ ticket.appointment.sitio|default:'—' }}, Barangay {{ barangay.name }}</dd><dt>Contact Number</dt><dd>{{ ticket.appointment.resident.contact_number }}</dd></dl></section><section class="workflow-card"><h3>Appointment Information</h3><dl><dt>Schedule</dt><dd>{{ ticket.appointment.appointment_date|date:'M j, Y' }} · {{ ticket.appointment.time_slot.start_time|time:'g:i A' }}</dd><dt>Purpose</dt><dd class="workflow-purpose"><div class="workflow-purpose-display"><span>{{ ticket.appointment.purpose|default:'Official document request' }}</span><button type="button" class="workflow-purpose-edit">Edit</button></div><form class="workflow-purpose-form" method="post" action="{% url 'staff_processing_document_preview' ticket.pk %}" hidden>{% csrf_token %}<textarea name="purpose" maxlength="500" rows="3" aria-label="Purpose">{{ ticket.appointment.purpose }}</textarea><p class="workflow-purpose-error" role="alert" hidden></p><div><button type="button" class="workflow-purpose-cancel">Cancel</button><button type="submit" class="workflow-purpose-save">Save</button></div></form></dd></dl></section></div>
 <section class="workflow-card checklist"><h3>Document Checklist</h3><article><i>✓</i><span><b>Service identified</b><small>{{ ticket.appointment.service.name }}</small></span></article><article><i>✓</i><span><b>Active template matched</b><small>{{ ticket.appointment.service.name }} Template</small></span></article><article><i>✓</i><span><b>Required information complete</b><small>Resident and appointment fields available</small></span></article><div class="generated-note"><b>Document generated</b><small>Review the document before completing.</small></div><button type="button" class="preview-generated" data-preview="document-preview-{{ ticket.pk }}">Preview Generated Document</button></section></div></div>
 <div class="workflow-actions"><button type="button" class="save-close">Save &amp; Close</button><button type="button" class="done-workflow" data-confirm="document-completion-{{ ticket.pk }}">Done</button></div></dialog>
 <dialog class="document-preview-modal" id="document-preview-{{ ticket.pk }}"><header><div><small>DOCUMENT PREVIEW · DOC-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.pk|stringformat:'06d' }}</small><h2>{{ ticket.appointment.service.name }}</h2></div><button type="button" class="preview-close" aria-label="Close">&times;</button></header><iframe title="Generated {{ ticket.appointment.service.name }}" data-src="{% url 'staff_processing_document_preview' ticket.pk %}?embedded=1"></iframe><footer><a href="{% url 'staff_processing_document_preview' ticket.pk %}?download=1">Download</a><button type="button" class="print-generated">Print</button><button type="button" class="done-generated" data-confirm="document-completion-{{ ticket.pk }}">Done</button></footer></dialog>
@@ -74,6 +74,57 @@ document.querySelectorAll('.complete-document-form').forEach(function(form) {
       yesButton.disabled = false;
       yesButton.textContent = 'Yes';
       window.alert(error.message);
+    });
+  });
+});
+document.querySelectorAll('.workflow-purpose').forEach(function(purposeEditor) {
+  var display = purposeEditor.querySelector('.workflow-purpose-display');
+  var form = purposeEditor.querySelector('.workflow-purpose-form');
+  var textarea = form.querySelector('textarea');
+  var errorMessage = form.querySelector('.workflow-purpose-error');
+  var saveButton = form.querySelector('.workflow-purpose-save');
+
+  purposeEditor.querySelector('.workflow-purpose-edit').addEventListener('click', function() {
+    display.hidden = true;
+    form.hidden = false;
+    errorMessage.hidden = true;
+    textarea.focus();
+  });
+  purposeEditor.querySelector('.workflow-purpose-cancel').addEventListener('click', function() {
+    form.reset();
+    form.hidden = true;
+    display.hidden = false;
+    errorMessage.hidden = true;
+  });
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    if (saveButton.disabled) return;
+    saveButton.disabled = true;
+    errorMessage.hidden = true;
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok) throw new Error(data.error || 'Unable to update Purpose.');
+        return data;
+      });
+    }).then(function(data) {
+      display.querySelector('span').textContent = data.display_purpose;
+      textarea.value = data.purpose;
+      textarea.defaultValue = data.purpose;
+      form.hidden = true;
+      display.hidden = false;
+      var ticketId = form.closest('.document-workflow-modal').id.split('-').pop();
+      var preview = document.getElementById('document-preview-' + ticketId);
+      var frame = preview && preview.querySelector('iframe');
+      if (frame && frame.getAttribute('src')) frame.contentWindow.location.reload();
+    }).catch(function(error) {
+      errorMessage.textContent = error.message;
+      errorMessage.hidden = false;
+    }).finally(function() {
+      saveButton.disabled = false;
     });
   });
 });

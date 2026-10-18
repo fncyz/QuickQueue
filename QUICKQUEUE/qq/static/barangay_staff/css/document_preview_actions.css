@@ -17,6 +17,79 @@
   box-shadow: 0 5px 12px rgba(23, 105, 232, .24);
 }
 
+.workflow-purpose-display {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-purpose-display > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workflow-purpose-edit {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1769e8;
+  font: 600 12px Poppins, sans-serif;
+  cursor: pointer;
+}
+
+.workflow-purpose-form[hidden],
+.workflow-purpose-display[hidden] {
+  display: none;
+}
+
+.workflow-purpose-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #b9c9df;
+  border-radius: 8px;
+  color: #263a61;
+  font: 400 13px/1.5 Poppins, sans-serif;
+  resize: vertical;
+}
+
+.workflow-purpose-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.workflow-purpose-form button {
+  padding: 7px 12px;
+  border: 1px solid #cbd9ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #405676;
+  font: 600 12px Poppins, sans-serif;
+  cursor: pointer;
+}
+
+.workflow-purpose-form .workflow-purpose-save {
+  border-color: #1769e8;
+  background: #1769e8;
+  color: #fff;
+}
+
+.workflow-purpose-form .workflow-purpose-save:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.workflow-purpose-error {
+  margin: 6px 0 0;
+  color: #b4232f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .document-preview-modal > footer .done-generated {
   border-color: #15915f;
   background: #15915f;

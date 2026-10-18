@@ -125,10 +125,21 @@ def staff_document_preview(request, pk):
         appointment = ticket.appointment
         appointment.purpose = edit_form.cleaned_data["purpose"]
         appointment.save(update_fields=["purpose", "updated_at"])
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({
+                "ok": True,
+                "purpose": appointment.purpose,
+                "display_purpose": appointment.purpose or "Official document request",
+            })
         preview_url = reverse("staff_processing_document_preview", args=[ticket.pk])
         if request.GET.get("embedded") == "1":
             preview_url += "?embedded=1"
         return redirect(preview_url)
+    if request.method == "POST" and request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({
+            "ok": False,
+            "error": " ".join(edit_form.errors.get("purpose", ["Unable to update Purpose."])),
+        }, status=400)
     if request.GET.get("download") == "1":
         resident = ticket.appointment.resident
         content = (

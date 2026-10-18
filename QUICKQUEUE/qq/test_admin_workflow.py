@@ -536,6 +536,12 @@ class AdminStaffWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
+        summary = content.split('<section class="summary">', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(summary.count("<article>"), 3)
+        self.assertNotIn("Needs Attention", summary)
+        summary_labels = ["Appointments Today", "Confirmed", "Tomorrow"]
+        summary_positions = [summary.index(label) for label in summary_labels]
+        self.assertEqual(summary_positions, sorted(summary_positions))
         tabs = content.split('<nav class="tabs">', 1)[1].split("</nav>", 1)[0]
         tab_labels = [
             "All Appointments",
@@ -693,6 +699,9 @@ class AdminStaffWorkflowTests(TestCase):
         )
         documents_page = self.client.get("/barangay/staff/documents/")
         self.assertNotContains(documents_page, 'class="edit-generated"')
+        self.assertContains(documents_page, 'class="workflow-purpose-edit">Edit</button>')
+        self.assertContains(documents_page, 'class="workflow-purpose-form"')
+        self.assertContains(documents_page, 'name="purpose"')
         self.assertContains(documents_page, 'class="print-generated"')
         self.assertContains(documents_page, 'class="done-generated"')
         self.assertContains(documents_page, 'class="done-workflow"')
@@ -724,17 +733,32 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertEqual(ticket.appointment.purpose, "Updated employment requirement")
         self.assertNotEqual(ticket.appointment.sitio, "Purok 7")
 
+        modal_saved = self.client.post(
+            preview_url,
+            {"purpose": "Updated directly in processing modal", "sitio": "Purok 9"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(modal_saved.status_code, 200)
+        self.assertJSONEqual(modal_saved.content, {
+            "ok": True,
+            "purpose": "Updated directly in processing modal",
+            "display_purpose": "Updated directly in processing modal",
+        })
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.purpose, "Updated directly in processing modal")
+        self.assertNotEqual(ticket.appointment.sitio, "Purok 9")
+
         refreshed = self.client.get(preview_url)
-        self.assertContains(refreshed, "Updated employment requirement")
+        self.assertContains(refreshed, "Updated directly in processing modal")
         downloaded = self.client.get(f"{preview_url}?download=1")
         self.assertEqual(downloaded["Content-Type"], "text/plain")
-        self.assertContains(downloaded, "Purpose: Updated employment requirement")
+        self.assertContains(downloaded, "Purpose: Updated directly in processing modal")
         self.assertContains(
             downloaded,
             f"Purok / Sitio: {ticket.appointment.sitio or 'Not provided'}",
         )
         printed = self.client.get(f"{preview_url}?print=1")
-        self.assertContains(printed, "Updated employment requirement")
+        self.assertContains(printed, "Updated directly in processing modal")
         self.assertContains(printed, "window.print()")
 
     def test_document_preview_rejects_invalid_edits_without_saving(self):
@@ -756,6 +780,16 @@ class AdminStaffWorkflowTests(TestCase):
         ticket.appointment.refresh_from_db()
         self.assertEqual(ticket.appointment.purpose, "Original purpose")
         self.assertEqual(ticket.appointment.sitio, "Original sitio")
+
+        ajax_response = self.client.post(
+            preview_url,
+            {"purpose": "x" * 501},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(ajax_response.status_code, 400)
+        self.assertIn("at most 500 characters", ajax_response.json()["error"])
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.purpose, "Original purpose")
 
     def test_document_done_marks_ready_once_and_notifies_resident(self):
         ticket = self._ticket("done-preview", "Done", self.service, "C12")
@@ -905,3 +939,13 @@ class AdminStaffWorkflowTests(TestCase):
         ticket.refresh_from_db()
         self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
         self.assertFalse(Notification.objects.filter(appointment=ticket.appointment).exists())
+
+        original_purpose = ticket.appointment.purpose
+        purpose_response = self.client.post(
+            f"/barangay/staff/documents/{ticket.pk}/preview/",
+            {"purpose": "Unauthorized purpose change"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(purpose_response.status_code, 404)
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.purpose, original_purpose)
