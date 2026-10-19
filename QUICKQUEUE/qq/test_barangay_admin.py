@@ -1,13 +1,35 @@
 from datetime import timedelta
+from tempfile import TemporaryDirectory
 
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage, Storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
 from django.urls import reverse
 from django.utils import timezone
 
 from qq.models import Appointment, Barangay, BarangayAdminRegistration, BarangayStaff, DocumentTemplate, Resident, Service
+
+
+class FailingTemplateStorage(Storage):
+    def _open(self, name, mode="rb"):
+        raise OSError("simulated storage outage")
+
+    def _save(self, name, content):
+        raise OSError("simulated storage outage")
+
+    def exists(self, name):
+        return False
+
+
+class SelectiveFailTemplateStorage(FileSystemStorage):
+    def _save(self, name, content):
+        if name.endswith("replacement.docx"):
+            raise OSError("simulated replacement outage")
+        return super()._save(name, content)
 
 
 class BarangayAdminRegistrationManagementTests(TestCase):
@@ -120,6 +142,153 @@ class BarangayAdminRegistrationManagementTests(TestCase):
         self.assertEqual(payload[0]["file_type"], "PDF")
         self.assertEqual(payload[0]["service_name"], service.name)
         self.assertNotContains(response, "Private Bato Template")
+
+    def test_document_template_upload_validation_storage_and_barangay_access(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        service = Service.objects.filter(is_temporary=False).first()
+        filesystem_storages = {
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+
+        with TemporaryDirectory() as media_root, self.settings(
+            STORAGES=filesystem_storages,
+            MEDIA_ROOT=media_root,
+            MEDIA_URL="/media/",
+        ):
+            valid = self.client.post(
+                reverse("api_document_templates"),
+                {
+                    "service": service.pk,
+                    "name": "Clearance DOCX",
+                    "template_file": SimpleUploadedFile(
+                        "clearance.docx",
+                        b"PK\x03\x04test-docx-content",
+                        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                },
+            )
+            self.assertEqual(valid.status_code, 201)
+            template = DocumentTemplate.objects.get(pk=valid.json()["id"])
+            self.assertTrue(template.template_file.storage.exists(template.template_file.name))
+            with template.template_file.open("rb") as stored_file:
+                self.assertEqual(stored_file.read(), b"PK\x03\x04test-docx-content")
+            detail = self.client.get(
+                reverse("api_document_template_detail", args=(template.pk,))
+            )
+            self.assertEqual(detail.status_code, 200)
+            self.assertIn("/media/", detail.json()["file_url"])
+
+            other_admin = User.objects.create_user("bato-template-admin", password="secret")
+            self.other_barangay.user = other_admin
+            self.other_barangay.save(update_fields=["user", "updated_at"])
+            self.client.force_login(other_admin)
+            self.assertEqual(
+                self.client.get(
+                    reverse("api_document_template_detail", args=(template.pk,))
+                ).status_code,
+                404,
+            )
+
+        self.client.force_login(self.superuser)
+        unsupported = self.client.post(
+            reverse("api_document_templates"),
+            {
+                "service": Service.objects.filter(is_temporary=False).exclude(pk=service.pk).first().pk,
+                "name": "Executable",
+                "template_file": SimpleUploadedFile("template.exe", b"invalid"),
+            },
+        )
+        self.assertEqual(unsupported.status_code, 400)
+        self.assertIn("template_file", unsupported.json())
+
+        oversized_service = Service.objects.filter(is_temporary=False).exclude(
+            pk__in=DocumentTemplate.objects.filter(barangay=self.barangay).values("service_id")
+        ).first()
+        oversized = self.client.post(
+            reverse("api_document_templates"),
+            {
+                "service": oversized_service.pk,
+                "name": "Oversized",
+                "template_file": SimpleUploadedFile(
+                    "oversized.docx", b"x" * (10 * 1024 * 1024 + 1)
+                ),
+            },
+        )
+        self.assertEqual(oversized.status_code, 400)
+        self.assertIn("10MB", str(oversized.json()["template_file"]))
+
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "qq.test_barangay_admin.FailingTemplateStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+    )
+    def test_document_template_storage_failure_returns_error_without_database_record(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        service = Service.objects.filter(is_temporary=False).first()
+
+        response = self.client.post(
+            reverse("api_document_templates"),
+            {
+                "service": service.pk,
+                "name": "Unavailable storage",
+                "template_file": SimpleUploadedFile("template.docx", b"test"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("persistent storage", str(response.json()["template_file"]))
+        self.assertFalse(
+            DocumentTemplate.objects.filter(
+                barangay=self.barangay, service=service
+            ).exists()
+        )
+
+    def test_failed_template_replacement_preserves_existing_file_and_record(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        service = Service.objects.filter(is_temporary=False).first()
+        storages = {
+            "default": {"BACKEND": "qq.test_barangay_admin.SelectiveFailTemplateStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        with TemporaryDirectory() as media_root, self.settings(
+            STORAGES=storages, MEDIA_ROOT=media_root, MEDIA_URL="/media/"
+        ):
+            uploaded = self.client.post(
+                reverse("api_document_templates"),
+                {
+                    "service": service.pk,
+                    "name": "Original",
+                    "template_file": SimpleUploadedFile("original.docx", b"original"),
+                },
+            )
+            self.assertEqual(uploaded.status_code, 201)
+            template = DocumentTemplate.objects.get(pk=uploaded.json()["id"])
+            original_name = template.template_file.name
+
+            failed = self.client.patch(
+                reverse("api_document_template_detail", args=(template.pk,)),
+                encode_multipart(
+                    BOUNDARY,
+                    {
+                        "name": "Replacement",
+                        "template_file": SimpleUploadedFile(
+                            "replacement.docx", b"replacement"
+                        ),
+                    },
+                ),
+                content_type=MULTIPART_CONTENT,
+            )
+
+            self.assertEqual(failed.status_code, 503)
+            template.refresh_from_db()
+            self.assertEqual(template.name, "Original")
+            self.assertEqual(template.template_file.name, original_name)
+            self.assertTrue(template.template_file.storage.exists(original_name))
 
     def test_admin_dashboard_special_services_are_scoped_current_and_read_only(self):
         self.barangay.user = self.superuser

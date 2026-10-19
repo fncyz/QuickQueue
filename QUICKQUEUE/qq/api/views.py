@@ -56,6 +56,25 @@ from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 logger = logging.getLogger(__name__)
 
 
+def _delete_stored_file_safely(storage, name):
+    if not name:
+        return
+    try:
+        storage.delete(name)
+    except Exception as error:
+        logger.warning(
+            "Unable to remove a document-template storage object; error_type=%s.",
+            type(error).__name__,
+        )
+
+
+def _storage_failure_response():
+    return Response(
+        {"template_file": ["The template could not be saved to persistent storage. Please try again."]},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
 def _safe_request_id(request):
     value = request.headers.get("X-Request-ID", "")[:64]
     return value if re.fullmatch(r"[A-Za-z0-9._-]+", value) else "not-provided"
@@ -87,7 +106,25 @@ def document_templates_api(request):
     service = serializer.validated_data["service"]
     if DocumentTemplate.objects.filter(barangay=barangay, service=service).exists():
         return Response({"service": ["A template already exists for this service. Use replace instead."]}, status=status.HTTP_400_BAD_REQUEST)
-    template = serializer.save(barangay=barangay, uploaded_by=request.user)
+    template = DocumentTemplate(
+        barangay=barangay,
+        uploaded_by=request.user,
+        **serializer.validated_data,
+    )
+    try:
+        with transaction.atomic():
+            template.save()
+    except Exception as error:
+        if template.template_file and template.template_file._committed:
+            _delete_stored_file_safely(
+                template.template_file.storage, template.template_file.name
+            )
+        logger.error(
+            "Document-template upload failed for barangay_id=%s error_type=%s.",
+            barangay.pk,
+            type(error).__name__,
+        )
+        return _storage_failure_response()
     return Response(DocumentTemplateSerializer(template, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -105,15 +142,47 @@ def document_template_detail_api(request, pk):
     if request.method == "GET":
         return Response(DocumentTemplateSerializer(template, context={"request": request}).data)
     if request.method == "DELETE":
-        template.template_file.delete(save=False)
-        template.delete()
+        storage = template.template_file.storage
+        stored_name = template.template_file.name
+        try:
+            with transaction.atomic():
+                template.delete()
+        except DatabaseError as error:
+            logger.error(
+                "Document-template deletion failed for barangay_id=%s template_id=%s error_type=%s.",
+                barangay.pk,
+                pk,
+                type(error).__name__,
+            )
+            return Response(
+                {"detail": "The template could not be deleted. Please try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        _delete_stored_file_safely(storage, stored_name)
         return Response(status=status.HTTP_204_NO_CONTENT)
     serializer = DocumentTemplateSerializer(template, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
-    if "template_file" in serializer.validated_data:
+    replacing_file = "template_file" in serializer.validated_data
+    old_storage = template.template_file.storage
+    old_name = template.template_file.name
+    if replacing_file:
         template.version += 1
-        template.template_file.delete(save=False)
-    template = serializer.save()
+    try:
+        with transaction.atomic():
+            template = serializer.save()
+    except Exception as error:
+        new_name = template.template_file.name if template.template_file else ""
+        if replacing_file and new_name and new_name != old_name:
+            _delete_stored_file_safely(template.template_file.storage, new_name)
+        logger.error(
+            "Document-template update failed for barangay_id=%s template_id=%s error_type=%s.",
+            barangay.pk,
+            pk,
+            type(error).__name__,
+        )
+        return _storage_failure_response()
+    if replacing_file and old_name and old_name != template.template_file.name:
+        _delete_stored_file_safely(old_storage, old_name)
     return Response(DocumentTemplateSerializer(template, context={"request": request}).data)
 
 
@@ -786,7 +855,7 @@ def queue_status_api(request):
             "time_slot": f"{appointment.time_slot.start_time.strftime('%I:%M %p')} - {appointment.time_slot.end_time.strftime('%I:%M %p')}",
             "barangay": appointment.barangay.name,
             "queue_number": appointment.queue_number,
-            "status": appointment.get_status_display(),
+            "status": appointment.workflow_status_display,
             "status_code": appointment.status,
             "checked_in": bool(resident_ticket and resident_ticket.notes == CHECKED_IN_NOTE),
             "now_serving": now_serving.queue_number if now_serving else "—",
@@ -885,7 +954,7 @@ def transactions_api(request):
                 if (appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)) == 0
                 else f"₱{(appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)):,.2f}"
             ),
-            "status": appointment.get_status_display(),
+            "status": appointment.workflow_status_display,
             "status_code": appointment.status,
             "date_booked": appointment.created_at.strftime("%B %d, %Y"),
             "appointment_date": appointment.appointment_date.strftime("%B %d, %Y") if appointment.appointment_date else "",

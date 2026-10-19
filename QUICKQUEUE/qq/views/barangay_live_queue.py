@@ -398,42 +398,44 @@ def barangay_queue_call_next(request):
 @login_required(login_url="signin")
 @require_POST
 def barangay_queue_complete(request, pk):
-    """Mark a now-serving ticket as completed."""
+    """Finish counter service and begin the non-terminal document workflow."""
     _require_queue_operator(request.user)
     barangay = _barangay_for(request.user)
-    ticket = get_object_or_404(
-        QueueTicket.objects.select_related(
-            "appointment__resident", "appointment__time_slot"
-        ),
-        pk=pk,
-        appointment__barangay=barangay,
-        appointment__service__is_temporary=False,
-    )
     service_window = _service_window_for_user(request.user, barangay)
     is_regular_staff = hasattr(request.user, "staff_profile") and request.user.staff_profile.role != BarangayStaff.Role.ADMIN
-    if is_regular_staff and (not service_window or ticket.service_window_id != service_window.id):
-        messages.error(request, "This queue transaction belongs to another service window.")
-        return _redirect_live_queue(request, ticket.appointment.time_slot_id)
-    if ticket.status != QueueTicket.Status.NOW_SERVING:
-        messages.error(request, "Only a now-serving ticket can be completed.")
-        return _redirect_live_queue(request, ticket.appointment.time_slot_id)
+    with transaction.atomic():
+        ticket = get_object_or_404(
+            QueueTicket.objects.select_for_update().select_related(
+                "appointment__resident", "appointment__time_slot"
+            ),
+            pk=pk,
+            appointment__barangay=barangay,
+            appointment__service__is_temporary=False,
+        )
+        if is_regular_staff and (not service_window or ticket.service_window_id != service_window.id):
+            messages.error(request, "This queue transaction belongs to another service window.")
+            return _redirect_live_queue(request, ticket.appointment.time_slot_id)
+        if ticket.status != QueueTicket.Status.NOW_SERVING:
+            messages.error(request, "Only a now-serving ticket can be completed.")
+            return _redirect_live_queue(request, ticket.appointment.time_slot_id)
 
-    now = timezone.now()
-    ticket.status = QueueTicket.Status.COMPLETED
-    ticket.completed_at = now
-    ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
-    if not ticket.requirements:
-        ticket.requirements = "Valid ID"
-    ticket.save(update_fields=["status", "completed_at", "claim_status", "requirements", "updated_at"])
-    ticket.appointment.status = Appointment.Status.COMPLETED
-    ticket.appointment.save(update_fields=["status", "updated_at"])
+        now = timezone.now()
+        ticket.status = QueueTicket.Status.COMPLETED
+        ticket.completed_at = now
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        if not ticket.requirements:
+            ticket.requirements = "Valid ID"
+        ticket.save(update_fields=["status", "completed_at", "claim_status", "requirements", "updated_at"])
+        if ticket.appointment.status not in (Appointment.Status.CANCELLED, Appointment.Status.MISSED):
+            ticket.appointment.status = Appointment.Status.ONGOING
+            ticket.appointment.save(update_fields=["status", "updated_at"])
 
     Notification.objects.create(
         resident=ticket.appointment.resident,
         appointment=ticket.appointment,
-        notification_type=Notification.NotificationType.APPOINTMENT_COMPLETED,
-        title="Service Completed",
-        message=f"Your queue number {ticket.queue_number} has been completed.",
+        notification_type=Notification.NotificationType.DOCUMENT_UPDATE,
+        title="Document Processing Started",
+        message=f"Counter service for {ticket.queue_number} is complete. Your document is now being processed.",
     )
 
     messages.success(request, f"Completed {ticket.queue_number}.")

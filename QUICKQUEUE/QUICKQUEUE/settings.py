@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'storages',
     'qq',
     'crispy_forms',
     'crispy_bootstrap5',
@@ -159,12 +160,54 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
-MEDIA_URL = 'media/'
+if IS_PRODUCTION:
+    storage_environment = {
+        "bucket_name": os.environ.get("SUPABASE_STORAGE_BUCKET"),
+        "endpoint_url": os.environ.get("SUPABASE_STORAGE_ENDPOINT"),
+        "region_name": os.environ.get("SUPABASE_STORAGE_REGION"),
+        "access_key": os.environ.get("SUPABASE_STORAGE_ACCESS_KEY_ID"),
+        "secret_key": os.environ.get("SUPABASE_STORAGE_SECRET_ACCESS_KEY"),
+    }
+    storage_environment_names = {
+        "bucket_name": "SUPABASE_STORAGE_BUCKET",
+        "endpoint_url": "SUPABASE_STORAGE_ENDPOINT",
+        "region_name": "SUPABASE_STORAGE_REGION",
+        "access_key": "SUPABASE_STORAGE_ACCESS_KEY_ID",
+        "secret_key": "SUPABASE_STORAGE_SECRET_ACCESS_KEY",
+    }
+    missing_storage_settings = [
+        storage_environment_names[name]
+        for name, value in storage_environment.items()
+        if not value
+    ]
+    if missing_storage_settings:
+        raise ImproperlyConfigured(
+            "Persistent Supabase Storage is required in production. Missing: "
+            + ", ".join(missing_storage_settings)
+        )
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            **storage_environment,
+            "default_acl": None,
+            "file_overwrite": False,
+            "querystring_auth": True,
+            "querystring_expire": 300,
+            "signature_version": "s3v4",
+            "addressing_style": "path",
+            "location": "quickqueue",
+        },
+    }
+
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 EMAIL_BACKEND = "qq.backends.email_backend.EmailBackend"

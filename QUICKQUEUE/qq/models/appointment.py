@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 
 from .barangay import Barangay
@@ -103,3 +104,32 @@ class Appointment(models.Model):
             f"{self.queue_number} | "
             f"{self.resident.first_name} {self.resident.last_name}"
         )
+
+    @property
+    def workflow_status_display(self):
+        """Return the status of the full service-and-document workflow."""
+        if self.status in (self.Status.CANCELLED, self.Status.MISSED):
+            return self.get_status_display()
+        try:
+            claim_status = self.queue_ticket.claim_status
+        except ObjectDoesNotExist:
+            return self.get_status_display()
+        return {
+            "P": "Processing",
+            "R": "Ready for Pickup",
+            "L": "Completed",
+        }.get(claim_status, self.get_status_display())
+
+    @property
+    def workflow_status_code(self):
+        if self.status in (self.Status.CANCELLED, self.Status.MISSED):
+            return self.status.lower()
+        try:
+            claim_status = self.queue_ticket.claim_status
+        except ObjectDoesNotExist:
+            claim_status = ""
+        return {
+            "P": "processing",
+            "R": "ready",
+            "L": "completed",
+        }.get(claim_status, self.status.lower())

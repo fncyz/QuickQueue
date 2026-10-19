@@ -38,7 +38,11 @@ def mark_document_claimed(ticket, *, claimed_at=None):
     ticket.save(update_fields=update_fields)
 
     appointment = ticket.appointment
-    if appointment.status != Appointment.Status.COMPLETED:
+    if appointment.status not in (
+        Appointment.Status.COMPLETED,
+        Appointment.Status.CANCELLED,
+        Appointment.Status.MISSED,
+    ):
         appointment.status = Appointment.Status.COMPLETED
         appointment.save(update_fields=["status", "updated_at"])
     return True

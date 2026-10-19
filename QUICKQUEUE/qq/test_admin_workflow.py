@@ -326,6 +326,20 @@ class AdminStaffWorkflowTests(TestCase):
         event_ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
         event_ticket.save(update_fields=["claim_status", "updated_at"])
 
+        admin_client = APIClient()
+        admin_client.force_login(self.admin_user)
+        special_appointments = admin_client.get(
+            "/barangay/appointments/",
+            {"special_q": event_booking.booking_reference},
+        )
+        self.assertEqual(special_appointments.status_code, 200)
+        special_section = special_appointments.content.decode().split(
+            'id="special-services"', 1
+        )[1]
+        self.assertIn("Booking Reference", special_section)
+        self.assertIn(event_booking.booking_reference, special_section)
+        self.assertNotIn("Queue No.", special_section)
+
         appointments = self.client.get(
             f"/barangay/staff/appointments/?date={today.isoformat()}"
         )
@@ -474,6 +488,70 @@ class AdminStaffWorkflowTests(TestCase):
         pending.refresh_from_db()
         self.assertEqual(scanned.status, EventBooking.Status.CHECKED_IN)
         self.assertEqual(pending.status, EventBooking.Status.CONFIRMED)
+
+    def test_counter_completion_ready_and_claim_follow_single_consistent_lifecycle(self):
+        window = ServiceWindow.objects.create(
+            barangay=self.barangay,
+            number=1,
+            name="Window 1",
+            assigned_staff=self.staff,
+        )
+        ticket = self._ticket(
+            "lifecycle-resident", "Lifecycle", self.service, "L01", checked_in=True
+        )
+        ticket.status = QueueTicket.Status.NOW_SERVING
+        ticket.service_window = window
+        ticket.save(update_fields=["status", "service_window", "updated_at"])
+        ticket.appointment.status = Appointment.Status.ONGOING
+        ticket.appointment.save(update_fields=["status", "updated_at"])
+
+        counter_done = self.client.post(f"/barangay/queue/{ticket.pk}/complete/")
+        self.assertEqual(counter_done.status_code, 302)
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.status, QueueTicket.Status.COMPLETED)
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.ONGOING)
+        self.assertEqual(ticket.appointment.workflow_status_display, "Processing")
+
+        dashboard = self.client.get("/barangay/staff/dashboard/")
+        self.assertEqual(dashboard.context["processing_documents"], 1)
+        self.assertIsNone(dashboard.context["now_serving"])
+
+        ready = self.client.post(
+            f"/barangay/staff/documents/{ticket.pk}/preview/",
+            {"action": "complete"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(ready.status_code, 200)
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.READY)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.ONGOING)
+        self.assertEqual(ticket.appointment.workflow_status_display, "Ready for Pickup")
+        self.assertEqual(
+            self.client.get("/barangay/staff/dashboard/").context["processing_documents"],
+            0,
+        )
+
+        resident_client = APIClient()
+        resident_client.force_authenticate(ticket.appointment.resident.user)
+        self.assertEqual(
+            resident_client.get("/api/queue-status/").data["appointment"]["status"],
+            "Ready for Pickup",
+        )
+
+        claimed = self.client.post(
+            f"/barangay/staff/dashboard/documents/{ticket.pk}/claim/"
+        )
+        self.assertEqual(claimed.status_code, 302)
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.CLAIMED)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.COMPLETED)
+        self.assertIsNone(
+            resident_client.get("/api/queue-status/").data["appointment"]
+        )
 
     def test_dashboard_priority_tasks_show_only_barangay_ready_documents_once(self):
         ready = self._ticket("priority-ready", "Ready", self.service, "D01")

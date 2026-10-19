@@ -145,6 +145,7 @@ def barangay_appointments(request):
             Q(resident__first_name__icontains=special_search)
             | Q(resident__last_name__icontains=special_search)
             | Q(service__name__icontains=special_search)
+            | Q(event_booking__booking_id__icontains=special_search.removeprefix("EVT-"))
         )
     if special_service_id.isdigit():
         filtered_special = filtered_special.filter(service_id=int(special_service_id))
