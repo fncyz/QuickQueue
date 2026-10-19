@@ -116,6 +116,9 @@ class SuperAdminAccountManagementTests(TestCase):
 
         self.assertContains(response, "Back to Barangay Admins")
         self.assertContains(response, "You have unsaved changes")
+        self.assertContains(response, 'id="admin-modal" class="barangay-modal" open')
+        self.assertContains(response, "removeAttribute('open');modal.showModal()")
+        self.assertContains(response, "modal.addEventListener('cancel'")
         self.assertEqual(response.context["return_url"], return_to)
 
     def test_activation_controls_user_and_admin_profile(self):

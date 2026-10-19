@@ -3,6 +3,7 @@ from datetime import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from qq.models import Barangay, BarangayStaff, Notification, QueueTicket
 from qq.services.notification_service import notify_resident
+from qq.services.queue_service import mark_document_claimed
 
 
 def _barangay_for(user):
@@ -185,26 +187,23 @@ def barangay_mark_claim_ready(request, pk):
 def barangay_mark_claimed(request, pk):
     """Mark a ready document as claimed by the resident."""
     barangay = _barangay_for(request.user)
-    ticket = get_object_or_404(
-        QueueTicket.objects.select_related("appointment"),
-        pk=pk,
-        appointment__barangay=barangay,
-        status=QueueTicket.Status.COMPLETED,
-    )
-    if ticket.claim_status != QueueTicket.ClaimStatus.READY:
-        messages.error(request, "Only ready documents can be marked as claimed.")
-        return _redirect_history()
-
-    ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
-    ticket.claimed_at = timezone.now()
-    ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
-
-    Notification.objects.create(
-        resident=ticket.appointment.resident,
-        appointment=ticket.appointment,
-        notification_type=Notification.NotificationType.QUEUE_UPDATE,
-        title="Document Claimed",
-        message=f"Queue number {ticket.queue_number} has been marked as claimed.",
-    )
+    with transaction.atomic():
+        ticket = get_object_or_404(
+            QueueTicket.objects.select_for_update().select_related("appointment"),
+            pk=pk,
+            appointment__barangay=barangay,
+            status=QueueTicket.Status.COMPLETED,
+        )
+        if ticket.claim_status != QueueTicket.ClaimStatus.READY:
+            messages.error(request, "Only ready documents can be marked as claimed.")
+            return _redirect_history()
+        mark_document_claimed(ticket)
+        notify_resident(
+            appointment=ticket.appointment,
+            notification_type=Notification.NotificationType.QUEUE_UPDATE,
+            title="Document Claimed",
+            message=f"Queue number {ticket.queue_number} has been marked as claimed.",
+            event_key=f"ticket:{ticket.pk}:document-claimed",
+        )
     messages.success(request, f"{ticket.queue_number} marked as claimed.")
     return _redirect_history()

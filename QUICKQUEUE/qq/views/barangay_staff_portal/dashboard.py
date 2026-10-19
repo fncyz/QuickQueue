@@ -7,7 +7,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from qq.models import Appointment, BarangayStaff, QueueTicket, Service
+from qq.models import Appointment, BarangayStaff, Notification, QueueTicket, Service
+from qq.services.notification_service import notify_resident
+from qq.services.queue_service import mark_document_claimed
 
 
 def _staff_for_dashboard(user):
@@ -45,9 +47,12 @@ def staff_dashboard(request):
         "appointment__resident", "appointment__service", "appointment__time_slot"
     )
     today_tickets = tickets.filter(appointment__appointment_date=today)
-    now_serving = today_tickets.filter(status=QueueTicket.Status.NOW_SERVING).first()
+    active_today_tickets = today_tickets.exclude(
+        claim_status=QueueTicket.ClaimStatus.CLAIMED
+    )
+    now_serving = active_today_tickets.filter(status=QueueTicket.Status.NOW_SERVING).first()
     waiting_tickets = list(
-        today_tickets.filter(status=QueueTicket.Status.WAITING).order_by(
+        active_today_tickets.filter(status=QueueTicket.Status.WAITING).order_by(
             "appointment__time_slot__start_time", "queue_number"
         )[:3]
     )
@@ -110,7 +115,7 @@ def staff_dashboard(request):
         "today": today,
         "greeting": greeting,
         "now_serving": now_serving,
-        "waiting": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
+        "waiting": active_today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
         "waiting_tickets": waiting_tickets,
         "ready_documents": ready_documents,
         "ready_count": ready_count,
@@ -139,8 +144,13 @@ def staff_dashboard_mark_claimed(request, pk):
         if ticket.claim_status != QueueTicket.ClaimStatus.READY:
             messages.error(request, "Only documents that are ready for pickup can be marked as claimed.")
             return redirect("staff_dashboard")
-        ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
-        ticket.claimed_at = timezone.now()
-        ticket.save(update_fields=["claim_status", "claimed_at", "updated_at"])
+        mark_document_claimed(ticket)
+        notify_resident(
+            appointment=ticket.appointment,
+            notification_type=Notification.NotificationType.QUEUE_UPDATE,
+            title="Document Claimed",
+            message=f"Queue number {ticket.queue_number} has been marked as claimed.",
+            event_key=f"ticket:{ticket.pk}:document-claimed",
+        )
     messages.success(request, f"{ticket.queue_number} was marked as claimed.")
     return redirect("staff_dashboard")

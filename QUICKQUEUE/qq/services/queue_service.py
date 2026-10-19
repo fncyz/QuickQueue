@@ -1,4 +1,5 @@
 from django.db.models import Max, Q
+from django.utils import timezone
 
 from qq.models import Appointment, QueueTicket
 
@@ -8,7 +9,39 @@ CHECKED_IN_NOTE = "Resident checked in and is waiting at the barangay."
 
 def live_queue_participation_q():
     """Waiting tickets participate only after check-in; progressed tickets stay visible."""
-    return Q(notes=CHECKED_IN_NOTE) | ~Q(status=QueueTicket.Status.WAITING)
+    return (
+        (Q(notes=CHECKED_IN_NOTE) | ~Q(status=QueueTicket.Status.WAITING))
+        & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)
+    )
+
+
+def mark_document_claimed(ticket, *, claimed_at=None):
+    """Apply the terminal document-claim transition to a locked queue ticket.
+
+    Callers must obtain the ticket with ``select_for_update()`` inside an atomic
+    transaction. Ready for Pickup remains non-terminal; only an actual claim
+    closes any lingering active queue/appointment state.
+    """
+    if ticket.claim_status == QueueTicket.ClaimStatus.CLAIMED:
+        return False
+    if ticket.claim_status != QueueTicket.ClaimStatus.READY:
+        raise ValueError("Only documents that are ready for pickup can be marked as claimed.")
+
+    now = claimed_at or timezone.now()
+    ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
+    ticket.claimed_at = now
+    update_fields = ["claim_status", "claimed_at", "updated_at"]
+    if ticket.status in (QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING):
+        ticket.status = QueueTicket.Status.COMPLETED
+        ticket.completed_at = ticket.completed_at or now
+        update_fields.extend(["status", "completed_at"])
+    ticket.save(update_fields=update_fields)
+
+    appointment = ticket.appointment
+    if appointment.status != Appointment.Status.COMPLETED:
+        appointment.status = Appointment.Status.COMPLETED
+        appointment.save(update_fields=["status", "updated_at"])
+    return True
 
 
 def generate_queue_number(barangay, service, appointment_date):

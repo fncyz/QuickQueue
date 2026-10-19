@@ -38,15 +38,17 @@ def barangay_dashboard(request):
     ticket_totals = tickets.aggregate(
         total=Count("id"),
         completed=Count("id", filter=Q(status=QueueTicket.Status.COMPLETED)),
-        waiting=Count("id", filter=Q(status=QueueTicket.Status.WAITING)),
-        serving=Count("id", filter=Q(status=QueueTicket.Status.NOW_SERVING)),
+        waiting=Count("id", filter=Q(status=QueueTicket.Status.WAITING) & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)),
+        serving=Count("id", filter=Q(status=QueueTicket.Status.NOW_SERVING) & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)),
         missed=Count("id", filter=Q(status=QueueTicket.Status.MISSED)),
         cancelled=Count("id", filter=Q(status=QueueTicket.Status.CANCELLED)),
     )
     completed = ticket_totals["completed"]
     waiting = ticket_totals["waiting"]
     serving_count = ticket_totals["serving"]
-    now_serving = tickets.filter(status=QueueTicket.Status.NOW_SERVING).first()
+    now_serving = tickets.exclude(
+        claim_status=QueueTicket.ClaimStatus.CLAIMED
+    ).filter(status=QueueTicket.Status.NOW_SERVING).first()
     no_show = ticket_totals["missed"]
     cancelled = ticket_totals["cancelled"]
     total_tickets = ticket_totals["total"]

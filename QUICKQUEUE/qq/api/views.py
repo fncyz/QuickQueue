@@ -711,7 +711,13 @@ def queue_status_api(request):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 if ticket.notes == CHECKED_IN_NOTE:
-                    return Response({"success": True, "message": "You are already checked in."})
+                    return Response({
+                        "success": True,
+                        "changed": False,
+                        "checked_in": True,
+                        "staff_notification_created": False,
+                        "message": "You are already checked in.",
+                    })
                 if appointment.status != Appointment.Status.CONFIRMED or ticket.status != QueueTicket.Status.WAITING:
                     return Response(
                         {"message": "This appointment is not eligible for check-in."},
@@ -719,18 +725,27 @@ def queue_status_api(request):
                     )
                 ticket.notes = CHECKED_IN_NOTE
                 ticket.save(update_fields=["notes", "updated_at"])
-            notify_barangay_staff(
-                appointment=appointment,
-                title="Resident Checked In",
-                message=(f"{resident} has successfully checked in for {appointment.service.name}. "
-                         f"Queue Number: {appointment.queue_number}."),
-                event_key=f"appointment:{appointment.pk}:staff-check-in",
-            )
-            return Response({"success": True, "message": "You are checked in. Barangay staff have been notified."})
+                staff_notifications = notify_barangay_staff(
+                    appointment=appointment,
+                    title="Resident Checked In",
+                    message=(f"{resident} has successfully checked in for {appointment.service.name}. "
+                             f"Queue Number: {appointment.queue_number}."),
+                    event_key=f"appointment:{appointment.pk}:staff-check-in",
+                )
+            return Response({
+                "success": True,
+                "changed": True,
+                "checked_in": True,
+                "staff_notification_created": bool(staff_notifications),
+                "message": (
+                    "You have successfully checked in for your appointment. Barangay staff "
+                    "have been notified. Please wait for your queue number to be called."
+                ),
+            })
 
         return Response({"message": "Invalid queue action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    appointment = resident.appointments.select_related("service", "barangay", "time_slot").exclude(
+    appointment = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket").exclude(
         service__is_temporary=True,
     ).filter(
         appointment_date__gte=timezone.localdate(),
@@ -738,6 +753,10 @@ def queue_status_api(request):
     ).order_by("appointment_date", "time_slot__start_time").first()
     if not appointment:
         return Response({"appointment": None})
+    try:
+        resident_ticket = appointment.queue_ticket
+    except QueueTicket.DoesNotExist:
+        resident_ticket = None
 
     queue = QueueTicket.objects.filter(
         live_queue_participation_q(),
@@ -769,6 +788,7 @@ def queue_status_api(request):
             "queue_number": appointment.queue_number,
             "status": appointment.get_status_display(),
             "status_code": appointment.status,
+            "checked_in": bool(resident_ticket and resident_ticket.notes == CHECKED_IN_NOTE),
             "now_serving": now_serving.queue_number if now_serving else "—",
             "people_ahead": people_ahead,
             "estimated_wait": people_ahead * effective_service_duration(

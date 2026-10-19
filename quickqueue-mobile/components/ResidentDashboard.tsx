@@ -70,13 +70,11 @@ export function ResidentDashboard() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
   const [refreshRevision, setRefreshRevision] = useState(0);
-  const lastFreshLoad = useRef(0);
   const loadInFlight = useRef(false);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        lastFreshLoad.current = 0;
         setRefreshRevision((value) => value + 1);
       }
     });
@@ -97,7 +95,6 @@ export function ResidentDashboard() {
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
       }
       if (!isOnline) return;
-      if (Date.now() - lastFreshLoad.current < 30000) return;
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return;
         const config = { headers: { Authorization: `Bearer ${accessToken}` } };
@@ -113,7 +110,6 @@ export function ResidentDashboard() {
         setServices(bookingResponse.data.services);
         setTemporaryServices(activeTemporaryListings(bookingResponse.data.temporary_services || []));
         setActiveAppointment(queueResponse.data.appointment);
-        lastFreshLoad.current = Date.now();
         const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`);
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
         await setCurrentAccountId(profileResponse.data.username);

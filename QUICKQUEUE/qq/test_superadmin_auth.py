@@ -431,6 +431,9 @@ class SuperAdminBarangayManagementTests(TestCase):
 
         self.assertContains(response, "Back to Barangays")
         self.assertContains(response, "You have unsaved changes")
+        self.assertContains(response, 'id="barangay-modal" class="barangay-modal" open')
+        self.assertContains(response, "removeAttribute('open');modal.showModal()")
+        self.assertContains(response, "modal.addEventListener('cancel'")
         self.assertEqual(response.context["return_url"], return_to)
 
     def test_search_status_sorting_and_pagination(self):

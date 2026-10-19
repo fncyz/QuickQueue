@@ -538,11 +538,18 @@ class AdminStaffWorkflowTests(TestCase):
     def test_dashboard_claim_action_is_locked_scoped_and_idempotent(self):
         ready = self._ticket("claim-ready", "Claim Ready", self.service, "D05")
         ready.claim_status = QueueTicket.ClaimStatus.READY
-        ready.save(update_fields=["claim_status", "updated_at"])
-        original_queue_status = ready.status
-        original_appointment_status = ready.appointment.status
+        ready.status = QueueTicket.Status.NOW_SERVING
+        ready.notes = CHECKED_IN_NOTE
+        ready.save(update_fields=["claim_status", "status", "notes", "updated_at"])
+        ready.appointment.status = Appointment.Status.ONGOING
+        ready.appointment.save(update_fields=["status", "updated_at"])
         notification_count = Notification.objects.count()
         claim_url = f"/barangay/staff/dashboard/documents/{ready.pk}/claim/"
+
+        staff_queue_before = self.client.get(
+            f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+        )
+        self.assertIn(ready.pk, [item.pk for item in staff_queue_before.context["tickets"]])
 
         get_response = self.client.get(claim_url)
         self.assertEqual(get_response.status_code, 405)
@@ -556,9 +563,27 @@ class AdminStaffWorkflowTests(TestCase):
         ready.appointment.refresh_from_db()
         self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.CLAIMED)
         self.assertIsNotNone(ready.claimed_at)
-        self.assertEqual(ready.status, original_queue_status)
-        self.assertEqual(ready.appointment.status, original_appointment_status)
-        self.assertEqual(Notification.objects.count(), notification_count)
+        self.assertEqual(ready.status, QueueTicket.Status.COMPLETED)
+        self.assertEqual(ready.appointment.status, Appointment.Status.COMPLETED)
+        self.assertEqual(Notification.objects.count(), notification_count + 1)
+        staff_queue_after = self.client.get(
+            f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+        )
+        self.assertNotIn(ready.pk, [item.pk for item in staff_queue_after.context["tickets"]])
+        admin_client = APIClient()
+        admin_client.force_login(self.admin_user)
+        admin_monitor = admin_client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+        self.assertNotIn(ready.pk, [item.pk for item in admin_monitor.context["tickets"]])
+        self.assertIsNone(admin_monitor.context["now_serving"])
+        admin_dashboard = admin_client.get("/barangay/dashboard/")
+        self.assertIsNone(admin_dashboard.context["now_serving"])
+        resident_client = APIClient()
+        resident_client.force_authenticate(ready.appointment.resident.user)
+        self.assertIsNone(resident_client.get("/api/queue-status/").data["appointment"])
+        history = resident_client.get("/api/transactions/")
+        claimed_record = next(item for item in history.data["transactions"] if item["id"] == ready.appointment_id)
+        self.assertEqual(claimed_record["status_code"], Appointment.Status.COMPLETED)
+        self.assertIsNotNone(claimed_record["date_claimed"])
         claimed_priority = claimed.content.decode().split('<section class="priority"', 1)[1].split(
             '<section class="lower">', 1
         )[0]
@@ -574,7 +599,7 @@ class AdminStaffWorkflowTests(TestCase):
         ready.refresh_from_db()
         self.assertEqual(ready.claim_status, QueueTicket.ClaimStatus.CLAIMED)
         self.assertEqual(ready.claimed_at, claimed_at)
-        self.assertEqual(Notification.objects.count(), notification_count)
+        self.assertEqual(Notification.objects.count(), notification_count + 1)
 
         foreign = self._ticket("claim-foreign", "Claim Foreign", self.service, "D06")
         foreign.claim_status = QueueTicket.ClaimStatus.READY
@@ -783,8 +808,22 @@ class AdminStaffWorkflowTests(TestCase):
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
+        self.assertTrue(first.data["changed"])
+        self.assertTrue(first.data["checked_in"])
+        self.assertTrue(first.data["staff_notification_created"])
+        self.assertFalse(second.data["changed"])
+        self.assertTrue(second.data["checked_in"])
+        self.assertEqual(
+            Notification.objects.filter(
+                appointment=ticket.appointment,
+                title="Resident Checked In",
+            ).count(),
+            1,
+        )
         ticket.refresh_from_db()
         self.assertEqual(ticket.notes, CHECKED_IN_NOTE)
+        status_response = resident_client.get("/api/queue-status/")
+        self.assertTrue(status_response.data["appointment"]["checked_in"])
         self.client.force_login(self.admin_user)
         monitor = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
         self.assertEqual([item.pk for item in monitor.context["tickets"]], [ticket.pk])

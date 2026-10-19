@@ -28,6 +28,8 @@ class SuperAdminSettingsTests(TestCase):
         self.assertContains(response, "PostgreSQL (Supabase)")
         self.assertContains(response, "Vercel")
         self.assertContains(response, "Asia/Manila")
+        self.assertContains(response, "Password Policy")
+        self.assertContains(response, "settings.css")
         self.assertNotContains(response, "SECRET_KEY")
         self.assertNotContains(response, "DATABASE_URL")
         self.assertTemplateUsed(response, "superadmin/components/sidebar.html")
