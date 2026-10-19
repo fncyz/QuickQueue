@@ -1,5 +1,8 @@
 from datetime import timedelta
+from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
+from zipfile import ZipFile
 
 from django.contrib import admin
 from django.contrib.auth.models import User
@@ -59,6 +62,17 @@ class BarangayAdminRegistrationManagementTests(TestCase):
         return self.client.post(
             reverse("admin:qq_barangayadminregistration_add"), self._registration_data(),
         )
+
+    @staticmethod
+    def _docx_bytes(text="QuickQueue DOCX preview"):
+        output = BytesIO()
+        with ZipFile(output, "w") as archive:
+            archive.writestr(
+                "word/document.xml",
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                f"<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>",
+            )
+        return output.getvalue()
 
     def test_superuser_can_create_barangay_without_registration(self):
         response = self.client.post(reverse("admin:qq_barangay_add"), {
@@ -142,6 +156,71 @@ class BarangayAdminRegistrationManagementTests(TestCase):
         self.assertEqual(payload[0]["file_type"], "PDF")
         self.assertEqual(payload[0]["service_name"], service.name)
         self.assertNotContains(response, "Private Bato Template")
+
+    def test_document_template_preview_and_download_are_separate_and_barangay_scoped(self):
+        self.barangay.user = self.superuser
+        self.barangay.save(update_fields=["user", "updated_at"])
+        service = Service.objects.filter(is_temporary=False).first()
+        storages = {
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        with TemporaryDirectory() as media_root, self.settings(
+            STORAGES=storages, MEDIA_ROOT=media_root, MEDIA_URL="/media/"
+        ):
+            template = DocumentTemplate.objects.create(
+                barangay=self.barangay,
+                service=service,
+                name="Previewable Clearance",
+                template_file=SimpleUploadedFile(
+                    "clearance-original.docx", self._docx_bytes()
+                ),
+                uploaded_by=self.superuser,
+            )
+
+            preview = self.client.get(
+                reverse("barangay_document_template_preview", args=(template.pk,))
+            )
+            self.assertEqual(preview.status_code, 200)
+            self.assertContains(preview, "QuickQueue DOCX preview")
+            self.assertContains(preview, "Simplified browser preview")
+            self.assertNotIn("attachment", preview.headers.get("Content-Disposition", ""))
+
+            download = self.client.get(
+                reverse("barangay_document_template_download", args=(template.pk,))
+            )
+            self.assertEqual(download.status_code, 200)
+            self.assertIn("attachment", download["Content-Disposition"])
+            self.assertIn("clearance-original.docx", download["Content-Disposition"])
+            self.assertEqual(b"".join(download.streaming_content), self._docx_bytes())
+
+            api_payload = self.client.get(reverse("api_document_templates")).json()[0]
+            self.assertIn(f"/{template.pk}/preview/", api_payload["preview_url"])
+            self.assertIn(f"/{template.pk}/download/", api_payload["download_url"])
+
+            page = self.client.get(reverse("barangay_document_templates"))
+            self.assertContains(page, 'id="template-viewer"')
+            script = Path("qq/static/qq/js/document_templates.js").read_text(encoding="utf-8")
+            self.assertIn("View Template", script)
+            self.assertIn("Download Template", script)
+            self.assertNotIn("View / Download", script)
+
+            other_admin = User.objects.create_user("private-template-admin", password="secret")
+            self.other_barangay.user = other_admin
+            self.other_barangay.save(update_fields=["user", "updated_at"])
+            self.client.force_login(other_admin)
+            self.assertEqual(
+                self.client.get(
+                    reverse("barangay_document_template_preview", args=(template.pk,))
+                ).status_code,
+                404,
+            )
+            self.assertEqual(
+                self.client.get(
+                    reverse("barangay_document_template_download", args=(template.pk,))
+                ).status_code,
+                404,
+            )
 
     def test_document_template_upload_validation_storage_and_barangay_access(self):
         self.barangay.user = self.superuser

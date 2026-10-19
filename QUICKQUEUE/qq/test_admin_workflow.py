@@ -553,6 +553,26 @@ class AdminStaffWorkflowTests(TestCase):
             resident_client.get("/api/queue-status/").data["appointment"]
         )
 
+        admin_client = APIClient()
+        admin_client.force_login(self.admin_user)
+        # A legacy stale queue value must not override the finalized claim and
+        # appointment state or put the resident back into an active queue.
+        QueueTicket.objects.filter(pk=ticket.pk).update(
+            status=QueueTicket.Status.NOW_SERVING
+        )
+        admin_dashboard = admin_client.get("/barangay/dashboard/")
+        self.assertIsNone(admin_dashboard.context["now_serving"])
+        activity = admin_dashboard.content.decode().split(
+            "Recent Queue Activity", 1
+        )[1].split("Live Queue Monitor", 1)[0]
+        self.assertIn("Completed", activity)
+        self.assertIn("activity-status-icon", activity)
+        self.assertNotIn("Now Serving", activity)
+
+        admin_appointments = admin_client.get("/barangay/appointments/")
+        self.assertContains(admin_appointments, "status-completed")
+        self.assertContains(admin_appointments, ">Completed</span>")
+
     def test_dashboard_priority_tasks_show_only_barangay_ready_documents_once(self):
         ready = self._ticket("priority-ready", "Ready", self.service, "D01")
         processing = self._ticket("priority-processing", "Processing", self.service, "D02")

@@ -11,6 +11,10 @@
   const serviceField = document.getElementById("template-service");
   const nameField = document.getElementById("template-name");
   const fileField = document.getElementById("template-file");
+  const viewer = document.getElementById("template-viewer");
+  const viewerFrame = document.getElementById("viewer-frame");
+  const viewerTitle = document.getElementById("viewer-title");
+  const viewerDownload = document.getElementById("viewer-download");
   let templates = [];
   let editing = null;
 
@@ -60,7 +64,7 @@
       <div class="template-card-preview"><span class="file-icon ${iconClass(type)}" data-type="${escapeAttribute(type)}"><svg viewBox="0 0 24 28" aria-hidden="true"><path d="M4 2h10l6 6v18H4z"/><path d="M14 2v7h6M8 14h8M8 18h8"/></svg></span></div>
       <div class="template-card-body"><h2 class="template-card-title" title="${escapeAttribute(filename)}">${escapeHtml(filename)}</h2><p class="template-service">${escapeHtml(template.service_name)}</p><div class="template-metadata"><span><b>${escapeHtml(type)}</b> · Version ${template.version}</span><time datetime="${escapeAttribute(template.updated_at)}">Updated ${escapeHtml(updated)}</time></div></div>
       <button class="template-menu-toggle" type="button" aria-label="Actions for ${escapeAttribute(filename)}" aria-haspopup="menu" aria-expanded="false">···</button>
-      <div class="template-menu" role="menu" hidden><a role="menuitem" href="${escapeAttribute(template.file_url)}" target="_blank" rel="noopener">View / Download</a><button role="menuitem" class="replace" type="button">Replace Template</button><button role="menuitem" class="delete" type="button">Delete</button></div>
+      <div class="template-menu" role="menu" hidden><button role="menuitem" class="view" type="button">View Template</button><a role="menuitem" href="${escapeAttribute(template.download_url)}">Download Template</a><button role="menuitem" class="replace" type="button">Replace Template</button><button role="menuitem" class="delete" type="button">Delete</button></div>
     </article>`;
   }
 
@@ -128,6 +132,14 @@
       open(template);
       return;
     }
+    if (event.target.closest(".view")) {
+      closeMenus();
+      viewerTitle.textContent = template.file_name || template.name;
+      viewerDownload.href = template.download_url;
+      viewerFrame.src = template.preview_url;
+      viewer.showModal();
+      return;
+    }
     if (event.target.closest(".delete") && window.confirm("Delete this template?")) {
       try {
         await api(`${endpoint}${template.id}/`, {method: "DELETE"});
@@ -150,6 +162,16 @@
       closeMenus();
       toggle.focus();
     }
+  });
+
+  function closeViewer() {
+    viewer.close();
+    viewerFrame.removeAttribute("src");
+  }
+
+  document.getElementById("viewer-close").addEventListener("click", closeViewer);
+  viewer.addEventListener("click", (event) => {
+    if (event.target === viewer) closeViewer();
   });
 
   form.addEventListener("submit", async (event) => {

@@ -87,6 +87,28 @@ class QueueTicket(models.Model):
         return self.queue_number
 
     @property
+    def activity_status(self):
+        """Return the authoritative status used by current queue activity UIs."""
+        if self.appointment.status == Appointment.Status.CANCELLED:
+            return self.Status.CANCELLED
+        if self.appointment.status == Appointment.Status.MISSED:
+            return self.Status.MISSED
+        if (
+            self.claim_status == self.ClaimStatus.CLAIMED
+            and self.appointment.status == Appointment.Status.COMPLETED
+        ):
+            return self.Status.COMPLETED
+        return self.status
+
+    @property
+    def activity_status_display(self):
+        if self.claim_status == self.ClaimStatus.READY:
+            return "Ready for Pickup"
+        if self.claim_status == self.ClaimStatus.PROCESSING:
+            return "Processing"
+        return dict(self.Status.choices).get(self.activity_status, self.activity_status)
+
+    @property
     def processing_duration_label(self):
         if not self.called_at or not self.completed_at:
             return "—"

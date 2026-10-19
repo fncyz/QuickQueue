@@ -34,6 +34,7 @@
 </div>
 
 <dialog id="template-dialog"><form id="template-form"><header><div><small id="dialog-label">NEW TEMPLATE</small><h2 id="dialog-title">Upload document template</h2></div><button type="button" class="close" aria-label="Close">×</button></header><div class="dialog-body"><label>Service<select name="service" id="template-service" required><option value="">Select service</option>{% for service in services %}<option value="{{ service.pk }}">{{ service.name }}</option>{% endfor %}</select></label><label>Template name<input name="name" id="template-name" maxlength="150" required placeholder="e.g. Certificate of Residency Template"></label><label>Template file<input name="template_file" id="template-file" type="file" accept=".pdf,.doc,.docx,.odt,.html,.txt" required><small>PDF, DOC, DOCX, ODT, HTML, or TXT. Maximum 10MB.</small></label></div><footer><button type="button" class="close secondary">Cancel</button><button type="submit">Save Template</button></footer></form></dialog>
+<dialog id="template-viewer" aria-labelledby="viewer-title"><header><div><small>DOCUMENT PREVIEW</small><h2 id="viewer-title">Template</h2></div><div class="viewer-actions"><a id="viewer-download" href="#">Download</a><button type="button" id="viewer-close" aria-label="Close preview">×</button></div></header><div class="viewer-stage"><iframe id="viewer-frame" title="Document template preview"></iframe></div></dialog>
 <form class="csrf-bootstrap">{% csrf_token %}</form>
 <script defer src="{% static 'qq/js/document_templates.js' %}"></script>
 </body>
