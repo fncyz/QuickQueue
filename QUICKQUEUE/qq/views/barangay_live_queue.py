@@ -12,7 +12,12 @@ from django.views.decorators.http import require_POST
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service, ServiceWindow, TimeSlot
 from qq.services.configuration_service import service_configuration_map
 from qq.services.notification_service import notify_resident
-from qq.services.queue_service import CHECKED_IN_NOTE, live_queue_participation_q
+from qq.services.queue_service import (
+    CHECKED_IN_NOTE,
+    active_queue_status_q,
+    finalized_queue_q,
+    live_queue_participation_q,
+)
 
 
 def _barangay_for(user):
@@ -206,9 +211,13 @@ def barangay_live_queue(request):
             None,
         )
         waiting_count = sum(1 for ticket in tickets if ticket.status == QueueTicket.Status.WAITING)
-        completed_count = sum(
-            1 for ticket in tickets if ticket.status == QueueTicket.Status.COMPLETED
-        )
+        completed_count = QueueTicket.objects.filter(
+            finalized_queue_q(),
+            appointment__barangay=barangay,
+            appointment__appointment_date=today,
+            appointment__time_slot=current_slot,
+            appointment__service__is_temporary=False,
+        ).count()
         serving_count = sum(
             1 for ticket in tickets if ticket.status == QueueTicket.Status.NOW_SERVING
         )
@@ -219,13 +228,12 @@ def barangay_live_queue(request):
             next_wait_minutes = next_in_line[0].wait_minutes
 
     today_tickets = QueueTicket.objects.filter(
-        live_queue_participation_q(),
         appointment__barangay=barangay,
         appointment__appointment_date=today,
         appointment__service__is_temporary=False,
     ).exclude(status=QueueTicket.Status.CANCELLED)
 
-    completed_today = today_tickets.filter(status=QueueTicket.Status.COMPLETED)
+    completed_today = today_tickets.filter(finalized_queue_q())
     recently_served = completed_today.select_related(
         "appointment__resident", "appointment__service"
     ).order_by("-completed_at")[:3]
@@ -282,7 +290,7 @@ def barangay_live_queue(request):
                 "average_service_minutes": average_service_minutes,
                 "completed_today": completed_today.count(),
                 "waiting_today": today_tickets.filter(
-                    status=QueueTicket.Status.WAITING
+                    active_queue_status_q(QueueTicket.Status.WAITING)
                 ).count(),
                 "total_today": today_tickets.count(),
                 "active_windows": active_windows,

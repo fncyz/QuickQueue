@@ -15,7 +15,7 @@ import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useAppTheme } from '@/contexts/app-theme';
 import { residentLayout } from '@/constants/resident-layout';
 import { useConnectivity } from '@/contexts/connectivity';
-import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/services/offline-cache';
+import { readOfflineCache, setCurrentAccountId, writeActiveAppointmentCache, writeOfflineCache } from '@/services/offline-cache';
 import { useTutorial } from '@/contexts/tutorial';
 import { activeTemporaryListings } from '@/services/event-expiration';
 
@@ -70,7 +70,7 @@ export function ResidentDashboard() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
   const [refreshRevision, setRefreshRevision] = useState(0);
-  const loadInFlight = useRef(false);
+  const loadRevision = useRef(0);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -84,12 +84,27 @@ export function ResidentDashboard() {
   useFocusEffect(useCallback(() => {
     void refreshRevision;
     let isActive = true;
+    const revision = ++loadRevision.current;
+    const refreshActiveAppointment = async () => {
+      if (!isOnline) return;
+      const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
+      if (!accessToken) return;
+      try {
+        const response = await api.get<{ appointment: ActiveAppointment | null }>(
+          'queue-status/',
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        if (!isActive || revision !== loadRevision.current) return;
+        setActiveAppointment(response.data.appointment);
+        await writeActiveAppointmentCache(response.data.appointment);
+      } catch {
+        // Retain the last synchronized appointment until connectivity recovers.
+      }
+    };
     const loadDashboard = async () => {
-      if (loadInFlight.current) return;
-      loadInFlight.current = true;
       try {
       const saved = await readOfflineCache<DashboardCache>('dashboard');
-      if (saved && isActive) {
+      if (saved && isActive && revision === loadRevision.current) {
         setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setTemporaryServices(safeCachedTemporaryServices(saved.value.temporaryServices || [])); setActiveAppointment(saved.value.activeAppointment);
         const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`);
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
@@ -104,7 +119,7 @@ export function ResidentDashboard() {
           api.get<{ services: Service[]; temporary_services: TemporaryService[] }>('appointments/?summary=1', config),
           api.get<{ appointment: ActiveAppointment | null }>('queue-status/', config),
         ]);
-        if (!isActive) return;
+        if (!isActive || revision !== loadRevision.current) return;
         setResidentName(profileResponse.data.first_name);
         setUnreadNotifications(notificationResponse.data.unread_count);
         setServices(bookingResponse.data.services);
@@ -114,14 +129,19 @@ export function ResidentDashboard() {
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
         await setCurrentAccountId(profileResponse.data.username);
         await writeOfflineCache<DashboardCache>('dashboard', { activeAppointment: queueResponse.data.appointment, residentName: profileResponse.data.first_name, services: bookingResponse.data.services, temporaryServices: bookingResponse.data.temporary_services || [], unreadNotifications: notificationResponse.data.unread_count, username: profileResponse.data.username });
+        await writeActiveAppointmentCache(queueResponse.data.appointment);
       } catch {
         // Keep the dashboard usable if fresh server data is temporarily unavailable.
-      } finally {
-        loadInFlight.current = false;
       }
     };
     loadDashboard();
-    return () => { isActive = false; };
+    const timer = isOnline
+      ? setInterval(refreshActiveAppointment, 15000)
+      : undefined;
+    return () => {
+      isActive = false;
+      if (timer) clearInterval(timer);
+    };
   }, [isOnline, refreshRevision]));
 
   const filteredServices = useMemo(() => services.filter((item) => item.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())), [serviceSearch, services]);
@@ -235,8 +255,8 @@ function EmptyAppointmentCard({ isDark }: { isDark: boolean }) {
   return <View style={[s.appointment, s.emptyAppointment, isDark && s.darkCard]}>
     <View style={[s.emptyCalendar, isDark && s.darkIcon]}><Ionicons name="calendar" size={22} color={colors.accent} /></View>
     <View style={s.emptyCopy}>
-      <Text numberOfLines={2} style={[s.emptyTitle, { color: colors.text }]}>No Appointment Yet</Text>
-      <Text style={[s.emptyText, { color: colors.muted }]}>You don&apos;t have any appointment scheduled.</Text>
+      <Text style={[s.emptyTitle, { color: colors.text }]}>No Upcoming Appointments</Text>
+      <Text style={[s.emptyText, { color: colors.muted }]}>You don&apos;t have any upcoming appointments. Book a service whenever you need one.</Text>
       <Pressable onPress={() => router.push('/booking')} style={s.book}><Ionicons name="calendar-outline" size={16} color="#FFF" /><Text numberOfLines={2} style={s.bookText}>Book an Appointment</Text></Pressable>
     </View>
     <View style={s.emptyIllustration}><Ionicons name="clipboard-outline" size={32} color={isDark ? '#2A4266' : '#D8E6FD'} /><View style={s.clockBadge}><Ionicons name="time-outline" size={18} color={isDark ? '#5E7CA8' : '#AFC9F3'} /></View></View>

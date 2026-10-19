@@ -738,7 +738,7 @@ def queue_status_api(request):
 
         action = request.data.get("action")
         if action == "cancel":
-            if appointment.status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
+            if appointment.effective_status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
                 return Response({"message": "This appointment can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
             if appointment.appointment_date < timezone.localdate():
                 return Response({"message": "Past appointments can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
@@ -816,6 +816,8 @@ def queue_status_api(request):
 
     appointment = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket").exclude(
         service__is_temporary=True,
+    ).exclude(
+        queue_ticket__claim_status=QueueTicket.ClaimStatus.CLAIMED,
     ).filter(
         appointment_date__gte=timezone.localdate(),
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING],
@@ -881,7 +883,7 @@ def transactions_api(request):
 
         action = request.data.get("action")
         if action == "cancel":
-            if appointment.status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
+            if appointment.effective_status not in (Appointment.Status.PENDING, Appointment.Status.CONFIRMED):
                 return Response({"message": "This appointment can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
             if appointment.appointment_date < timezone.localdate():
                 return Response({"message": "Past appointments can no longer be cancelled."}, status=status.HTTP_400_BAD_REQUEST)
@@ -955,7 +957,9 @@ def transactions_api(request):
                 else f"₱{(appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)):,.2f}"
             ),
             "status": appointment.workflow_status_display,
-            "status_code": appointment.status,
+            "status_code": (
+                appointment.status if event_booking else appointment.effective_status
+            ),
             "date_booked": appointment.created_at.strftime("%B %d, %Y"),
             "appointment_date": appointment.appointment_date.strftime("%B %d, %Y") if appointment.appointment_date else "",
             "date_claimed": ticket.claimed_at.strftime("%B %d, %Y") if ticket and ticket.claimed_at else None,

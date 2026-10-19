@@ -6,6 +6,12 @@ from django.utils import timezone
 
 from qq.models import Appointment, Barangay, BarangayStaff, Notification, QueueTicket, Service
 from qq.services.notification_service import unread_count_for_user
+from qq.services.queue_service import (
+    active_queue_status_q,
+    cancelled_queue_q,
+    finalized_queue_q,
+    missed_queue_q,
+)
 
 
 @login_required(login_url="signin")
@@ -37,18 +43,18 @@ def barangay_dashboard(request):
     )
     ticket_totals = tickets.aggregate(
         total=Count("id"),
-        completed=Count("id", filter=Q(status=QueueTicket.Status.COMPLETED)),
-        waiting=Count("id", filter=Q(status=QueueTicket.Status.WAITING) & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)),
-        serving=Count("id", filter=Q(status=QueueTicket.Status.NOW_SERVING) & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)),
-        missed=Count("id", filter=Q(status=QueueTicket.Status.MISSED)),
-        cancelled=Count("id", filter=Q(status=QueueTicket.Status.CANCELLED)),
+        completed=Count("id", filter=finalized_queue_q()),
+        waiting=Count("id", filter=active_queue_status_q(QueueTicket.Status.WAITING)),
+        serving=Count("id", filter=active_queue_status_q(QueueTicket.Status.NOW_SERVING)),
+        missed=Count("id", filter=missed_queue_q()),
+        cancelled=Count("id", filter=cancelled_queue_q()),
     )
     completed = ticket_totals["completed"]
     waiting = ticket_totals["waiting"]
     serving_count = ticket_totals["serving"]
-    now_serving = tickets.exclude(
-        claim_status=QueueTicket.ClaimStatus.CLAIMED
-    ).filter(status=QueueTicket.Status.NOW_SERVING).first()
+    now_serving = tickets.filter(
+        active_queue_status_q(QueueTicket.Status.NOW_SERVING)
+    ).first()
     no_show = ticket_totals["missed"]
     cancelled = ticket_totals["cancelled"]
     total_tickets = ticket_totals["total"]
@@ -63,10 +69,10 @@ def barangay_dashboard(request):
         appointment__appointment_date__lte=today,
     )
     month_ticket_totals = month_tickets.aggregate(
-        completed=Count("id", filter=Q(status=QueueTicket.Status.COMPLETED)),
+        completed=Count("id", filter=finalized_queue_q()),
         cancelled=Count(
             "id",
-            filter=Q(status__in=[QueueTicket.Status.CANCELLED, QueueTicket.Status.MISSED]),
+            filter=cancelled_queue_q() | missed_queue_q(),
         ),
     )
     month_completed = month_ticket_totals["completed"]

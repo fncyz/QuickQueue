@@ -1,14 +1,19 @@
 from datetime import date, time, timedelta
+import io
+import tempfile
+import zipfile
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from qq.models import (
-    Appointment, Barangay, BarangayStaff, EventBooking, Notification, QueueTicket, Resident,
-    PushDevice, Service, ServiceWindow, TimeSlot,
+    Appointment, Barangay, BarangayStaff, DocumentTemplate, EventBooking,
+    GeneratedDocument, Notification, QueueTicket, Resident, PushDevice, Service,
+    ServiceWindow, TimeSlot,
 )
 from qq.services.queue_service import CHECKED_IN_NOTE
 
@@ -78,6 +83,142 @@ class AdminStaffWorkflowTests(TestCase):
             served_by=self.staff,
             notes=CHECKED_IN_NOTE if checked_in else "",
         )
+
+    @staticmethod
+    def _placeholder_docx():
+        document_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Resident: {{ resident_</w:t></w:r>
+          <w:r><w:t>full_name }} / {{ purpose }} / {{ resident_middle_name }} / {{ official_signature }}</w:t></w:r></w:p></w:body>
+        </w:document>'''
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as package:
+            package.writestr("word/document.xml", document_xml)
+            package.writestr("word/media/seal.png", b"official-seal-bytes")
+        return stream.getvalue()
+
+    @staticmethod
+    def _plain_docx():
+        document_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>Resident information must be verified by staff.</w:t></w:r></w:p></w:body>
+        </w:document>'''
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as package:
+            package.writestr("word/document.xml", document_xml)
+        return stream.getvalue()
+
+    def test_staff_generates_populated_docx_without_changing_template_or_lifecycle(self):
+        ticket = self._ticket("generated-resident", "Generated", self.service, "C20")
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        ticket.appointment.purpose = "Employment requirement"
+        ticket.appointment.save(update_fields=["purpose", "updated_at"])
+
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            template = DocumentTemplate.objects.create(
+                barangay=self.barangay,
+                service=self.service,
+                name="Clearance Placeholder Template",
+                template_file=SimpleUploadedFile(
+                    "clearance.docx",
+                    self._placeholder_docx(),
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+                uploaded_by=self.admin_user,
+            )
+            with template.template_file.open("rb") as source:
+                original = source.read()
+
+            preview_url = f"/barangay/staff/documents/{ticket.pk}/preview/"
+            preview = self.client.get(preview_url)
+            self.assertContains(preview, "Clearance Placeholder Template")
+            self.assertContains(preview, "Generate Document")
+
+            generated_response = self.client.post(
+                preview_url,
+                {"action": "generate"},
+                follow=True,
+            )
+            self.assertContains(generated_response, "Generated DOC-")
+            generated = GeneratedDocument.objects.get(ticket=ticket)
+            with generated.document_file.open("rb") as output:
+                generated_bytes = output.read()
+            with zipfile.ZipFile(io.BytesIO(generated_bytes)) as package:
+                generated_xml = package.read("word/document.xml").decode()
+                self.assertEqual(package.read("word/media/seal.png"), b"official-seal-bytes")
+            self.assertIn("Generated Resident", generated_xml)
+            self.assertIn("Employment requirement", generated_xml)
+            self.assertNotIn("resident_full_name", generated_xml)
+            self.assertIn("resident_middle_name", generated_xml)
+            self.assertIn("official_signature", generated_xml)
+            self.assertIn("<ns0:b", generated_xml)
+
+            with template.template_file.open("rb") as source:
+                self.assertEqual(source.read(), original)
+            ticket.refresh_from_db()
+            self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+
+            download = self.client.get(f"{preview_url}?download=1")
+            self.assertEqual(
+                download["Content-Type"],
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            self.assertIn(".docx", download["Content-Disposition"])
+            download.close()
+
+    def test_template_without_placeholders_is_not_generated_or_marked_ready(self):
+        ticket = self._ticket("plain-template", "Plain", self.other_service, "C21")
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            DocumentTemplate.objects.create(
+                barangay=self.barangay,
+                service=self.other_service,
+                name="Plain Official Template",
+                template_file=SimpleUploadedFile("plain.docx", self._plain_docx()),
+                uploaded_by=self.admin_user,
+            )
+            response = self.client.post(
+                f"/barangay/staff/documents/{ticket.pk}/preview/",
+                {"action": "generate"},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("no recognized", response.json()["error"])
+        self.assertFalse(GeneratedDocument.objects.filter(ticket=ticket).exists())
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+
+    def test_generated_document_storage_failure_is_reported_without_ready_transition(self):
+        ticket = self._ticket("generation-failure", "Failure", self.service, "C22")
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            DocumentTemplate.objects.create(
+                barangay=self.barangay,
+                service=self.service,
+                name="Storage Failure Template",
+                template_file=SimpleUploadedFile("failure.docx", self._placeholder_docx()),
+                uploaded_by=self.admin_user,
+            )
+            with patch(
+                "django.db.models.fields.files.FieldFile.save",
+                side_effect=OSError("storage unavailable"),
+            ):
+                response = self.client.post(
+                    f"/barangay/staff/documents/{ticket.pk}/preview/",
+                    {"action": "generate"},
+                    HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("persistent storage", response.json()["error"])
+        self.assertFalse(GeneratedDocument.objects.filter(ticket=ticket).exists())
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
 
     def test_staff_dashboard_uses_direct_staff_workflow_links(self):
         response = self.client.get("/barangay/staff/dashboard/")
@@ -562,12 +703,27 @@ class AdminStaffWorkflowTests(TestCase):
         )
         admin_dashboard = admin_client.get("/barangay/dashboard/")
         self.assertIsNone(admin_dashboard.context["now_serving"])
+        self.assertEqual(admin_dashboard.context["completed"], 1)
+        self.assertEqual(admin_dashboard.context["serving_count"], 0)
         activity = admin_dashboard.content.decode().split(
             "Recent Queue Activity", 1
         )[1].split("Live Queue Monitor", 1)[0]
         self.assertIn("Completed", activity)
         self.assertIn("activity-status-icon", activity)
         self.assertNotIn("Now Serving", activity)
+
+        admin_monitor = admin_client.get(
+            f"/barangay/queue/live/?slot={self.slot.pk}"
+        )
+        self.assertIsNone(admin_monitor.context["now_serving"])
+        self.assertEqual(admin_monitor.context["completed_count"], 1)
+
+        self.client.force_login(self.staff_user)
+        staff_queue = self.client.get(
+            f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+        )
+        self.assertIsNone(staff_queue.context["now_serving"])
+        self.assertEqual(staff_queue.context["completed_count"], 1)
 
         admin_appointments = admin_client.get("/barangay/appointments/")
         self.assertContains(admin_appointments, "status-completed")

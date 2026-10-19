@@ -1,13 +1,15 @@
 from django import forms
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from qq.models import BarangayStaff, Notification, QueueTicket, Service
+from qq.models import BarangayStaff, DocumentTemplate, GeneratedDocument, Notification, QueueTicket, Service
+from qq.services.document_generation import generate_document, template_values
 from qq.services.notification_service import notify_resident
 
 
@@ -98,6 +100,27 @@ def staff_document_preview(request, pk):
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"ok": False, "error": message}, status=403)
         return HttpResponseForbidden(message)
+    if request.method == "POST" and request.POST.get("action") == "generate":
+        try:
+            generated_document, generation = generate_document(ticket, request.user)
+        except ValueError as error:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"ok": False, "error": str(error)}, status=400)
+            messages.error(request, str(error))
+        else:
+            message = f"Generated {generated_document.document_file.name.rsplit('/', 1)[-1]}."
+            if generation.missing_fields:
+                message += " Missing values were left as placeholders: " + ", ".join(generation.missing_fields) + "."
+            if generation.unknown_fields:
+                message += " Unsupported placeholders were left unchanged: " + ", ".join(generation.unknown_fields) + "."
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({
+                    "ok": True,
+                    "message": message,
+                    "download_url": reverse("staff_processing_document_preview", args=[ticket.pk]) + "?download=1",
+                })
+            messages.success(request, message)
+        return redirect(reverse("staff_processing_document_preview", args=[ticket.pk]))
     if request.method == "POST" and request.POST.get("action") == "complete":
         with transaction.atomic():
             locked_ticket = get_object_or_404(
@@ -139,6 +162,16 @@ def staff_document_preview(request, pk):
         appointment = ticket.appointment
         appointment.purpose = edit_form.cleaned_data["purpose"]
         appointment.save(update_fields=["purpose", "updated_at"])
+        existing_document = GeneratedDocument.objects.filter(ticket=ticket).first()
+        if existing_document:
+            storage = existing_document.document_file.storage
+            stored_name = existing_document.document_file.name
+            existing_document.delete()
+            if stored_name:
+                try:
+                    storage.delete(stored_name)
+                except Exception:
+                    pass
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({
                 "ok": True,
@@ -155,6 +188,18 @@ def staff_document_preview(request, pk):
             "error": " ".join(edit_form.errors.get("purpose", ["Unable to update Purpose."])),
         }, status=400)
     if request.GET.get("download") == "1":
+        generated_document = GeneratedDocument.objects.filter(
+            ticket=ticket,
+            template__barangay=staff.barangay,
+        ).first()
+        if generated_document and generated_document.document_file:
+            filename = generated_document.document_file.name.rsplit("/", 1)[-1]
+            return FileResponse(
+                generated_document.document_file.open("rb"),
+                as_attachment=True,
+                filename=filename,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
         resident = ticket.appointment.resident
         content = (
             f"QuickQueue Completed Document\n\nDocument: {ticket.appointment.service.name}\n"
@@ -166,6 +211,15 @@ def staff_document_preview(request, pk):
         response = HttpResponse(content, content_type="text/plain")
         response["Content-Disposition"] = f'attachment; filename="DOC-{ticket.pk:06d}.txt"'
         return response
+    document_template = DocumentTemplate.objects.filter(
+        barangay=staff.barangay,
+        service=ticket.appointment.service,
+        is_active=True,
+    ).first()
+    generated_document = GeneratedDocument.objects.filter(
+        ticket=ticket,
+        template__barangay=staff.barangay,
+    ).first()
     return render(request, "barangay_staff/document_preview.html", {
         "staff": staff, "barangay": staff.barangay, "ticket": ticket,
         "auto_print": request.GET.get("print") == "1",
@@ -178,4 +232,11 @@ def staff_document_preview(request, pk):
         "can_complete": can_process and ticket.claim_status == QueueTicket.ClaimStatus.PROCESSING,
         "is_ready": ticket.claim_status == QueueTicket.ClaimStatus.READY,
         "is_archived": ticket.claim_status == QueueTicket.ClaimStatus.CLAIMED,
+        "document_template": document_template,
+        "template_is_docx": bool(
+            document_template
+            and document_template.template_file.name.lower().endswith(".docx")
+        ),
+        "generated_document": generated_document,
+        "template_values": template_values(ticket),
     })

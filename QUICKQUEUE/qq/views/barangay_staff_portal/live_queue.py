@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from qq.models import BarangayStaff, QueueTicket, Service
 from qq.services.configuration_service import service_configuration_map
-from qq.services.queue_service import live_queue_participation_q
+from qq.services.queue_service import active_queue_status_q, finalized_queue_q
 from qq.views.barangay_live_queue import (
     _annotate_wait_estimates, _resolve_slot, _service_window_for_user, _ticket_queryset,
 )
@@ -53,19 +53,27 @@ def staff_live_queue(request):
         tickets = _annotate_wait_estimates(list(ticket_queryset), duration_by_service)
         now_serving = next((t for t in tickets if t.status == QueueTicket.Status.NOW_SERVING), None)
         waiting_count = sum(t.status == QueueTicket.Status.WAITING for t in tickets)
-        completed_count = sum(t.status == QueueTicket.Status.COMPLETED for t in tickets)
+        completed_query = QueueTicket.objects.filter(
+            finalized_queue_q(),
+            appointment__barangay=barangay,
+            appointment__appointment_date=today,
+            appointment__time_slot=current_slot,
+            appointment__service__is_temporary=False,
+        )
+        if service_window:
+            completed_query = completed_query.filter(service_window=service_window)
+        completed_count = completed_query.count()
         serving_count = sum(t.status == QueueTicket.Status.NOW_SERVING for t in tickets)
         next_in_line = [t for t in tickets if t.status == QueueTicket.Status.WAITING][:3]
         if next_in_line:
             next_wait_minutes = next_in_line[0].wait_minutes
 
     today_tickets = QueueTicket.objects.filter(
-        live_queue_participation_q(),
         appointment__barangay=barangay,
         appointment__appointment_date=today,
         appointment__service__is_temporary=False,
     ).exclude(status=QueueTicket.Status.CANCELLED)
-    completed_today = today_tickets.filter(status=QueueTicket.Status.COMPLETED)
+    completed_today = today_tickets.filter(finalized_queue_q())
     avg_duration = completed_today.exclude(called_at=None).exclude(completed_at=None).annotate(
         service_seconds=ExpressionWrapper(F("completed_at") - F("called_at"), output_field=DurationField())
     ).aggregate(avg=Avg("service_seconds"))["avg"]
@@ -92,7 +100,9 @@ def staff_live_queue(request):
         ).order_by("name"), configuration_map),
         "filters": {"q": search, "service": service_id},
         "stats": {"average_service_minutes": average_minutes, "completed_today": completed_today.count(),
-                  "waiting_today": today_tickets.filter(status=QueueTicket.Status.WAITING).count(),
+                  "waiting_today": today_tickets.filter(
+                      active_queue_status_q(QueueTicket.Status.WAITING)
+                  ).count(),
                   "total_today": today_tickets.count()},
     })
 

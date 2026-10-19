@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, AppState, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,7 +16,7 @@ import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
-import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
+import { readOfflineCache, writeActiveAppointmentCache } from '@/services/offline-cache';
 
 type Appointment = { id: number; appointment_id: string; name: string; service: string; service_fee: string; date: string; time_slot: string; barangay: string; queue_number: string; now_serving: string; people_ahead: number; estimated_wait: number; checked_in: boolean };
 
@@ -49,7 +49,7 @@ export default function QueueScreen() {
       if (screenActive.current) setToken(accessToken);
       const response = await api.get('queue-status/', { headers: { Authorization: `Bearer ${accessToken}` } });
       if (screenActive.current) setAppointment(response.data.appointment);
-      await writeOfflineCache('appointment', response.data.appointment);
+      await writeActiveAppointmentCache(response.data.appointment);
     } catch (error: any) {
       if (screenActive.current && showLoader && !hasCachedAppointment) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
     } finally {
@@ -68,6 +68,13 @@ export default function QueueScreen() {
     };
   }, [isOnline, loadQueue]));
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && screenActive.current) loadQueue();
+    });
+    return () => subscription.remove();
+  }, [loadQueue]);
+
   const performAction = async (action: 'check_in' | 'cancel') => {
     if (!appointment || actionInFlight.current) return;
     if (!isOnline) return Alert.alert('Internet connection required', 'Reconnect to update this appointment.');
@@ -78,7 +85,7 @@ export default function QueueScreen() {
       if (action === 'check_in') {
         const updatedAppointment = { ...appointment, checked_in: true };
         setAppointment(updatedAppointment);
-        await writeOfflineCache('appointment', updatedAppointment);
+        await writeActiveAppointmentCache(updatedAppointment);
         if (response.data.changed) Alert.alert('Check-in Successful!', response.data.message);
       } else {
         Alert.alert('Appointment cancelled', response.data.message);
@@ -99,7 +106,7 @@ export default function QueueScreen() {
   return <SafeAreaView style={[s.safe, { backgroundColor: colors.background }]} edges={['top']}><Animated.ScrollView style={[s.page, { backgroundColor: colors.background }]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} onScroll={coverHeader.onScroll} scrollEventThrottle={16}>
     <Animated.View style={[s.hero, coverHeader.headerStyle]}><Pressable onPress={() => router.back()} style={s.back}><Ionicons name="chevron-back" size={26} color="#FFF" /></Pressable><HeaderNotificationBell onPress={() => router.push('/notifications')} style={s.avatar} /><View style={s.live}><View style={s.dot} /><Text style={s.liveText}>Live Status</Text></View><Text numberOfLines={2} style={s.heading}>Queue Status</Text><Text numberOfLines={2} style={s.subheading}>Track your queue in real time and stay ready for your turn.</Text></Animated.View>
     <SavedInformationBanner followedByOverlap={false} message="Saved appointment · queue status may not be up to date." />
-    {!appointment ? <View style={[s.empty, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><Ionicons name="people-outline" size={48} color={colors.accent} /><Text style={[s.emptyTitle, { color: colors.text }]}>No active appointment</Text><Text style={[s.emptyCopy, { color: colors.muted }]}>Book an appointment to view your live queue position here.</Text><Pressable onPress={() => router.push('/booking')} style={s.book}><Text style={s.bookText}>Book Now</Text></Pressable></View> : <>
+    {!appointment ? <View style={[s.empty, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><Ionicons name="people-outline" size={48} color={colors.accent} /><Text style={[s.emptyTitle, { color: colors.text }]}>No Active Queue</Text><Text style={[s.emptyCopy, { color: colors.muted }]}>You don&apos;t have an active queue right now. Your completed appointments are available in Transactions.</Text><Pressable onPress={() => router.push('/transactions')} style={s.book}><Text style={s.bookText}>View Transactions</Text></Pressable></View> : <>
       <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }, isOnline && s.cardFirst]}><SectionTitle icon="people-circle" title="Your Queue Status" subtitle="Real-time updates on your queue." right="You’re all set!" /><View style={[s.ticketPanel, { backgroundColor: colors.surfaceAlt }]}><Metric label="NOW SERVING" value={appointment.now_serving} icon="megaphone-outline" detail="Please proceed to the service counter." /><Metric label="YOUR NUMBER" value={appointment.queue_number} icon="person-outline" detail={appointment.people_ahead ? `${appointment.people_ahead} people ahead of you` : 'You are next in line'} center /><Metric label="ESTIMATED WAITING TIME" value={`${appointment.estimated_wait} minutes`} icon="time-outline" detail="Please wait for your turn." /></View><View style={[s.note, { backgroundColor: colors.iconBackground }]}><Ionicons name="notifications-outline" size={14} color={colors.accent} /><Text style={[s.noteText, { color: colors.muted }]}><Text style={[s.noteStrong, { color: colors.accent }]}>Note: </Text>Waiting time may change based on the number of people being served.</Text></View></View>
       <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }, !isOnline && s.disabledCard]}><SectionTitle icon="flash" title="Appointment Actions" subtitle={isOnline ? 'Manage your appointment quickly and easily.' : 'Internet connection required for actions.'} /><View style={s.actions}>{appointment.checked_in ? <View accessibilityRole="text" style={[s.action, s.checkedIn, { backgroundColor: isDark ? '#142C2A' : '#F0FFF5' }]}><Ionicons name="checkmark-circle-outline" size={24} color="#159447" /><View style={s.actionCopy}><Text style={s.checkedInTitle}>Checked In</Text><Text style={[s.actionText, { color: colors.muted }]}>Barangay staff have been notified. Please wait for your number.</Text></View></View> : <Pressable disabled={acting || !isOnline} onPress={() => performAction('check_in')} style={[s.action, s.check, { backgroundColor: isDark ? '#142C2A' : 'transparent' }]}><Ionicons name="checkmark-circle" size={24} color="#22A950" /><View style={s.actionCopy}><Text style={s.checkTitle}>Check In</Text><Text style={[s.actionText, { color: colors.muted }]}>Let staff know you’ve arrived.</Text></View><Ionicons name="chevron-forward" size={17} color="#22A950" /></Pressable>}<Pressable disabled={acting || !isOnline} onPress={confirmCancellation} style={[s.action, s.cancel, { backgroundColor: isDark ? '#301F29' : 'transparent' }]}><Ionicons name="close-circle" size={24} color="#ED1C24" /><View style={s.actionCopy}><Text style={s.cancelTitle}>Cancel Appointment</Text><Text style={[s.actionText, { color: colors.muted }]}>Cancel if you cannot make it.</Text></View><Ionicons name="chevron-forward" size={17} color="#ED1C24" /></Pressable></View></View>
       <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><SectionTitle icon="calendar" title="Appointment Information" subtitle="Here are the details of your appointment." />{[

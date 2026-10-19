@@ -7,6 +7,49 @@ from qq.models import Appointment, QueueTicket
 CHECKED_IN_NOTE = "Resident checked in and is waiting at the barangay."
 
 
+def finalized_queue_q():
+    """Authoritative predicate for a fully finalized resident transaction."""
+    return Q(
+        claim_status=QueueTicket.ClaimStatus.CLAIMED,
+        appointment__status=Appointment.Status.COMPLETED,
+    )
+
+
+def active_queue_status_q(status):
+    """Match an active raw queue status without finalized/terminal records."""
+    return (
+        Q(status=status)
+        & ~Q(claim_status=QueueTicket.ClaimStatus.CLAIMED)
+        & ~Q(
+            appointment__status__in=[
+                Appointment.Status.COMPLETED,
+                Appointment.Status.CANCELLED,
+                Appointment.Status.MISSED,
+            ]
+        )
+    )
+
+
+def cancelled_queue_q():
+    return (
+        Q(appointment__status=Appointment.Status.CANCELLED)
+        | (
+            Q(status=QueueTicket.Status.CANCELLED)
+            & ~Q(appointment__status=Appointment.Status.MISSED)
+        )
+    ) & ~finalized_queue_q()
+
+
+def missed_queue_q():
+    return (
+        Q(appointment__status=Appointment.Status.MISSED)
+        | (
+            Q(status=QueueTicket.Status.MISSED)
+            & ~Q(appointment__status=Appointment.Status.CANCELLED)
+        )
+    ) & ~finalized_queue_q()
+
+
 def live_queue_participation_q():
     """Waiting tickets participate only after check-in; progressed tickets stay visible."""
     return (
@@ -31,7 +74,11 @@ def mark_document_claimed(ticket, *, claimed_at=None):
     ticket.claim_status = QueueTicket.ClaimStatus.CLAIMED
     ticket.claimed_at = now
     update_fields = ["claim_status", "claimed_at", "updated_at"]
-    if ticket.status in (QueueTicket.Status.WAITING, QueueTicket.Status.NOW_SERVING):
+    if ticket.status not in (
+        QueueTicket.Status.COMPLETED,
+        QueueTicket.Status.MISSED,
+        QueueTicket.Status.CANCELLED,
+    ):
         ticket.status = QueueTicket.Status.COMPLETED
         ticket.completed_at = ticket.completed_at or now
         update_fields.extend(["status", "completed_at"])

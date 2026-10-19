@@ -62,6 +62,41 @@ export async function removeOfflineCache(name: string) {
   if (key) await AsyncStorage.removeItem(key);
 }
 
+type CachedActiveAppointment = { appointment_id?: string };
+type CachedDashboard = Record<string, unknown> & {
+  activeAppointment?: CachedActiveAppointment | null;
+};
+
+export async function writeActiveAppointmentCache<T extends CachedActiveAppointment>(appointment: T | null) {
+  await writeOfflineCache('appointment', appointment);
+  const dashboard = await readOfflineCache<CachedDashboard>('dashboard');
+  if (dashboard) {
+    await writeOfflineCache('dashboard', {
+      ...dashboard.value,
+      activeAppointment: appointment,
+    });
+  }
+}
+
+export async function clearTerminalActiveAppointmentCaches(appointmentIds: string[]) {
+  const terminalIds = new Set(appointmentIds);
+  if (terminalIds.size === 0) return;
+
+  const appointment = await readOfflineCache<CachedActiveAppointment | null>('appointment');
+  if (appointment?.value?.appointment_id && terminalIds.has(appointment.value.appointment_id)) {
+    await writeOfflineCache('appointment', null);
+  }
+
+  const dashboard = await readOfflineCache<CachedDashboard>('dashboard');
+  const dashboardAppointmentId = dashboard?.value.activeAppointment?.appointment_id;
+  if (dashboard && dashboardAppointmentId && terminalIds.has(dashboardAppointmentId)) {
+    await writeOfflineCache('dashboard', {
+      ...dashboard.value,
+      activeAppointment: null,
+    });
+  }
+}
+
 export async function clearCurrentResidentData() {
   const accountId = await getCurrentAccountId();
   const keys = await AsyncStorage.getAllKeys();

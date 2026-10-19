@@ -106,6 +106,19 @@ class Appointment(models.Model):
         )
 
     @property
+    def effective_status(self):
+        """Return the authoritative regular-appointment lifecycle status."""
+        if self.status in (self.Status.CANCELLED, self.Status.MISSED):
+            return self.status
+        try:
+            claim_status = self.queue_ticket.claim_status
+        except ObjectDoesNotExist:
+            return self.status
+        if claim_status == "L":
+            return self.Status.COMPLETED
+        return self.status
+
+    @property
     def workflow_status_display(self):
         """Return the status of the full service-and-document workflow."""
         if self.status in (self.Status.CANCELLED, self.Status.MISSED):

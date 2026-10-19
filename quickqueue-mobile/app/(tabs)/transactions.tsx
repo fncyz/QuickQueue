@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/Typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,7 +14,7 @@ import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { residentLayout } from '@/constants/resident-layout';
 import { useAppTheme } from '@/contexts/app-theme';
 import { useConnectivity } from '@/contexts/connectivity';
-import { readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
+import { clearTerminalActiveAppointmentCaches, readOfflineCache, writeOfflineCache } from '@/services/offline-cache';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
 
@@ -39,11 +39,11 @@ export default function TransactionsScreen() {
   const [search, setSearch] = useState('');
   const [cached, setCached] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(20);
-  const lastFreshLoad = useRef(0);
   const actionLock = useRef(false);
   const loadInFlight = useRef(false);
+  const screenActive = useRef(false);
 
-  const loadTransactions = useCallback(async (force = false) => {
+  const loadTransactions = useCallback(async () => {
     if (loadInFlight.current) return;
     loadInFlight.current = true;
     let hasCachedTransactions = false;
@@ -53,21 +53,35 @@ export default function TransactionsScreen() {
       hasCachedTransactions = Boolean(saved);
       if (saved) { setTransactions(saved.value); setCached(true); setLoading(false); }
       if (!isOnline) return;
-      if (!force && Date.now() - lastFreshLoad.current < 30000) return;
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
       setToken(accessToken);
       const response = await api.get('transactions/', { headers: { Authorization: `Bearer ${accessToken}` } });
       setTransactions(response.data.transactions);
-      lastFreshLoad.current = Date.now();
       setCached(false);
       await writeOfflineCache('transactions', response.data.transactions);
+      await clearTerminalActiveAppointmentCaches(
+        response.data.transactions
+          .filter((item: Transaction) => !item.is_event && ['D', 'X', 'M'].includes(item.status_code))
+          .map((item: Transaction) => item.appointment_id),
+      );
     } catch (error: any) {
       if (!hasCachedTransactions) Alert.alert('Unable to load transactions', error?.response?.data?.message || 'Please check your connection.');
     } finally { loadInFlight.current = false; setLoading(false); }
   }, [isOnline]);
 
-  useFocusEffect(useCallback(() => { loadTransactions(); }, [loadTransactions]));
+  useFocusEffect(useCallback(() => {
+    screenActive.current = true;
+    loadTransactions();
+    return () => { screenActive.current = false; };
+  }, [loadTransactions]));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && screenActive.current) loadTransactions();
+    });
+    return () => subscription.remove();
+  }, [loadTransactions]);
 
   const filteredTransactions = useMemo(() => transactions.filter((item) => {
     const matchesFilter = filter === 'All' || (filter === 'Pending' && ['P', 'C', 'O'].includes(item.status_code)) || (filter === 'Completed' && item.status_code === 'D') || (filter === 'Cancelled' && item.status_code === 'X') || (filter === 'Expired' && item.status_code === 'M');
@@ -130,7 +144,11 @@ export default function TransactionsScreen() {
 function displayStatus(item: Transaction) { if (item.is_event) return item.event_booking_status === 'checked_in' ? 'Checked In' : item.event_booking_status === 'cancelled' ? 'Cancelled' : item.event_booking_status === 'event_ended' ? 'Event Ended' : 'Confirmed'; return item.status_code === 'M' ? 'Expired' : item.status; }
 function displayStatusDetail(item: Transaction) { return item.status_detail || null; }
 function statusColors(code: string) { if (code === 'D') return ['#E5FAEC', '#159447']; if (code === 'X') return ['#FFE8EB', '#E21E31']; if (code === 'M') return ['#EEF0F4', '#596277']; if (code === 'P') return ['#FFF1DD', '#E98216']; return ['#E9F1FF', '#0759D9']; }
-function statusIcon(code: string) { if (code === 'D') return 'checkmark-circle-outline' as const; if (code === 'M' || code === 'P') return 'time-outline' as const; return 'close-circle-outline' as const; }
+function statusIcon(code: string) {
+  if (code === 'D' || code === 'C') return 'checkmark-circle-outline' as const;
+  if (code === 'X') return 'close-circle-outline' as const;
+  return 'time-outline' as const;
+}
 function TransactionCard({ item, disabled, onView, onAction }: { item: Transaction; disabled: boolean; onView: () => void; onAction: (action: 'cancel' | 'delete') => void }) {
   const { colors } = useAppTheme();
   const [chipBg, chipText] = statusColors(item.status_code);

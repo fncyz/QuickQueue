@@ -324,6 +324,63 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(response.data["appointment"]["service_fee"], "Free")
         self.assertEqual(response.data["appointment"]["status_code"], Appointment.Status.CONFIRMED)
 
+    def test_claimed_legacy_appointment_is_history_only_and_next_active_is_selected(self):
+        today = timezone.localdate()
+        finalized = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=today,
+            time_slot=self.time_slot,
+            queue_number="DOC-OLD",
+            status=Appointment.Status.ONGOING,
+        )
+        claimed_at = timezone.now()
+        QueueTicket.objects.create(
+            appointment=finalized,
+            queue_number=finalized.queue_number,
+            status=QueueTicket.Status.NOW_SERVING,
+            claim_status=QueueTicket.ClaimStatus.CLAIMED,
+            claimed_at=claimed_at,
+        )
+        next_appointment = Appointment.objects.create(
+            resident=self.resident,
+            barangay=self.barangay,
+            service=self.service,
+            appointment_date=today + timedelta(days=1),
+            time_slot=self.time_slot,
+            queue_number="DOC-NEXT",
+            status=Appointment.Status.CONFIRMED,
+        )
+
+        queue_response = self.client.get("/api/queue-status/")
+        self.assertEqual(
+            queue_response.data["appointment"]["id"], next_appointment.pk
+        )
+
+        history_response = self.client.get("/api/transactions/")
+        finalized_record = next(
+            item
+            for item in history_response.data["transactions"]
+            if item["id"] == finalized.pk
+        )
+        self.assertEqual(finalized_record["status"], "Completed")
+        self.assertEqual(
+            finalized_record["status_code"], Appointment.Status.COMPLETED
+        )
+        self.assertIsNotNone(finalized_record["date_claimed"])
+
+        for endpoint in ("/api/queue-status/", "/api/transactions/"):
+            cancellation = self.client.post(
+                endpoint,
+                {"appointment_id": finalized.pk, "action": "cancel"},
+                format="json",
+            )
+            self.assertEqual(cancellation.status_code, 400)
+
+        finalized.refresh_from_db()
+        self.assertEqual(finalized.status, Appointment.Status.ONGOING)
+
     def test_completed_and_missed_appointments_keep_occupying_slots(self):
         booking_date = timezone.localdate() + timedelta(days=1)
         completed = Appointment.objects.create(

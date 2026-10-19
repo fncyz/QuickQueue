@@ -102,6 +102,10 @@ class QueueTicket(models.Model):
 
     @property
     def activity_status_display(self):
+        if self.activity_status in (self.Status.CANCELLED, self.Status.MISSED):
+            return dict(self.Status.choices)[self.activity_status]
+        if self.activity_status == self.Status.COMPLETED:
+            return "Completed"
         if self.claim_status == self.ClaimStatus.READY:
             return "Ready for Pickup"
         if self.claim_status == self.ClaimStatus.PROCESSING:
