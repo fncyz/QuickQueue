@@ -50,6 +50,7 @@ class SuperAdminAccountManagementTests(TestCase):
         self.assertEqual(admin_user.barangay_profile, self.barangay)
         self.assertEqual(admin_user.staff_profile.role, BarangayStaff.Role.ADMIN)
         self.assertEqual(admin_user.staff_profile.barangay, self.barangay)
+        self.assertTrue(admin_user.staff_profile.must_change_password)
         registration = admin_user.barangay_admin_registration
         self.assertEqual(registration.status, BarangayAdminRegistration.Status.APPROVED)
         self.assertEqual(registration.origin, BarangayAdminRegistration.Origin.SUPERUSER)
@@ -58,7 +59,11 @@ class SuperAdminAccountManagementTests(TestCase):
         login_response = self.client.post(reverse("signin"), {
             "username": admin_user.username, "password": self.password,
         })
-        self.assertRedirects(login_response, reverse("barangay_dashboard"), fetch_redirect_response=False)
+        self.assertRedirects(
+            login_response,
+            reverse("mandatory_password_change"),
+            fetch_redirect_response=False,
+        )
 
     def test_duplicate_username_and_barangay_assignment_are_rejected(self):
         self.create_admin()
@@ -84,7 +89,10 @@ class SuperAdminAccountManagementTests(TestCase):
             "is_active": "on",
         })
 
-        self.assertRedirects(response, reverse("superadmin_admin_detail", args=[admin_user.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('superadmin_barangay_admins')}?selected={admin_user.pk}",
+        )
         admin_user.refresh_from_db()
         self.barangay.refresh_from_db()
         self.other_barangay.refresh_from_db()
@@ -93,6 +101,22 @@ class SuperAdminAccountManagementTests(TestCase):
         self.assertEqual(self.other_barangay.user_id, admin_user.pk)
         self.assertEqual(admin_user.staff_profile.barangay, self.other_barangay)
         self.assertEqual(admin_user.email, "updated@example.com")
+
+    def test_admin_edit_preserves_safe_management_return_location(self):
+        admin_user = self.create_admin()
+        return_to = (
+            f"{reverse('superadmin_barangay_admins')}?q=Maria&status=active"
+            f"&sort=desc&page=1&selected={admin_user.pk}"
+        )
+
+        response = self.client.get(
+            reverse("superadmin_admin_edit", args=[admin_user.pk]),
+            {"return_to": return_to},
+        )
+
+        self.assertContains(response, "Back to Barangay Admins")
+        self.assertContains(response, "You have unsaved changes")
+        self.assertEqual(response.context["return_url"], return_to)
 
     def test_activation_controls_user_and_admin_profile(self):
         admin_user = self.create_admin()
@@ -129,6 +153,24 @@ class SuperAdminAccountManagementTests(TestCase):
             barangay.save(update_fields=["user"])
         page_two = self.client.get(reverse("superadmin_barangay_admins"), {"page": 2})
         self.assertEqual(page_two.context["admin_page"].number, 2)
+
+    def test_administrator_details_panel_is_hidden_until_view_is_selected(self):
+        admin_user = self.create_admin()
+
+        default_response = self.client.get(reverse("superadmin_barangay_admins"))
+        self.assertIsNone(default_response.context["selected_admin"])
+        self.assertContains(
+            default_response,
+            'id="admin-selection" aria-label="Selected administrator details" hidden',
+        )
+
+        selected_response = self.client.get(
+            reverse("superadmin_barangay_admins"), {"selected": admin_user.pk}
+        )
+        self.assertEqual(selected_response.context["selected_admin"], admin_user)
+        self.assertContains(selected_response, "split-management panel-open")
+        self.assertContains(selected_response, "Close selected administrator details")
+        self.assertContains(selected_response, admin_user.email)
 
     def test_secure_password_reset_sends_token_link(self):
         admin_user = self.create_admin()

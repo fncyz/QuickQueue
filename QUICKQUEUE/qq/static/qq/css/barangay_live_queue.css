@@ -25,3 +25,7 @@
 .serving-metrics .available-window-list{max-width:190px;font-size:clamp(15px,1.25vw,21px);line-height:1.25;white-space:normal}
 .recently-served{margin-top:24px}
 @media(max-width:700px){.serving-metrics .available-window-list{max-width:none}.serving-metrics .time-slot-value{font-size:clamp(15px,4vw,20px)}}
+
+/* Prevent only the fullscreen serving labels from wrapping on wide displays. */
+.live-monitor-page:fullscreen .live-label{display:inline-flex;align-items:center;white-space:nowrap}
+.live-monitor-page:fullscreen .assigned-window-value{font-size:clamp(19px,1.45vw,32px);white-space:nowrap}

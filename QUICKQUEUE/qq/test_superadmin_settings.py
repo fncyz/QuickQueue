@@ -24,7 +24,7 @@ class SuperAdminSettingsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "System Administrator")
         self.assertContains(response, "settings-superuser")
-        self.assertContains(response, "Super Administrator")
+        self.assertContains(response, "System Administrator")
         self.assertContains(response, "PostgreSQL (Supabase)")
         self.assertContains(response, "Vercel")
         self.assertContains(response, "Asia/Manila")

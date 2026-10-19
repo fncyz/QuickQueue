@@ -141,6 +141,7 @@ class BarangayAdminDetailsTests(TestCase):
         self.assertIn("Booking Reference", labels)
         self.assertIn(booking.booking_reference, values)
         self.assertNotIn("Queue Number", labels)
+        self.assertNotIn("Time Slot", labels)
         self.assertNotIn("Purpose", labels)
         self.assertNotIn("Sitio / Purok", labels)
 
@@ -154,9 +155,18 @@ class BarangayAdminDetailsTests(TestCase):
         ]
         labels = {field["label"] for field in fields}
         self.assertIn("Queue Number", labels)
+        self.assertIn("Time Slot", labels)
         self.assertIn("Purpose", labels)
         self.assertIn("Sitio / Purok", labels)
         self.assertNotIn("Booking Reference", labels)
+
+    def test_resident_rows_only_show_the_view_action(self):
+        response = self.client.get(reverse("barangay_residents"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="#resident-{self.resident.pk}"')
+        self.assertNotContains(response, 'class="btn-more"')
+        self.assertContains(response, "qq/js/admin_details_modal.js")
 
     def test_detail_endpoint_rejects_cross_barangay_records_and_regular_staff(self):
         foreign_user = User.objects.create_user("foreign-detail", password="secret")

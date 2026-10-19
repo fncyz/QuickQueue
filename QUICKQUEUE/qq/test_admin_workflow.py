@@ -632,6 +632,16 @@ class AdminStaffWorkflowTests(TestCase):
             ticket.pk: ticket.wait_minutes for ticket in serving_response.context["tickets"]
         }
         self.assertEqual(serving_estimates[second.pk], self.service.estimated_duration)
+        table_markup = serving_response.content.decode().split(
+            '<section class="queue-table panel">', 1
+        )[1].split("</section>", 1)[0]
+        self.assertIn(">Skip</button>", table_markup)
+        self.assertIn(">Serve Now</button>", table_markup)
+        self.assertNotIn(">Complete</button>", table_markup)
+        self.assertContains(
+            serving_response,
+            "font:700 11px Poppins,Arial,sans-serif",
+        )
 
         first.status = QueueTicket.Status.COMPLETED
         first.save(update_fields=["status", "updated_at"])
@@ -748,6 +758,7 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertContains(response, "Serving Resident")
         self.assertContains(response, "Window 2")
         self.assertContains(response, "Now Serving")
+        self.assertContains(response, 'class="assigned-window-value"')
 
         forbidden = self.client.post("/barangay/queue/skip/", {"slot": self.slot.pk})
         self.assertEqual(forbidden.status_code, 403)
@@ -1262,6 +1273,23 @@ class AdminStaffWorkflowTests(TestCase):
         ready_preview = self.client.get(preview_url)
         self.assertContains(ready_preview, "Ready for Pickup")
         self.assertContains(ready_preview, 'disabled aria-disabled="true"')
+
+    def test_document_completion_uses_explicit_numeric_id_and_url_not_form_action_property(self):
+        ticket = self._ticket("completion-url", "Completion URL", self.service, "C19")
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        completion_url = f"/barangay/staff/documents/{ticket.pk}/preview/"
+
+        response = self.client.get("/barangay/staff/documents/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'data-document-id="{ticket.pk}"')
+        self.assertContains(response, f'data-completion-url="{completion_url}"')
+        completion_script = response.content.decode().split(
+            "document.querySelectorAll('.complete-document-form')", 1
+        )[1].split("document.querySelectorAll('.workflow-purpose')", 1)[0]
+        self.assertIn("fetch(requestUrl", completion_script)
+        self.assertNotIn("fetch(form.action", completion_script)
 
     @patch("qq.services.push_notifications._send_notification_push")
     def test_document_ready_push_is_queued_after_commit_for_configured_device(self, send_push):

@@ -8,6 +8,8 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -17,7 +19,6 @@ from qq.models import Appointment, Barangay, BarangayAdminRegistration, Barangay
 SUPERADMIN_PAGES = {
     "barangays": ("Barangays", "Barangay management will be available in a future phase."),
     "barangay_admins": ("Barangay Admins", "Barangay administrator management will be available in a future phase."),
-    "pending_verifications": ("Pending Verifications", "Verification tools will be available in a future phase."),
     "system_settings": ("System Settings", "System configuration will be available in a future phase."),
 }
 
@@ -25,6 +26,17 @@ SUPERADMIN_PAGES = {
 def _require_superuser(request):
     if not request.user.is_superuser:
         raise PermissionDenied
+
+
+def _safe_management_return(request, fallback):
+    return_to = request.GET.get("return_to", "")
+    if return_to and url_has_allowed_host_and_scheme(
+        return_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return return_to
+    return fallback
 
 
 def _appointment_period(value, today):
@@ -41,26 +53,42 @@ def _recent_activities():
     activities = []
     for barangay in Barangay.objects.only("name", "created_at").order_by("-created_at")[:8]:
         activities.append({
-            "kind": "barangay",
+            "activity_type": "barangay_registered",
             "description": f"Barangay {barangay.name} was registered.",
             "timestamp": barangay.created_at,
         })
 
-    registrations = BarangayAdminRegistration.objects.select_related("barangay", "user").order_by("-created_at")[:8]
+    # Registration management has been retired, but its historical audit events
+    # remain useful context on the read-only dashboard activity feed.
+    registrations = BarangayAdminRegistration.objects.select_related(
+        "barangay", "user"
+    ).order_by("-created_at")[:8]
     for registration in registrations:
         applicant = registration.user.get_full_name() or registration.user.username
         activities.append({
-            "kind": "application",
-            "description": f"{applicant} submitted an administrator application for Barangay {registration.barangay.name}.",
+            "activity_type": "administrator_application_submitted",
+            "description": (
+                f"{applicant} submitted an administrator application for "
+                f"Barangay {registration.barangay.name}."
+            ),
             "timestamp": registration.created_at,
         })
         if registration.reviewed_at and registration.status in {
             BarangayAdminRegistration.Status.APPROVED,
             BarangayAdminRegistration.Status.REJECTED,
         }:
+            activity_type = (
+                "administrator_approved"
+                if registration.status == BarangayAdminRegistration.Status.APPROVED
+                else "administrator_rejected"
+            )
             activities.append({
-                "kind": registration.status,
-                "description": f"The administrator application for Barangay {registration.barangay.name} was {registration.get_status_display().lower()}.",
+                "activity_type": activity_type,
+                "description": (
+                    f"The administrator application for Barangay "
+                    f"{registration.barangay.name} was "
+                    f"{registration.get_status_display().lower()}."
+                ),
                 "timestamp": registration.reviewed_at,
             })
 
@@ -94,23 +122,6 @@ def superadmin_dashboard(request):
         .values_list("user_id", flat=True)
     )
 
-    verification_counts = {
-        row["status"]: row["total"]
-        for row in BarangayAdminRegistration.objects.values("status").annotate(total=Count("id"))
-    }
-    total_applications = sum(verification_counts.values())
-    verification_rows = []
-    for status, label in BarangayAdminRegistration.Status.choices:
-        count = verification_counts.get(status, 0)
-        percentage = round(count / total_applications * 100, 1) if total_applications else 0
-        verification_rows.append({
-            "status": status,
-            "label": label,
-            "count": count,
-            "percentage": percentage,
-            "action": "Awaiting review" if status == BarangayAdminRegistration.Status.PENDING else f"{label} decision recorded",
-        })
-
     context = {
         "today": today,
         "total_barangays": Barangay.objects.count(),
@@ -121,14 +132,6 @@ def superadmin_dashboard(request):
         "period_label": period_label,
         "selected_period": selected_period,
         "recent_activities": _recent_activities(),
-        "total_applications": total_applications,
-        "verification_rows": verification_rows,
-        "approved_applications": verification_counts.get(BarangayAdminRegistration.Status.APPROVED, 0),
-        "rejected_applications": verification_counts.get(BarangayAdminRegistration.Status.REJECTED, 0),
-        "pending_applications": verification_counts.get(BarangayAdminRegistration.Status.PENDING, 0),
-        "pending_verifications": BarangayAdminRegistration.objects.filter(
-            status=BarangayAdminRegistration.Status.PENDING
-        ).select_related("barangay", "user").order_by("-created_at")[:5],
     }
     return render(request, "superadmin/dashboard.html", context)
 
@@ -162,7 +165,33 @@ def _administrator_name(barangay):
     return None
 
 
-def _barangay_management_context(request, *, form=None, editing=None):
+def _administrator_details(barangay):
+    if barangay.user_id:
+        user = barangay.user
+        staff_profile = getattr(user, "staff_profile", None)
+        return {
+            "name": user.get_full_name() or user.username,
+            "contact": getattr(staff_profile, "contact_number", "") or "Not provided",
+            "email": user.email or "Not provided",
+            "registered": user.date_joined,
+        }
+    if barangay.active_admins:
+        profile = barangay.active_admins[0]
+        return {
+            "name": profile.full_name,
+            "contact": profile.contact_number or "Not provided",
+            "email": profile.user.email if profile.user_id and profile.user.email else "Not provided",
+            "registered": profile.created_at,
+        }
+    return {
+        "name": "Not assigned",
+        "contact": "Not provided",
+        "email": "Not provided",
+        "registered": None,
+    }
+
+
+def _barangay_management_context(request, *, form=None, editing=None, return_url=""):
     today = timezone.localdate()
     queryset = _barangay_queryset().annotate(
         resident_count=Count("residents", distinct=True),
@@ -184,11 +213,13 @@ def _barangay_management_context(request, *, form=None, editing=None):
     queryset = queryset.order_by("-name" if sort == "desc" else "name")
     page = Paginator(queryset, 10).get_page(request.GET.get("page"))
     for barangay in page.object_list:
-        barangay.assigned_administrator = _administrator_name(barangay)
+        administrator = _administrator_details(barangay)
+        barangay.assigned_administrator = administrator["name"]
+        barangay.administrator_contact = administrator["contact"]
+        barangay.administrator_email = administrator["email"]
+        barangay.administrator_registered = administrator["registered"]
     selected_id = request.GET.get("selected")
     selected_barangay = next((item for item in page.object_list if str(item.pk) == selected_id), None)
-    if selected_barangay is None and page.object_list:
-        selected_barangay = page.object_list[0]
     return {
         "barangay_page": page,
         "search_query": search,
@@ -200,13 +231,11 @@ def _barangay_management_context(request, *, form=None, editing=None):
         "active_admins": BarangayStaff.objects.filter(
             role=BarangayStaff.Role.ADMIN, user__is_active=True
         ).values("user_id").distinct().count(),
-        "pending_registrations": BarangayAdminRegistration.objects.filter(
-            status=BarangayAdminRegistration.Status.PENDING
-        ).count(),
         "total_residents": Resident.objects.count(),
         "selected_barangay": selected_barangay,
         "barangay_form": form or SuperAdminBarangayForm(),
         "editing_barangay": editing,
+        "return_url": return_url,
         "show_barangay_modal": form is not None or request.GET.get("add") == "1" or editing is not None,
     }
 
@@ -246,11 +275,18 @@ def superadmin_barangay_detail(request, pk):
 def superadmin_barangay_edit(request, pk):
     _require_superuser(request)
     barangay = get_object_or_404(_barangay_queryset(), pk=pk)
+    fallback = f"{reverse('superadmin_barangays')}?selected={barangay.pk}"
+    return_url = _safe_management_return(request, fallback)
     if request.method == "GET":
         return render(
             request,
             "superadmin/barangays.html",
-            _barangay_management_context(request, form=SuperAdminBarangayForm(instance=barangay), editing=barangay),
+            _barangay_management_context(
+                request,
+                form=SuperAdminBarangayForm(instance=barangay),
+                editing=barangay,
+                return_url=return_url,
+            ),
         )
 
     form = SuperAdminBarangayForm(request.POST, instance=barangay)
@@ -262,11 +298,13 @@ def superadmin_barangay_edit(request, pk):
             form.add_error("name", "A barangay with this name already exists.")
         else:
             messages.success(request, f"Barangay {barangay.name} was updated successfully.")
-            return redirect("superadmin_barangay_detail", pk=barangay.pk)
+            return redirect(return_url)
     return render(
         request,
         "superadmin/barangays.html",
-        _barangay_management_context(request, form=form, editing=barangay),
+        _barangay_management_context(
+            request, form=form, editing=barangay, return_url=return_url
+        ),
         status=400,
     )
 

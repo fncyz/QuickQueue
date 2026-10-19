@@ -18,7 +18,7 @@
 <section class="workflow-card checklist"><h3>Document Checklist</h3><article><i>✓</i><span><b>Service identified</b><small>{{ ticket.appointment.service.name }}</small></span></article><article><i>✓</i><span><b>Active template matched</b><small>{{ ticket.appointment.service.name }} Template</small></span></article><article><i>✓</i><span><b>Required information complete</b><small>Resident and appointment fields available</small></span></article><div class="generated-note"><b>Document generated</b><small>Review the document before completing.</small></div><button type="button" class="preview-generated" data-preview="document-preview-{{ ticket.pk }}">Preview Generated Document</button></section></div></div>
 <div class="workflow-actions"><button type="button" class="save-close">Save &amp; Close</button>{% if ticket.can_process %}<button type="button" class="done-workflow" data-confirm="document-completion-{{ ticket.pk }}">Done</button>{% endif %}</div></dialog>
 <dialog class="document-preview-modal" id="document-preview-{{ ticket.pk }}"><header><div><small>DOCUMENT PREVIEW · DOC-{{ ticket.appointment.created_at|date:'Y' }}-{{ ticket.pk|stringformat:'06d' }}</small><h2>{{ ticket.appointment.service.name }}</h2></div><button type="button" class="preview-close" aria-label="Close">&times;</button></header><iframe title="Generated {{ ticket.appointment.service.name }}" data-src="{% url 'staff_processing_document_preview' ticket.pk %}?embedded=1"></iframe><footer><a href="{% url 'staff_processing_document_preview' ticket.pk %}?download=1">Download</a><button type="button" class="print-generated">Print</button>{% if ticket.can_process %}<button type="button" class="done-generated" data-confirm="document-completion-{{ ticket.pk }}">Done</button>{% endif %}</footer></dialog>
-{% if ticket.can_process %}<dialog class="document-completion-modal" id="document-completion-{{ ticket.pk }}"><section><h2>Complete Document Processing?</h2><p>Are you done processing this document? It will be marked as Ready for Pickup.</p></section><form class="complete-document-form" method="post" action="{% url 'staff_processing_document_preview' ticket.pk %}">{% csrf_token %}<input type="hidden" name="action" value="complete"><footer><button type="button" class="completion-no">No</button><button type="submit" class="completion-yes">Yes</button></footer></form></dialog>{% endif %}
+{% if ticket.can_process %}<dialog class="document-completion-modal" id="document-completion-{{ ticket.pk }}"><section><h2>Complete Document Processing?</h2><p>Are you done processing this document? It will be marked as Ready for Pickup.</p></section><form class="complete-document-form" method="post" action="{% url 'staff_processing_document_preview' ticket.pk %}" data-document-id="{{ ticket.pk }}" data-completion-url="{% url 'staff_processing_document_preview' ticket.pk %}">{% csrf_token %}<input type="hidden" name="action" value="complete"><footer><button type="button" class="completion-no">No</button><button type="submit" class="completion-yes">Yes</button></footer></form></dialog>{% endif %}
 {% endif %}{% endfor %}
 {% for ticket in tickets %}{% if ticket.is_expired %}<dialog class="document-completion-modal archive-expired-modal" id="archive-expired-{{ ticket.pk }}"><section><h2>Archive Expired Appointment?</h2><p>Are you sure you want to archive this expired appointment? Its records will remain available in history.</p></section><form class="archive-expired-form" method="post" action="{% url 'staff_document_action' ticket.pk %}">{% csrf_token %}<input type="hidden" name="action" value="archive_expired"><footer><button type="button" class="archive-no">No</button><button type="submit" class="archive-yes">Yes, Archive</button></footer></form></dialog>{% endif %}{% endfor %}
 <script>
@@ -58,19 +58,32 @@ document.querySelectorAll('.complete-document-form').forEach(function(form) {
   form.addEventListener('submit', function(event) {
     event.preventDefault();
     var yesButton = form.querySelector('.completion-yes');
-    if (yesButton.disabled) return;
+    if (yesButton.disabled || form.dataset.submitting === 'true') return;
+    var documentId = form.dataset.documentId || '';
+    var requestUrl = form.dataset.completionUrl || '';
+    if (!/^[1-9]\d*$/.test(documentId) || !requestUrl) {
+      window.alert('Unable to complete this document because its identifier is invalid. Please refresh the page and try again.');
+      return;
+    }
+    form.dataset.submitting = 'true';
     yesButton.disabled = true;
     yesButton.textContent = 'Processing…';
-    fetch(form.action, {
+    fetch(requestUrl, {
       method: 'POST',
       body: new FormData(form),
       headers: {'X-Requested-With': 'XMLHttpRequest'}
     }).then(function(response) {
-      if (!response.ok) throw new Error('Unable to complete this document.');
-      return response.json();
+      return response.json().catch(function() { return {}; }).then(function(payload) {
+        if (!response.ok || payload.ok !== true) {
+          throw new Error(payload.error || 'Unable to complete this document. Please try again.');
+        }
+        return payload;
+      });
     }).then(function() {
+      window.alert('Document marked as Ready for Pickup.');
       window.location.reload();
     }).catch(function(error) {
+      form.dataset.submitting = 'false';
       yesButton.disabled = false;
       yesButton.textContent = 'Yes';
       window.alert(error.message);

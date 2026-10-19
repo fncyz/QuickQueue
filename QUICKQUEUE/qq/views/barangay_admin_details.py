@@ -56,7 +56,6 @@ def _appointment_details(barangay, pk):
         {"label": "Resident", "value": str(appointment.resident)},
         {"label": "Service", "value": appointment.service.name},
         {"label": "Appointment Date", "value": _date(appointment.appointment_date)},
-        {"label": "Time Slot", "value": _slot_label(appointment.time_slot)},
     ]
     if is_special_service:
         appointment_fields.append(
@@ -66,8 +65,11 @@ def _appointment_details(barangay, pk):
             }
         )
     else:
-        appointment_fields.append(
-            {"label": "Queue Number", "value": _value(appointment.queue_number)}
+        appointment_fields.extend(
+            [
+                {"label": "Time Slot", "value": _slot_label(appointment.time_slot)},
+                {"label": "Queue Number", "value": _value(appointment.queue_number)},
+            ]
         )
     appointment_fields.append({"label": "Status", "value": status_label})
 

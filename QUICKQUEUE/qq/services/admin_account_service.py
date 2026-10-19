@@ -71,6 +71,7 @@ def create_barangay_admin(cleaned_data):
         username=user.username, email=user.email,
         contact_number=barangay.contact_number,
         role=BarangayStaff.Role.ADMIN, is_active=user.is_active,
+        must_change_password=True,
     )
     barangay.user = user
     barangay.save(update_fields=("user", "updated_at"))

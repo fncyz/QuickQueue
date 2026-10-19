@@ -48,8 +48,8 @@ class BarangayAdminCreateForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
     barangay = forms.ModelChoiceField(queryset=Barangay.objects.none())
-    password1 = forms.CharField(label="Password", help_text="Password must be at least 8 characters.", widget=forms.PasswordInput(attrs={"minlength": 8}))
-    password2 = forms.CharField(label="Confirm Password", widget=forms.PasswordInput(attrs={"minlength": 8}))
+    password1 = forms.CharField(label="Temporary Password", help_text="Password must be at least 8 characters. The administrator must replace it at first login.", widget=forms.PasswordInput(attrs={"minlength": 8}))
+    password2 = forms.CharField(label="Confirm Temporary Password", widget=forms.PasswordInput(attrs={"minlength": 8}))
     is_active = forms.BooleanField(required=False, initial=True)
 
     def __init__(self, *args, **kwargs):
@@ -138,7 +138,7 @@ class SuperAdminProfileForm(forms.ModelForm):
 
 
 class AdministrativePasswordResetForm(forms.Form):
-    superuser_password = forms.CharField(label="Your Super Admin Password", widget=forms.PasswordInput)
+    superuser_password = forms.CharField(label="Your System Administrator Password", widget=forms.PasswordInput)
     temporary_password1 = forms.CharField(label="Temporary Password", help_text="Password must be at least 8 characters.", widget=forms.PasswordInput(attrs={"minlength": 8}))
     temporary_password2 = forms.CharField(label="Confirm Temporary Password", widget=forms.PasswordInput(attrs={"minlength": 8}))
 
@@ -150,7 +150,7 @@ class AdministrativePasswordResetForm(forms.Form):
     def clean_superuser_password(self):
         password = self.cleaned_data["superuser_password"]
         if not self.superuser.check_password(password):
-            raise forms.ValidationError("Your Super Admin password is incorrect.")
+            raise forms.ValidationError("Your System Administrator password is incorrect.")
         return password
 
     def clean(self):

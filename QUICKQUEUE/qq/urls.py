@@ -59,10 +59,6 @@ from qq.views.superadmin_admins import (
     superadmin_admin_password_reset, superadmin_admin_status, superadmin_admins,
     superadmin_admin_temporary_password,
 )
-from qq.views.superadmin_verifications import (
-    superadmin_verification_approve, superadmin_verification_detail,
-    superadmin_verification_reject, superadmin_verifications,
-)
 from qq.views.superadmin_settings import superadmin_settings
 from qq.views.mandatory_password import mandatory_password_change
 
@@ -88,10 +84,6 @@ urlpatterns = [
     path("superadmin/barangay-admins/<int:pk>/status/", superadmin_admin_status, name="superadmin_admin_status"),
     path("superadmin/barangay-admins/<int:pk>/password-reset/", superadmin_admin_password_reset, name="superadmin_admin_password_reset"),
     path("superadmin/barangay-admins/<int:pk>/temporary-password/", superadmin_admin_temporary_password, name="superadmin_admin_temporary_password"),
-    path("superadmin/pending-verifications/", superadmin_verifications, name="superadmin_pending_verifications"),
-    path("superadmin/pending-verifications/<int:pk>/", superadmin_verification_detail, name="superadmin_verification_detail"),
-    path("superadmin/pending-verifications/<int:pk>/approve/", superadmin_verification_approve, name="superadmin_verification_approve"),
-    path("superadmin/pending-verifications/<int:pk>/reject/", superadmin_verification_reject, name="superadmin_verification_reject"),
     path("superadmin/system-settings/", superadmin_settings, name="superadmin_system_settings"),
     path("barangay/dashboard/", barangay_dashboard, name="barangay_dashboard"),
     path("barangay/staff/dashboard/", staff_dashboard, name="staff_dashboard"),

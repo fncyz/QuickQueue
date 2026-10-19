@@ -251,8 +251,7 @@
     gap: 6px;
 }
 
-.btn-view,
-.btn-more {
+.btn-view {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -279,13 +278,6 @@
     stroke-width: 1.9;
     stroke-linecap: round;
     stroke-linejoin: round;
-}
-
-.btn-more {
-    width: 30px;
-    border: 1px solid var(--line);
-    color: var(--muted);
-    background: #fff;
 }
 
 .empty-row {

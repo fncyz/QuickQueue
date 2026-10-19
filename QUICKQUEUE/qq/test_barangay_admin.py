@@ -65,6 +65,12 @@ class BarangayAdminRegistrationManagementTests(TestCase):
         self.assertContains(templates_page, 'placeholder="Search document templates..."')
         self.assertContains(templates_page, 'class="template-grid"')
         self.assertContains(templates_page, "qq/js/document_templates.js")
+        self.assertContains(templates_page, 'type="button" class="close secondary">Cancel</button>')
+        self.assertContains(
+            templates_page,
+            "#template-dialog footer .secondary{width:auto;height:42px",
+        )
+        self.assertContains(templates_page, "font:700 14px Poppins,sans-serif")
         self.assertNotContains(templates_page, "<table")
         self.assertNotContains(templates_page, "Service document library")
         self.assertNotContains(templates_page, "template-intro")

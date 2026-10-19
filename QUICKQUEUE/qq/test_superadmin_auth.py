@@ -117,7 +117,7 @@ class SuperAdminAuthenticationTests(TestCase):
         django_admin_response = self.client.get(reverse("admin:index"))
 
         self.assertEqual(dashboard_response.status_code, 200)
-        self.assertContains(dashboard_response, "QuickQueue Super Admin Dashboard")
+        self.assertContains(dashboard_response, "QuickQueue System Administrator Dashboard")
         self.assertEqual(django_admin_response.status_code, 200)
 
     def test_logout_ends_superuser_session(self):
@@ -138,7 +138,6 @@ class SuperAdminAuthenticationTests(TestCase):
             "superadmin_dashboard",
             "superadmin_barangays",
             "superadmin_barangay_admins",
-            "superadmin_pending_verifications",
             "superadmin_system_settings",
         )
         superuser = User.objects.create_superuser(
@@ -156,7 +155,7 @@ class SuperAdminAuthenticationTests(TestCase):
                 self.assertTemplateUsed(response, "superadmin/components/sidebar.html")
                 self.assertContains(response, f'class="active" href="{reverse(route_name)}"')
                 self.assertContains(response, "qq/images/qqlogo.png")
-                self.assertContains(response, "Super Admin Portal")
+                self.assertContains(response, "System Administrator Portal")
 
         self.client.logout()
         non_superuser = User.objects.create_user(
@@ -227,7 +226,7 @@ class SuperAdminDashboardDataTests(TestCase):
             reviewed_at=timezone.now() if status != BarangayAdminRegistration.Status.PENDING else None,
         )
 
-    def test_dashboard_statistics_and_verifications_use_database_records(self):
+    def test_dashboard_statistics_ignore_historical_verification_records(self):
         direct_admin = User.objects.create_user(username="direct-admin", password=self.password, is_staff=True)
         self.barangay_one.user = direct_admin
         self.barangay_one.save(update_fields=["user"])
@@ -271,13 +270,10 @@ class SuperAdminDashboardDataTests(TestCase):
         self.assertEqual(response.context["total_admins"], 2)
         self.assertEqual(response.context["total_residents"], self.initial_residents + 2)
         self.assertEqual(response.context["today_appointments"], self.initial_today_appointments + 2)
-        self.assertEqual(response.context["total_applications"], 4)
-        self.assertEqual(response.context["approved_applications"], 2)
-        self.assertEqual(response.context["rejected_applications"], 1)
-        self.assertEqual(response.context["pending_applications"], 1)
-        percentages = {row["status"]: row["percentage"] for row in response.context["verification_rows"]}
-        self.assertEqual(percentages, {"pending": 25.0, "approved": 50.0, "rejected": 25.0})
-        self.assertEqual(len(response.context["pending_verifications"]), 1)
+        self.assertNotIn("total_applications", response.context)
+        self.assertNotContains(response, "Verification Report")
+        self.assertNotContains(response, "Pending Verifications")
+        self.assertEqual(BarangayAdminRegistration.objects.count(), 4)
 
     def test_appointment_chart_groups_barangays_and_filters_dates(self):
         resident_one = self._resident("chart-one", self.barangay_one, "09511111111")
@@ -312,8 +308,6 @@ class SuperAdminDashboardDataTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No appointment records")
-        self.assertContains(response, "No verification data")
-        self.assertContains(response, "No pending verifications")
         self.assertContains(response, "No recorded activities")
 
 
@@ -353,6 +347,24 @@ class SuperAdminBarangayManagementTests(TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, self.barangay.address)
         self.assertContains(detail_response, "Assigned Administrator")
+
+    def test_barangay_details_panel_is_hidden_by_default_and_opens_for_selection(self):
+        default_response = self.client.get(reverse("superadmin_barangays"))
+
+        self.assertIsNone(default_response.context["selected_barangay"])
+        self.assertContains(
+            default_response,
+            'id="barangay-selection" aria-label="Selected barangay details" hidden',
+        )
+        self.assertNotContains(default_response, 'id="barangay-management" class="panel-open"')
+
+        selected_response = self.client.get(
+            reverse("superadmin_barangays"), {"selected": self.barangay.pk}
+        )
+
+        self.assertEqual(selected_response.context["selected_barangay"], self.barangay)
+        self.assertContains(selected_response, "split-management panel-open")
+        self.assertContains(selected_response, "Close selected barangay details")
 
     def test_superuser_can_create_barangay_and_dashboard_total_updates(self):
         before = self.client.get(reverse("superadmin_dashboard")).context["total_barangays"]
@@ -398,11 +410,28 @@ class SuperAdminBarangayManagementTests(TestCase):
             "is_active": "on",
         })
 
-        self.assertRedirects(response, reverse("superadmin_barangay_detail", args=[self.barangay.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('superadmin_barangays')}?selected={self.barangay.pk}",
+        )
         self.barangay.refresh_from_db()
         self.assertEqual(self.barangay.name, "Updated Barangay")
         self.assertEqual(self.barangay.address, "Updated Address, Toledo City")
         self.assertEqual(self.barangay.user, administrator)
+
+    def test_barangay_edit_preserves_safe_management_return_location(self):
+        return_to = (
+            f"{reverse('superadmin_barangays')}?q=Management&status=active"
+            f"&sort=desc&page=1&selected={self.barangay.pk}"
+        )
+        response = self.client.get(
+            reverse("superadmin_barangay_edit", args=[self.barangay.pk]),
+            {"return_to": return_to},
+        )
+
+        self.assertContains(response, "Back to Barangays")
+        self.assertContains(response, "You have unsaved changes")
+        self.assertEqual(response.context["return_url"], return_to)
 
     def test_search_status_sorting_and_pagination(self):
         self.barangay.is_active = False

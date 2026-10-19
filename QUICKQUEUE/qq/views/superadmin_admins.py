@@ -8,17 +8,29 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from qq.forms import AdministrativePasswordResetForm, BarangayAdminCreateForm, BarangayAdminEditForm
-from qq.models import Appointment, Barangay, BarangayAdminRegistration, BarangayStaff, Resident
-from django.utils import timezone
+from qq.models import Barangay, BarangayStaff
 from qq.services.admin_account_service import create_barangay_admin, reset_admin_password, update_barangay_admin
 
 
 def _require_superuser(request):
     if not request.user.is_superuser:
         raise PermissionDenied
+
+
+def _safe_management_return(request, fallback):
+    return_to = request.GET.get("return_to", "")
+    if return_to and url_has_allowed_host_and_scheme(
+        return_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return return_to
+    return fallback
 
 
 def _admin_queryset():
@@ -36,7 +48,7 @@ def _barangay_for(user):
     return None
 
 
-def _management_context(request, *, form=None, editing=None):
+def _management_context(request, *, form=None, editing=None, return_url=""):
     queryset = _admin_queryset()
     search = request.GET.get("q", "").strip()
     status = request.GET.get("status", "all")
@@ -68,20 +80,6 @@ def _management_context(request, *, form=None, editing=None):
         admin_user.contact_number = getattr(getattr(admin_user, "staff_profile", None), "contact_number", "")
     selected_id = request.GET.get("selected")
     selected_admin = next((item for item in page.object_list if str(item.pk) == selected_id), None)
-    if selected_admin is None and page.object_list:
-        selected_admin = page.object_list[0]
-    selected_stats = None
-    if selected_admin and selected_admin.assigned_barangay:
-        barangay = selected_admin.assigned_barangay
-        today = timezone.localdate()
-        selected_stats = {
-            "residents": Resident.objects.filter(barangay=barangay).count(),
-            "staff": BarangayStaff.objects.filter(barangay=barangay).exclude(role=BarangayStaff.Role.ADMIN).count(),
-            "appointments": Appointment.objects.filter(barangay=barangay, appointment_date=today).count(),
-            "completed": Appointment.objects.filter(
-                barangay=barangay, appointment_date=today, status=Appointment.Status.COMPLETED
-            ).count(),
-        }
 
     all_admins = _admin_queryset()
     assigned_ids = set(Barangay.objects.exclude(user_id=None).values_list("id", flat=True))
@@ -92,11 +90,7 @@ def _management_context(request, *, form=None, editing=None):
         "active_admins": all_admins.filter(is_active=True).count(),
         "inactive_admins": all_admins.filter(is_active=False).count(),
         "unassigned_barangays": Barangay.objects.exclude(pk__in=assigned_ids).count(),
-        "pending_registrations": BarangayAdminRegistration.objects.filter(
-            status=BarangayAdminRegistration.Status.PENDING
-        ).count(),
         "selected_admin": selected_admin,
-        "selected_stats": selected_stats,
         "barangays": Barangay.objects.order_by("name"),
         "search_query": search,
         "status_filter": status,
@@ -104,6 +98,7 @@ def _management_context(request, *, form=None, editing=None):
         "sort_order": "desc" if sort == "desc" else "asc",
         "admin_form": form or BarangayAdminCreateForm(),
         "editing_admin": editing,
+        "return_url": return_url,
         "show_admin_modal": form is not None or request.GET.get("add") == "1" or editing is not None,
     }
 
@@ -135,16 +130,29 @@ def superadmin_admin_detail(request, pk):
     _require_superuser(request)
     admin_user = get_object_or_404(_admin_queryset(), pk=pk)
     admin_user.assigned_barangay = _barangay_for(admin_user)
-    return render(request, "superadmin/admin_detail.html", {"admin_account": admin_user})
+    return render(request, "superadmin/admin_detail.html", {
+        "admin_account": admin_user,
+        "reset_form": AdministrativePasswordResetForm(
+            superuser=request.user, target_user=admin_user
+        ),
+    })
 
 
 @login_required(login_url="signin")
 def superadmin_admin_edit(request, pk):
     _require_superuser(request)
     admin_user = get_object_or_404(_admin_queryset(), pk=pk)
+    fallback = f"{reverse('superadmin_barangay_admins')}?selected={admin_user.pk}"
+    return_url = _safe_management_return(request, fallback)
     if request.method == "GET":
         form = BarangayAdminEditForm(user=admin_user)
-        return render(request, "superadmin/admins.html", _management_context(request, form=form, editing=admin_user))
+        return render(
+            request,
+            "superadmin/admins.html",
+            _management_context(
+                request, form=form, editing=admin_user, return_url=return_url
+            ),
+        )
     form = BarangayAdminEditForm(request.POST, user=admin_user)
     if form.is_valid():
         try:
@@ -153,8 +161,15 @@ def superadmin_admin_edit(request, pk):
             form.add_error("barangay", str(error) or "The account could not be updated.")
         else:
             messages.success(request, f"Administrator {admin_user.username} was updated successfully.")
-            return redirect("superadmin_admin_detail", pk=admin_user.pk)
-    return render(request, "superadmin/admins.html", _management_context(request, form=form, editing=admin_user), status=400)
+            return redirect(return_url)
+    return render(
+        request,
+        "superadmin/admins.html",
+        _management_context(
+            request, form=form, editing=admin_user, return_url=return_url
+        ),
+        status=400,
+    )
 
 
 @login_required(login_url="signin")
