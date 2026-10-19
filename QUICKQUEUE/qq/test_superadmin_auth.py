@@ -30,6 +30,15 @@ class SuperAdminAuthenticationTests(TestCase):
         )
         return user
 
+    def test_shared_signin_password_control_starts_hidden_and_accessible(self):
+        response = self.client.get(reverse("signin"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="password" name="password" type="password"')
+        self.assertContains(response, 'class="password-toggle" type="button" aria-label="Show password" aria-pressed="false"')
+        self.assertContains(response, 'class="eye-off"')
+        self.assertContains(response, 'class="eye"')
+
     def test_superuser_login_redirects_to_superadmin_dashboard_first(self):
         superuser = User.objects.create_superuser(
             username="superadmin",
@@ -429,11 +438,14 @@ class SuperAdminBarangayManagementTests(TestCase):
             {"return_to": return_to},
         )
 
-        self.assertContains(response, "Back to Barangays")
+        self.assertNotContains(response, "Back to Barangays")
+        self.assertContains(response, 'aria-label="Close"')
+        self.assertContains(response, ">Cancel</button>")
         self.assertContains(response, "You have unsaved changes")
         self.assertContains(response, 'id="barangay-modal" class="barangay-modal" open')
         self.assertContains(response, "removeAttribute('open');modal.showModal()")
         self.assertContains(response, "modal.addEventListener('cancel'")
+        self.assertContains(response, "split-management")
         self.assertEqual(response.context["return_url"], return_to)
 
     def test_search_status_sorting_and_pagination(self):

@@ -8,6 +8,12 @@
 
 @media(prefers-reduced-motion:reduce){.transition-arrival .signin-content>*{animation:none}.signin-submit{transition:none}}
 
+.password-toggle svg{grid-area:1/1;width:20px;height:20px}
+.password-toggle .eye{display:none}
+.password-toggle[aria-pressed="true"] .eye-off{display:none}
+.password-toggle[aria-pressed="true"] .eye{display:block}
+.password-toggle:active{background:rgb(255 255 255/18%)}
+
 .signin-visual{background-color:#fff;background-position:center bottom;background-size:100% auto}
 
 /* Reference geometry: shallow white S-curve with the form safely inside the blue panel. */

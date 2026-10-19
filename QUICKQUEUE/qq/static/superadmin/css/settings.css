@@ -18,8 +18,15 @@
 .settings-card form>footer{padding:16px 22px;text-align:right;border-top:1px solid #e8edf5}
 .settings-primary{min-height:41px;padding:0 18px;color:#fff;font:700 12px Poppins,Arial,sans-serif;background:#155eef;border:0;border-radius:8px;cursor:pointer}
 .password-input{position:relative;display:block}
-.password-input input{padding-right:60px}
-.password-input button{position:absolute;right:5px;top:5px;height:34px;padding:0 9px;color:#1764dc;font:600 10px Poppins,Arial,sans-serif;background:#edf4ff;border:0;border-radius:6px;cursor:pointer}
+.password-input input{padding-right:52px}
+.password-input button{position:absolute;right:5px;top:50%;width:36px;height:36px;padding:8px;display:grid;place-items:center;color:#1764dc;background:#edf4ff;border:0;border-radius:7px;cursor:pointer;transform:translateY(-50%);transition:background-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.password-input button svg{grid-area:1/1;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.password-input button .eye{display:none}
+.password-input button[aria-pressed="true"] .eye-off{display:none}
+.password-input button[aria-pressed="true"] .eye{display:block}
+.password-input button:hover{background:#dfeaff}
+.password-input button:focus-visible{outline:2px solid #1764dc;outline-offset:2px}
+.password-input button:active{transform:translateY(-50%) scale(.95)}
 .password-fields ul{margin:4px 0 0;padding-left:18px}
 .form-alert{margin:18px 22px 0;padding:10px;color:#b63e49;background:#ffedef;border-radius:8px}
 [data-settings-panel="general"] .settings-card:first-child>dl,[data-settings-panel="general"] .settings-card:nth-child(3)>dl,[data-settings-panel="account"] .settings-card.system-overview>dl{margin:0;padding:8px 24px;min-width:0}

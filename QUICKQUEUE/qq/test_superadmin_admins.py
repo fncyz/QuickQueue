@@ -114,7 +114,8 @@ class SuperAdminAccountManagementTests(TestCase):
             {"return_to": return_to},
         )
 
-        self.assertContains(response, "Back to Barangay Admins")
+        self.assertNotContains(response, "Back to Barangay Admins")
+        self.assertContains(response, ">Cancel</button>")
         self.assertContains(response, "You have unsaved changes")
         self.assertContains(response, 'id="admin-modal" class="barangay-modal" open')
         self.assertContains(response, "removeAttribute('open');modal.showModal()")
