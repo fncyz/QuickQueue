@@ -127,6 +127,10 @@ class SuperAdminAuthenticationTests(TestCase):
 
         self.assertEqual(dashboard_response.status_code, 200)
         self.assertContains(dashboard_response, "QuickQueue System Administrator Dashboard")
+        self.assertContains(dashboard_response, "Toledo City, Cebu")
+        self.assertContains(dashboard_response, 'class="dashboard-meta"')
+        self.assertNotContains(dashboard_response, "notification-icon")
+        self.assertNotContains(dashboard_response, 'aria-label="Notifications"')
         self.assertEqual(django_admin_response.status_code, 200)
 
     def test_logout_ends_superuser_session(self):

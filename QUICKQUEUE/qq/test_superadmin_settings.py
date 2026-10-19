@@ -40,6 +40,8 @@ class SuperAdminSettingsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'M4 21a8 8 0 0 1 16 0')
         self.assertContains(response, 'M7 11V7a5 5 0 0 1 10 0v4M12 15v2')
+        self.assertContains(response, 'M22 3l-8.646 8.646')
+        self.assertNotContains(response, '<header><i>#</i><span><h2>System Overview</h2>')
         self.assertContains(response, 'data-password-toggle aria-label="Show password"', count=3)
         self.assertContains(response, 'aria-label="Show password" aria-pressed="false"', count=3)
         self.assertContains(response, 'class="eye-off"', count=3)
