@@ -16,6 +16,7 @@ from .serializers import (
 )
 
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth.password_validation import validate_password
@@ -24,9 +25,11 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db import close_old_connections, connection
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, F, Q
+from django.db.models import CharField, Count, F, Q, Value
+from django.db.models.functions import Cast, Concat, ExtractYear, LPad
 from django.utils import timezone
 from datetime import date
+from decimal import Decimal
 from difflib import SequenceMatcher
 import logging
 import os
@@ -54,6 +57,11 @@ from .throttles import AccountDeletionRateThrottle, ChatRateThrottle
 
 
 logger = logging.getLogger(__name__)
+
+
+class TransactionsPagination(PageNumberPagination):
+    page_size = 20
+    max_page_size = 50
 
 
 def _delete_stored_file_safely(storage, name):
@@ -595,6 +603,20 @@ def appointments_api(request):
         }
 
     if request.method == "GET":
+        temporary_services = [service for service in services if service.is_temporary]
+        resident_bookings_by_service = {}
+        if temporary_services:
+            resident_bookings = EventBooking.objects.filter(
+                appointment__resident=resident,
+                appointment__service_id__in=[service.pk for service in temporary_services],
+            ).exclude(status=EventBooking.Status.CANCELLED).select_related(
+                "appointment"
+            ).order_by("pk")
+            for booking in resident_bookings:
+                resident_bookings_by_service.setdefault(
+                    booking.appointment.service_id, booking
+                )
+
         service_choices = []
         for service in services:
             configuration = service_configurations.get(service.pk)
@@ -615,15 +637,11 @@ def appointments_api(request):
                 })
             service_choices.append(choice)
         temporary_choices = []
-        for service in services:
-            if not service.is_temporary:
-                continue
+        for service in temporary_services:
             service_status = service.computed_status(now, service.live_booking_count)
             if service_status in {"expired", "cancelled", "deactivated", "archived"}:
                 continue
-            resident_booking = EventBooking.objects.filter(
-                appointment__resident=resident, appointment__service=service
-            ).exclude(status=EventBooking.Status.CANCELLED).first()
+            resident_booking = resident_bookings_by_service.get(service.pk)
             temporary_choices.append({
                 "id": service.pk,
                 "name": service.name,
@@ -931,7 +949,85 @@ def transactions_api(request):
 
         return Response({"message": "Invalid transaction action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    appointments = resident.appointments.select_related("service", "barangay", "time_slot", "queue_ticket", "event_booking").order_by("-appointment_date", "-created_at")
+    appointments_queryset = resident.appointments.select_related(
+        "service", "barangay", "time_slot", "queue_ticket", "event_booking"
+    ).order_by("-appointment_date", "-created_at", "-pk")
+
+    # Temporary compatibility bridge: clients must explicitly opt in to the
+    # paginated contract. Installed legacy clients expect the complete history
+    # and perform their search and status filtering locally.
+    use_pagination = request.query_params.get("paginate") == "1"
+    page = None
+    paginator = None
+    if use_pagination:
+        status_filter = request.query_params.get("status", "all").strip().lower()
+        if status_filter == "pending":
+            appointments_queryset = appointments_queryset.filter(
+                status__in=[
+                    Appointment.Status.PENDING,
+                    Appointment.Status.CONFIRMED,
+                    Appointment.Status.ONGOING,
+                ],
+            ).filter(
+                Q(event_booking__isnull=False)
+                | ~Q(queue_ticket__claim_status=QueueTicket.ClaimStatus.CLAIMED)
+            )
+        elif status_filter == "completed":
+            appointments_queryset = appointments_queryset.filter(
+                Q(status=Appointment.Status.COMPLETED)
+                | Q(
+                    event_booking__isnull=True,
+                    queue_ticket__claim_status=QueueTicket.ClaimStatus.CLAIMED,
+                )
+            )
+        elif status_filter == "cancelled":
+            appointments_queryset = appointments_queryset.filter(
+                status=Appointment.Status.CANCELLED
+            )
+        elif status_filter == "expired":
+            appointments_queryset = appointments_queryset.filter(
+                status=Appointment.Status.MISSED
+            )
+        elif status_filter != "all":
+            return Response(
+                {"message": "Invalid transaction status filter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        search = request.query_params.get("q", "").strip()
+        if search:
+            appointments_queryset = appointments_queryset.annotate(
+                transaction_reference=Concat(
+                    Value("QQ-"),
+                    Cast(ExtractYear("created_at"), output_field=CharField()),
+                    Value("-"),
+                    LPad(Cast("pk", output_field=CharField()), 5, Value("0")),
+                    output_field=CharField(),
+                )
+            ).filter(
+                Q(service__name__icontains=search)
+                | Q(queue_number__icontains=search)
+                | Q(transaction_reference__icontains=search)
+            )
+
+        paginator = TransactionsPagination()
+        appointments = list(paginator.paginate_queryset(appointments_queryset, request))
+        page = paginator.page
+        assert page is not None
+    else:
+        appointments = list(appointments_queryset)
+    legacy_fee_keys = {
+        (appointment.barangay_id, appointment.service_id)
+        for appointment in appointments
+        if appointment.service_fee_snapshot is None
+    }
+    configured_fees = {
+        (configuration.barangay_id, configuration.service_id): configuration.fee
+        for configuration in BarangayServiceConfiguration.objects.filter(
+            barangay_id__in={key[0] for key in legacy_fee_keys},
+            service_id__in={key[1] for key in legacy_fee_keys},
+        )
+    } if legacy_fee_keys else {}
     records = []
     now = timezone.now()
     for appointment in appointments:
@@ -947,15 +1043,17 @@ def transactions_api(request):
                 event_status = "event_ended"
             if appointment.service.lifecycle == Service.Lifecycle.CANCELLED:
                 event_status = EventBooking.Status.CANCELLED
+        fee = appointment.service_fee_snapshot
+        if fee is None:
+            fee = configured_fees.get(
+                (appointment.barangay_id, appointment.service_id),
+                Decimal("0.00"),
+            )
         records.append({
             "id": appointment.pk,
             "appointment_id": f"QQ-{appointment.created_at.year}-{appointment.pk:05d}",
             "service": appointment.service.name,
-            "service_fee": (
-                "Free"
-                if (appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)) == 0
-                else f"₱{(appointment.service_fee_snapshot if appointment.service_fee_snapshot is not None else effective_service_fee(appointment.barangay, appointment.service)):,.2f}"
-            ),
+            "service_fee": "Free" if fee == 0 else f"₱{fee:,.2f}",
             "status": appointment.workflow_status_display,
             "status_code": (
                 appointment.status if event_booking else appointment.effective_status
@@ -971,7 +1069,17 @@ def transactions_api(request):
             "booking_reference": event_booking.booking_reference if event_booking else None,
             "event_booking_status": event_status,
         })
-    return Response({"transactions": records})
+    response_data = {"transactions": records}
+    if page is not None and paginator is not None:
+        response_data["pagination"] = {
+            "count": page.paginator.count,
+            "page": page.number,
+            "page_size": paginator.get_page_size(request),
+            "total_pages": page.paginator.num_pages,
+            "next_page": page.next_page_number() if page.has_next() else None,
+            "previous_page": page.previous_page_number() if page.has_previous() else None,
+        }
+    return Response(response_data)
 
 
 @api_view(["GET"])

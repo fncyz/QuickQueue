@@ -15,9 +15,10 @@ import { useCoverHeaderScroll } from '@/hooks/use-cover-header-scroll';
 import { useAppTheme } from '@/contexts/app-theme';
 import { residentLayout } from '@/constants/resident-layout';
 import { useConnectivity } from '@/contexts/connectivity';
-import { readOfflineCache, setCurrentAccountId, writeActiveAppointmentCache, writeOfflineCache } from '@/services/offline-cache';
+import { readOfflineCache, setCurrentAccountId, writeOfflineCache } from '@/services/offline-cache';
 import { useTutorial } from '@/contexts/tutorial';
 import { activeTemporaryListings } from '@/services/event-expiration';
+import { QueueStatusAppointment, refreshQueueStatus } from '@/services/queue-status';
 
 const quickQueueLogo = require('../assets/images/qqlogo.png');
 const toledoLogo = require('../assets/images/toledo.png');
@@ -26,17 +27,16 @@ const servicesBackground = require('../assets/images/services_bg.png');
 
 type Service = { id: number; name: string };
 type TemporaryService = { id: number; name: string; description: string; type: string; location: string; event_start_date: string; event_end_date: string; booking_start_date: string; booking_end_date: string; status: 'active' | 'ending_soon' | 'upcoming' | 'fully_booked' | 'booking_closed' | 'expired' | 'cancelled' | 'deactivated' | 'archived'; capacity: number | null; remaining_capacity: number | null; can_book: boolean; is_event: boolean; is_booked: boolean; event_booking_id: number | null };
-type ActiveAppointment = {
-  appointment_id: string;
-  barangay: string;
-  date: string;
-  queue_number: string;
-  service: string;
-  status: string;
-  status_code: string;
-  time_slot: string;
-};
+type ActiveAppointment = QueueStatusAppointment;
 type DashboardCache = { activeAppointment: ActiveAppointment | null; residentName: string; services: Service[]; temporaryServices?: TemporaryService[]; unreadNotifications: number; username: string };
+type DashboardNetworkData = {
+  profile: { username: string; first_name: string };
+  notifications: { unread_count: number };
+  booking: { services: Service[]; temporary_services: TemporaryService[] };
+  queue: { appointment: ActiveAppointment | null };
+};
+
+const RAPID_REFRESH_DEDUP_MS = 3000;
 
 const safeCachedTemporaryServices = (items: TemporaryService[]) => {
   return activeTemporaryListings(items)
@@ -54,7 +54,7 @@ const serviceIcon = (name: string): keyof typeof Ionicons.glyphMap => {
 
 export function ResidentDashboard() {
   const { colors, isDark } = useAppTheme();
-  const { isOnline } = useConnectivity();
+  const { isOnline, reconnectVersion } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
   const { registerTarget } = useTutorial();
   const dashboardScroll = useRef<ScrollView | null>(null);
@@ -69,80 +69,101 @@ export function ResidentDashboard() {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
   const [showAllServices, setShowAllServices] = useState(false);
-  const [refreshRevision, setRefreshRevision] = useState(0);
   const loadRevision = useRef(0);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        setRefreshRevision((value) => value + 1);
-      }
-    });
-    return () => subscription.remove();
-  }, []);
+  const dashboardLoadInFlight = useRef<Promise<DashboardNetworkData> | null>(null);
+  const dashboardCacheHydrated = useRef(false);
+  const lastDashboardRefreshAt = useRef(0);
+  const handledReconnectVersion = useRef(reconnectVersion);
 
   useFocusEffect(useCallback(() => {
-    void refreshRevision;
     let isActive = true;
     const revision = ++loadRevision.current;
-    const refreshActiveAppointment = async () => {
+    let previousAppState = AppState.currentState;
+    const refreshActiveAppointment = async (maxAgeMs = 0) => {
       if (!isOnline) return;
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return;
       try {
-        const response = await api.get<{ appointment: ActiveAppointment | null }>(
-          'queue-status/',
-          { headers: { Authorization: `Bearer ${accessToken}` } },
-        );
+        const response = await refreshQueueStatus(accessToken, { maxAgeMs });
         if (!isActive || revision !== loadRevision.current) return;
-        setActiveAppointment(response.data.appointment);
-        await writeActiveAppointmentCache(response.data.appointment);
+        setActiveAppointment(response.appointment);
       } catch {
         // Retain the last synchronized appointment until connectivity recovers.
       }
     };
-    const loadDashboard = async () => {
+    const loadDashboard = async (force = false) => {
+      let dashboardRequest = dashboardLoadInFlight.current;
       try {
-      const saved = await readOfflineCache<DashboardCache>('dashboard');
-      if (saved && isActive && revision === loadRevision.current) {
-        setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setTemporaryServices(safeCachedTemporaryServices(saved.value.temporaryServices || [])); setActiveAppointment(saved.value.activeAppointment);
-        const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`);
-        if (cachedPhoto) setProfilePhoto(cachedPhoto);
-      }
-      if (!isOnline) return;
+        if (!dashboardCacheHydrated.current) {
+          const saved = await readOfflineCache<DashboardCache>('dashboard');
+          dashboardCacheHydrated.current = true;
+          if (saved && isActive && revision === loadRevision.current) {
+            setResidentName(saved.value.residentName); setUnreadNotifications(saved.value.unreadNotifications); setServices(saved.value.services); setTemporaryServices(safeCachedTemporaryServices(saved.value.temporaryServices || [])); setActiveAppointment(saved.value.activeAppointment);
+            const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${saved.value.username}`);
+            if (cachedPhoto) setProfilePhoto(cachedPhoto);
+          }
+        }
+        if (!isOnline) return;
         const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
         if (!accessToken) return;
+        if (!force && Date.now() - lastDashboardRefreshAt.current <= RAPID_REFRESH_DEDUP_MS) {
+          await refreshActiveAppointment(RAPID_REFRESH_DEDUP_MS);
+          return;
+        }
         const config = { headers: { Authorization: `Bearer ${accessToken}` } };
-        const [profileResponse, notificationResponse, bookingResponse, queueResponse] = await Promise.all([
-          api.get<{ username: string; first_name: string }>('profile/?summary=1', config),
-          api.get<{ unread_count: number }>('notifications/?summary=1', config),
-          api.get<{ services: Service[]; temporary_services: TemporaryService[] }>('appointments/?summary=1', config),
-          api.get<{ appointment: ActiveAppointment | null }>('queue-status/', config),
-        ]);
+        if (!dashboardRequest) {
+          dashboardRequest = Promise.all([
+            api.get<{ username: string; first_name: string }>('profile/?summary=1', config),
+            api.get<{ unread_count: number }>('notifications/?summary=1', config),
+            api.get<{ services: Service[]; temporary_services: TemporaryService[] }>('appointments/?summary=1', config),
+            refreshQueueStatus(accessToken, { maxAgeMs: RAPID_REFRESH_DEDUP_MS }),
+          ]).then(([profileResponse, notificationResponse, bookingResponse, queueResponse]) => ({
+            profile: profileResponse.data,
+            notifications: notificationResponse.data,
+            booking: bookingResponse.data,
+            queue: queueResponse,
+          }));
+          dashboardLoadInFlight.current = dashboardRequest;
+        }
+        const dashboard = await dashboardRequest;
         if (!isActive || revision !== loadRevision.current) return;
-        setResidentName(profileResponse.data.first_name);
-        setUnreadNotifications(notificationResponse.data.unread_count);
-        setServices(bookingResponse.data.services);
-        setTemporaryServices(activeTemporaryListings(bookingResponse.data.temporary_services || []));
-        setActiveAppointment(queueResponse.data.appointment);
-        const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${profileResponse.data.username}`);
+        lastDashboardRefreshAt.current = Date.now();
+        setResidentName(dashboard.profile.first_name);
+        setUnreadNotifications(dashboard.notifications.unread_count);
+        setServices(dashboard.booking.services);
+        setTemporaryServices(activeTemporaryListings(dashboard.booking.temporary_services || []));
+        setActiveAppointment(dashboard.queue.appointment);
+        const cachedPhoto = await AsyncStorage.getItem(`quickqueue.profilePhoto.${dashboard.profile.username}`);
         if (cachedPhoto) setProfilePhoto(cachedPhoto);
-        await setCurrentAccountId(profileResponse.data.username);
-        await writeOfflineCache<DashboardCache>('dashboard', { activeAppointment: queueResponse.data.appointment, residentName: profileResponse.data.first_name, services: bookingResponse.data.services, temporaryServices: bookingResponse.data.temporary_services || [], unreadNotifications: notificationResponse.data.unread_count, username: profileResponse.data.username });
-        await writeActiveAppointmentCache(queueResponse.data.appointment);
+        await setCurrentAccountId(dashboard.profile.username);
+        await writeOfflineCache<DashboardCache>('dashboard', { activeAppointment: dashboard.queue.appointment, residentName: dashboard.profile.first_name, services: dashboard.booking.services, temporaryServices: dashboard.booking.temporary_services || [], unreadNotifications: dashboard.notifications.unread_count, username: dashboard.profile.username });
       } catch {
         // Keep the dashboard usable if fresh server data is temporarily unavailable.
+      } finally {
+        if (dashboardLoadInFlight.current === dashboardRequest) {
+          dashboardLoadInFlight.current = null;
+        }
       }
     };
-    loadDashboard();
+    const reconnecting = reconnectVersion > handledReconnectVersion.current;
+    handledReconnectVersion.current = reconnectVersion;
+    void loadDashboard(reconnecting);
     const timer = isOnline
-      ? setInterval(refreshActiveAppointment, 15000)
+      ? setInterval(() => {
+          if (AppState.currentState === 'active') void refreshActiveAppointment();
+        }, 15000)
       : undefined;
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      const returningToForeground = previousAppState !== 'active' && nextState === 'active';
+      previousAppState = nextState;
+      if (returningToForeground && isOnline) void loadDashboard(true);
+    });
     return () => {
       isActive = false;
       if (timer) clearInterval(timer);
+      appStateSubscription.remove();
     };
-  }, [isOnline, refreshRevision]));
+  }, [isOnline, reconnectVersion]));
 
   const filteredServices = useMemo(() => services.filter((item) => item.name.toLowerCase().includes(serviceSearch.trim().toLowerCase())), [serviceSearch, services]);
   const visibleServices = showAllServices || serviceSearch ? filteredServices : filteredServices.slice(0, 3);

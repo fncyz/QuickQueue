@@ -17,24 +17,25 @@ import { useConnectivity } from '@/contexts/connectivity';
 import { QuickQueueLoadingIndicator } from '@/components/QuickQueueLoadingScreen';
 import { appTypography } from '@/constants/typography';
 import { readOfflineCache, writeActiveAppointmentCache } from '@/services/offline-cache';
+import { invalidateQueueStatus, QueueStatusAppointment, refreshQueueStatus } from '@/services/queue-status';
 
-type Appointment = { id: number; appointment_id: string; name: string; service: string; service_fee: string; date: string; time_slot: string; barangay: string; queue_number: string; now_serving: string; people_ahead: number; estimated_wait: number; checked_in: boolean };
+type Appointment = QueueStatusAppointment;
+
+const RAPID_REFRESH_DEDUP_MS = 3000;
 
 export default function QueueScreen() {
   const { colors, isDark } = useAppTheme();
-  const { isOnline } = useConnectivity();
+  const { isOnline, reconnectVersion } = useConnectivity();
   const coverHeader = useCoverHeaderScroll();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
-  const loadInFlight = useRef(false);
   const actionInFlight = useRef(false);
   const screenActive = useRef(false);
+  const handledReconnectVersion = useRef(reconnectVersion);
 
-  const loadQueue = useCallback(async (showLoader = true) => {
-    if (loadInFlight.current) return;
-    loadInFlight.current = true;
+  const loadQueue = useCallback(async (showLoader = true, maxAgeMs = RAPID_REFRESH_DEDUP_MS) => {
     let hasCachedAppointment = false;
     if (showLoader && screenActive.current) setLoading(true);
     try {
@@ -47,30 +48,35 @@ export default function QueueScreen() {
       const accessToken = await AsyncStorage.getItem('quickqueue.accessToken');
       if (!accessToken) return router.replace('/login');
       if (screenActive.current) setToken(accessToken);
-      const response = await api.get('queue-status/', { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (screenActive.current) setAppointment(response.data.appointment);
-      await writeActiveAppointmentCache(response.data.appointment);
+      const response = await refreshQueueStatus(accessToken, { maxAgeMs });
+      if (screenActive.current) setAppointment(response.appointment);
     } catch (error: any) {
       if (screenActive.current && showLoader && !hasCachedAppointment) Alert.alert('Unable to load queue', error?.response?.data?.message || 'Please check your connection.');
     } finally {
-      loadInFlight.current = false;
       if (screenActive.current && showLoader) setLoading(false);
     }
   }, [isOnline]);
 
   useFocusEffect(useCallback(() => {
     screenActive.current = true;
-    loadQueue();
-    const timer = isOnline ? setInterval(() => loadQueue(false), 15000) : undefined;
+    const reconnecting = reconnectVersion > handledReconnectVersion.current;
+    handledReconnectVersion.current = reconnectVersion;
+    void loadQueue(true, reconnecting ? 0 : RAPID_REFRESH_DEDUP_MS);
+    const timer = isOnline ? setInterval(() => {
+      if (AppState.currentState === 'active') void loadQueue(false, 0);
+    }, 15000) : undefined;
     return () => {
       screenActive.current = false;
       if (timer) clearInterval(timer);
     };
-  }, [isOnline, loadQueue]));
+  }, [isOnline, loadQueue, reconnectVersion]));
 
   useEffect(() => {
+    let previousAppState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && screenActive.current) loadQueue();
+      const returningToForeground = previousAppState !== 'active' && state === 'active';
+      previousAppState = state;
+      if (returningToForeground && screenActive.current) void loadQueue(false, 0);
     });
     return () => subscription.remove();
   }, [loadQueue]);
@@ -90,7 +96,8 @@ export default function QueueScreen() {
       } else {
         Alert.alert('Appointment cancelled', response.data.message);
       }
-      await loadQueue(false);
+      invalidateQueueStatus(token);
+      await loadQueue(false, 0);
     } catch (error: any) {
       Alert.alert('Action unavailable', error?.response?.data?.message || 'Please try again.');
     } finally { actionInFlight.current = false; setActing(false); }

@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -18,6 +20,7 @@ from qq.models import (
     Resident,
     Service,
     TimeSlot,
+    BarangayServiceConfiguration,
 )
 from qq.services.appointment_service import check_duplicate_appointment, check_timeslot_capacity
 from qq.services.timeslot_service import ensure_default_time_slots
@@ -278,6 +281,205 @@ class ResidentAppointmentApiTests(APITestCase):
             end_time=time(10, 0),
         )
         self.client.force_authenticate(user=self.user)
+
+    def _captured_get(self, path):
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(path)
+        return response, len(queries)
+
+    def test_appointment_summary_query_count_does_not_scale_with_temporary_services(self):
+        today = timezone.localdate()
+
+        def create_temporary(index, barangay=None):
+            target_barangay = barangay or self.barangay
+            service = Service.objects.create(
+                code=f"E{index:03d}"[-5:], name=f"Query Event {target_barangay.pk}-{index}",
+                description="Query test", estimated_duration=15, is_temporary=True,
+                temporary_type=Service.TemporaryType.EVENT, barangay=target_barangay,
+                event_start_date=today + timedelta(days=5), event_end_date=today + timedelta(days=5),
+                booking_start_date=today - timedelta(days=1), booking_end_date=today + timedelta(days=2),
+                capacity=20,
+            )
+            appointment = Appointment.objects.create(
+                resident=self.resident, barangay=self.barangay, service=service,
+                appointment_date=service.event_start_date, queue_number="",
+                status=Appointment.Status.CONFIRMED,
+            )
+            EventBooking.objects.create(appointment=appointment)
+            return service
+
+        create_temporary(1)
+        one_response, one_count = self._captured_get("/api/appointments/?summary=1")
+        for index in range(2, 6):
+            create_temporary(index)
+
+        other_barangay = Barangay.objects.create(
+            name="Other Query Barangay", address="Elsewhere", contact_number="09991112222",
+        )
+        other_service = create_temporary(99, barangay=other_barangay)
+        many_response, many_count = self._captured_get("/api/appointments/?summary=1")
+
+        self.assertEqual(one_response.status_code, 200)
+        self.assertEqual(many_response.status_code, 200)
+        self.assertEqual(many_count, one_count)
+        self.assertEqual(len(many_response.data["temporary_services"]), 5)
+        self.assertNotIn(other_service.pk, {item["id"] for item in many_response.data["temporary_services"]})
+
+    def test_transactions_query_count_does_not_scale_with_legacy_fees(self):
+        BarangayServiceConfiguration.objects.create(
+            barangay=self.barangay, service=self.service, fee="75.00", estimated_duration=15,
+        )
+
+        def create_legacy(index):
+            return Appointment.objects.create(
+                resident=self.resident, barangay=self.barangay, service=self.service,
+                appointment_date=timezone.localdate() - timedelta(days=index),
+                time_slot=self.time_slot, queue_number=f"DOC-{index:03d}",
+                status=Appointment.Status.COMPLETED, service_fee_snapshot=None,
+            )
+
+        create_legacy(1)
+        one_response, one_count = self._captured_get("/api/transactions/")
+        for index in range(2, 6):
+            create_legacy(index)
+        snapshot = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=self.service,
+            appointment_date=timezone.localdate() - timedelta(days=10),
+            time_slot=self.time_slot, queue_number="DOC-SNAP",
+            status=Appointment.Status.COMPLETED, service_fee_snapshot="25.00",
+        )
+        unconfigured_service = Service.objects.create(
+            code="FREE", name="Legacy Free Service", description="No fee configuration",
+            estimated_duration=10,
+        )
+        unconfigured = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=unconfigured_service,
+            appointment_date=timezone.localdate() - timedelta(days=11),
+            time_slot=self.time_slot, queue_number="FREE-001",
+            status=Appointment.Status.COMPLETED, service_fee_snapshot=None,
+        )
+        many_response, many_count = self._captured_get("/api/transactions/")
+
+        self.assertEqual(one_response.status_code, 200)
+        self.assertEqual(many_response.status_code, 200)
+        self.assertEqual(many_count, one_count)
+        amounts = {item["id"]: item["service_fee"] for item in many_response.data["transactions"]}
+        self.assertEqual(amounts[snapshot.pk], "₱25.00")
+        self.assertEqual(amounts[unconfigured.pk], "Free")
+        for appointment in Appointment.objects.exclude(pk__in=[snapshot.pk, unconfigured.pk]):
+            self.assertEqual(amounts[appointment.pk], "₱75.00")
+
+    def test_legacy_transactions_return_complete_history_without_pagination(self):
+        Appointment.objects.bulk_create([
+            Appointment(
+                resident=self.resident, barangay=self.barangay, service=self.service,
+                appointment_date=timezone.localdate() - timedelta(days=index),
+                time_slot=self.time_slot, queue_number=f"H-{index:03d}",
+                status=Appointment.Status.COMPLETED, service_fee_snapshot="20.00",
+            )
+            for index in range(55)
+        ])
+
+        legacy, query_count = self._captured_get(
+            "/api/transactions/?q=NO-MATCH&status=cancelled&page=2"
+        )
+
+        self.assertEqual(legacy.status_code, 200)
+        self.assertEqual(len(legacy.data["transactions"]), 55)
+        self.assertNotIn("pagination", legacy.data)
+        self.assertEqual(query_count, 1)
+        self.assertEqual(
+            [item["queue_number"] for item in legacy.data["transactions"]],
+            [f"H-{index:03d}" for index in range(55)],
+        )
+
+    def test_opted_in_transactions_are_paginated_with_stable_complete_history(self):
+        Appointment.objects.bulk_create([
+            Appointment(
+                resident=self.resident, barangay=self.barangay, service=self.service,
+                appointment_date=timezone.localdate() - timedelta(days=index),
+                time_slot=self.time_slot, queue_number=f"H-{index:03d}",
+                status=Appointment.Status.COMPLETED, service_fee_snapshot="20.00",
+            )
+            for index in range(55)
+        ])
+
+        first, query_count = self._captured_get("/api/transactions/?paginate=1")
+        second = self.client.get("/api/transactions/?paginate=1&page=2")
+        third = self.client.get("/api/transactions/?paginate=1&page=3")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(len(first.data["transactions"]), 20)
+        self.assertEqual(len(second.data["transactions"]), 20)
+        self.assertEqual(len(third.data["transactions"]), 15)
+        self.assertEqual(first.data["pagination"], {
+            "count": 55, "page": 1, "page_size": 20, "total_pages": 3,
+            "next_page": 2, "previous_page": None,
+        })
+        ids = [
+            item["id"]
+            for response in (first, second, third)
+            for item in response.data["transactions"]
+        ]
+        self.assertEqual(len(ids), 55)
+        self.assertEqual(len(set(ids)), 55)
+        self.assertEqual(query_count, 2)
+        self.assertLess(len(first.content), 10000)
+
+    def test_transaction_search_status_and_resident_isolation_cover_full_history(self):
+        appointments = []
+        for index in range(25):
+            appointments.append(Appointment.objects.create(
+                resident=self.resident, barangay=self.barangay, service=self.service,
+                appointment_date=timezone.localdate() - timedelta(days=index),
+                time_slot=self.time_slot, queue_number=f"SEARCH-{index:03d}",
+                status=Appointment.Status.COMPLETED if index % 2 else Appointment.Status.CANCELLED,
+                service_fee_snapshot="0.00",
+            ))
+        claimed = Appointment.objects.create(
+            resident=self.resident, barangay=self.barangay, service=self.service,
+            appointment_date=timezone.localdate() - timedelta(days=30),
+            time_slot=self.time_slot, queue_number="CLAIMED-001",
+            status=Appointment.Status.ONGOING, service_fee_snapshot="0.00",
+        )
+        QueueTicket.objects.create(
+            appointment=claimed, queue_number=claimed.queue_number,
+            status=QueueTicket.Status.COMPLETED,
+            claim_status=QueueTicket.ClaimStatus.CLAIMED,
+            claimed_at=timezone.now(),
+        )
+        other_barangay = Barangay.objects.create(
+            name="Transactions Isolation Barangay", address="Elsewhere",
+            contact_number="09995550000",
+        )
+        other_user = User.objects.create_user(username="transactions-other", password="secret")
+        other_resident = Resident.objects.create(
+            user=other_user, first_name="Other", last_name="Resident",
+            birthdate=date(1990, 1, 1), sex=Resident.Sex.FEMALE,
+            contact_number="09995550001", barangay=other_barangay,
+        )
+        foreign = Appointment.objects.create(
+            resident=other_resident, barangay=other_barangay, service=self.service,
+            appointment_date=timezone.localdate(), queue_number="PRIVATE-001",
+            status=Appointment.Status.COMPLETED, service_fee_snapshot="0.00",
+        )
+
+        search = self.client.get("/api/transactions/?paginate=1&q=SEARCH-024")
+        reference = f"QQ-{appointments[-1].created_at.year}-{appointments[-1].pk:05d}"
+        reference_search = self.client.get(f"/api/transactions/?paginate=1&q={reference}")
+        completed = self.client.get("/api/transactions/?paginate=1&status=completed")
+        cancelled = self.client.get("/api/transactions/?paginate=1&status=cancelled&page=2")
+
+        self.assertEqual([item["queue_number"] for item in search.data["transactions"]], ["SEARCH-024"])
+        self.assertEqual(
+            [item["id"] for item in reference_search.data["transactions"]],
+            [appointments[-1].pk],
+        )
+        completed_ids = {item["id"] for item in completed.data["transactions"]}
+        self.assertIn(claimed.pk, completed_ids)
+        self.assertTrue(all(item["status_code"] == Appointment.Status.COMPLETED for item in completed.data["transactions"]))
+        self.assertEqual(cancelled.status_code, 404)
+        self.assertNotIn(foreign.pk, completed_ids)
 
     def test_booking_returns_database_and_display_ids_and_creates_once(self):
         booking_date = timezone.localdate() + timedelta(days=1)

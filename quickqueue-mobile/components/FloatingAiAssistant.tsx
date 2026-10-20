@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAxiosError } from 'axios';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image, Keyboard, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, TextInput } from '@/components/Typography';
@@ -32,6 +32,7 @@ export function FloatingAiAssistant() {
   const shouldAutoScroll = useRef(true);
   const sessionId = useRef<string | undefined>(undefined);
   const [isOpen, setIsOpen] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [availability, setAvailability] = useState<Availability>('online');
   const [draft, setDraft] = useState('');
@@ -43,6 +44,15 @@ export function FloatingAiAssistant() {
   useEffect(() => () => {
     requestVersion.current += 1;
     requestAbort.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -149,6 +159,7 @@ export function FloatingAiAssistant() {
     } catch { /* Feedback is optional and must not interrupt chat. */ }
   }, []);
 
+  if (!isOpen && isKeyboardVisible) return null;
   if (!isOpen) return <Pressable accessibilityHint="Opens the QuickQueue Smart Assistant" accessibilityLabel="Open QuickQueue Smart Assistant" accessibilityRole="button" onPress={() => setIsOpen(true)} style={({ pressed }) => [styles.button, { bottom: insets.bottom + 101, height: size, opacity: pressed ? 0.82 : 1, right: Math.max(18, width * 0.045), transform: [{ scale: pressed ? 0.96 : 1 }], width: size }]}>
     <Image source={assistantLogo} resizeMode="contain" style={[styles.logo, { height: size - 8, width: size - 8 }]} />
   </Pressable>;

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Redirect, Tabs, usePathname } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Redirect, Tabs, useSegments } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { ResidentTabBar } from '@/components/ResidentTabBar';
@@ -14,13 +14,22 @@ import { useTutorial } from '@/contexts/tutorial';
 
 export default function TabLayout() {
   const { notice } = useConnectivity();
-  const { enabled: assistantEnabled } = useAssistantPreference();
-  const pathname = usePathname();
+  const { enabled: assistantEnabled, loaded: assistantPreferenceLoaded } = useAssistantPreference();
+  const segments = useSegments();
   const { isUnlocked } = useAuthSession();
   const { isTutorialActive } = useTutorial();
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [setupStage, setSetupStage] = useState<string | null>(null);
+  const activeTab = segments[segments.length - 1];
+  const isHomeTab = activeTab === '(tabs)';
+  const isSupportedAssistantTab = useMemo(
+    () => isHomeTab || ['queue', 'booking', 'transactions', 'profile'].includes(activeTab),
+    [activeTab, isHomeTab],
+  );
+  const showAssistant = !isTutorialActive
+    && isSupportedAssistantTab
+    && (isHomeTab || (assistantPreferenceLoaded && assistantEnabled));
 
   useEffect(() => {
     let active = true;
@@ -49,7 +58,7 @@ export default function TabLayout() {
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
-    {!isTutorialActive && assistantEnabled && (pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index') && <FloatingAiAssistant />}
+    {showAssistant && <FloatingAiAssistant />}
     {notice && <ConnectionStatusBanner />}
   </View>;
 }
