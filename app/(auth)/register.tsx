@@ -1,0 +1,340 @@
+import { forwardRef, useRef, useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text as TypographyText, TextInput } from '@/components/Typography';
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import type { StyleProp, ViewStyle } from "react-native";
+import BarangayDropdown from "@/components/BarangayDropdown";
+import AddressDropdown from "@/components/AddressDropdown";
+import { AuthBackButton } from "@/components/AuthBackButton";
+
+import { registerResident } from "@/services/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const Text = forwardRef<React.ElementRef<typeof TypographyText>, React.ComponentProps<typeof TypographyText>>(
+  function RegistrationText({ fixedFontSize = 9, ...props }, ref) {
+    return <TypographyText ref={ref} fixedFontSize={fixedFontSize} {...props} />;
+  },
+);
+
+const registrationErrorMessage = (error: any) => {
+  if (!error?.response) {
+    return "Cannot reach the QuickQueue server. Confirm that your phone and computer are on the same Wi-Fi, then restart the Django server.";
+  }
+
+  const errors = error.response.data?.errors;
+  if (errors && typeof errors === "object") {
+    return Object.entries(errors)
+      .map(([field, messages]) => `${field.replace(/_/g, " ")}: ${(Array.isArray(messages) ? messages : [messages]).join(", ")}`)
+      .join("\n");
+  }
+  return error.response.data?.message || "We could not create your account. Please try again.";
+};
+
+const formatDate = (date: Date | null) => {
+  if (!date) return "mm/dd/yyyy";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const calculateAge = (date: Date | null) => {
+  if (!date) return "";
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const hasNotHadBirthday =
+    today.getMonth() < date.getMonth() ||
+    (today.getMonth() === date.getMonth() && today.getDate() < date.getDate());
+  return String(hasNotHadBirthday ? age - 1 : age);
+};
+
+const provinces = [
+    { id: 1, name: "Cebu" },
+  ];
+
+  const municipalities = [
+    { id: 1, name: "Toledo City" },
+  ];
+
+function Field({ label, optional, required, children, style }: {
+  label: string;
+  optional?: boolean;
+  required?: boolean;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.field, style]}>
+      <Text style={styles.fieldLabel}>
+        {label} {optional && <Text style={styles.optional}>(Optional)</Text>}
+        {required && <Text style={styles.required}> *</Text>}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+function SectionTitle({ icon, children }: { icon: keyof typeof Ionicons.glyphMap; children: string }) {
+  return (
+    <View style={styles.sectionTitle}>
+      <Ionicons name={icon} size={21} color="#1671FF" />
+      <Text style={styles.sectionTitleText}>{children}</Text>
+    </View>
+  );
+}
+
+const IconInput = forwardRef<React.ElementRef<typeof TextInput>, React.ComponentProps<typeof TextInput> & { icon: keyof typeof Ionicons.glyphMap }>(function IconInput({ icon, ...props }, ref) {
+  return (
+    <View style={styles.inputShell}>
+      <Ionicons name={icon} size={16} color="#72809C" />
+      <TextInput ref={ref} fixedFontSize={9} style={styles.inputText} placeholderTextColor="#98A2B7" {...props} />
+    </View>
+  );
+});
+
+export default function RegisterScreen() {
+  const middleNameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const lastNameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const suffixRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const usernameRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const contactRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const emailRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const showWelcomeBackButton = from === 'welcome-back';
+  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [suffix, setSuffix] = useState("");
+  const [birthdate, setBirthdate] = useState<Date | null>(null);
+  const [sex, setSex] = useState("");
+  const [showSexPicker, setShowSexPicker] = useState(false);
+  const [email, setEmail] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+  const [barangay, setBarangay] = useState<number | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [province, setProvince] = useState<number | null>(null);
+  const [municipality, setMunicipality] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleContactNumberChange = (value: string) => {
+    const digitsOnly = value.replace(/\D/g, "");
+    if (value !== digitsOnly) {
+      Alert.alert("Invalid Contact Number", "Contact number can contain digits only.");
+    }
+    setContactNumber(digitsOnly);
+  };
+
+const handleRegister = async () => {
+  if (!birthdate) {
+    Alert.alert("Birthdate Required", "Please select your birthdate.");
+    return;
+  }
+
+  if (!barangay) {
+    Alert.alert("Barangay Required", "Please select your barangay.");
+    return;
+  }
+
+  if (!acceptedTerms) {
+    Alert.alert(
+      "Terms & Conditions",
+      "Please accept the Terms & Conditions."
+    );
+    return;
+  }
+
+  if (!username || !firstName || !lastName || !sex || !contactNumber) {
+    Alert.alert("Required Information", "Please complete all required fields.");
+    return;
+  }
+
+  if (!/^\d+$/.test(contactNumber)) {
+    Alert.alert("Invalid Contact Number", "Contact number can contain digits only.");
+    return;
+  }
+
+  try {
+    setIsSubmitting(true);
+    const result = await registerResident({
+      username,
+      first_name: firstName,
+      last_name: lastName,
+      middle_name: middleName,
+      suffix,
+      birthdate: formatDate(birthdate),
+      sex,
+      email: email.trim() || null,
+      contact_number: contactNumber,
+      barangay,
+      terms_accepted: acceptedTerms,
+    });
+
+    await AsyncStorage.multiSet([
+      ["quickqueue.accessToken", result.access],
+      ["quickqueue.refreshToken", result.refresh],
+      ["quickqueue.securitySetupStage", "password"],
+      ["quickqueue.pendingUsername", result.username],
+    ]);
+    router.replace("/set-password");
+  } catch (error: any) {
+    Alert.alert("Registration Failed", registrationErrorMessage(error));
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  return (
+    <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
+      {showWelcomeBackButton && <AuthBackButton onPress={() => router.replace('/welcome-back')} />}
+      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.card}>
+            <Text fixedFontSize={22} style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Join us to get started</Text>
+
+            <SectionTitle icon="person-outline">PERSONAL INFORMATION</SectionTitle>
+            <View style={styles.row}>
+              <Field label="First Name" required><IconInput icon="person-outline" placeholder="Enter first name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => middleNameRef.current?.focus()} /></Field>
+              <Field label="Middle Name" optional><IconInput ref={middleNameRef} icon="person-outline" placeholder="Enter middle name" value={middleName} onChangeText={setMiddleName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => lastNameRef.current?.focus()} /></Field>
+            </View>
+            <Field label="Last Name" required><IconInput ref={lastNameRef} icon="person-outline" placeholder="Enter last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => suffixRef.current?.focus()} /></Field>
+            <View style={styles.row}>
+              <Field label="Suffix" optional><IconInput ref={suffixRef} icon="pricetag-outline" placeholder="Enter suffix" value={suffix} onChangeText={setSuffix} returnKeyType="next" onSubmitEditing={() => usernameRef.current?.focus()} /></Field>
+              <Field label="Birthdate" required>
+                <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+                  <Ionicons name="calendar-outline" size={16} color="#72809C" />
+                  <Text style={[styles.dateText, !birthdate && styles.placeholder]}>{formatDate(birthdate)}</Text>
+                  <Ionicons name="chevron-down" size={14} color="#72809C" />
+                </Pressable>
+              </Field>
+            </View>
+            <View style={styles.row}>
+              <Field label="Age" required><View style={styles.inputShell}><Ionicons name="calendar-outline" size={16} color="#72809C" /><Text style={calculateAge(birthdate) ? styles.dateText : styles.placeholder}>{calculateAge(birthdate) || "Enter age"}</Text></View></Field>
+              <Field label="Sex" required>
+                <Pressable style={styles.selectInput} onPress={() => setShowSexPicker(true)} accessibilityRole="button" accessibilityLabel="Select sex">
+                  <Ionicons name="person-outline" size={16} color="#72809C" /><Text style={[styles.selectText, sex ? styles.dateText : styles.placeholder]}>{sex === "M" ? "Male" : sex === "F" ? "Female" : "Select"}</Text><Ionicons name="chevron-down" size={14} color="#72809C" />
+                </Pressable>
+              </Field>
+            </View>
+
+            <SectionTitle icon="mail-outline">ACCOUNT INFORMATION</SectionTitle>
+            <View style={styles.row}>
+              <Field label="Username" required><IconInput ref={usernameRef} icon="person-outline" placeholder="Enter username" value={username} onChangeText={setUsername} autoCapitalize="none" returnKeyType="next" onSubmitEditing={() => contactRef.current?.focus()} /></Field>
+              <Field label="Contact Number" required><IconInput ref={contactRef} icon="call-outline" placeholder="Enter contact number" value={contactNumber} onChangeText={handleContactNumberChange} keyboardType="phone-pad" maxLength={15} returnKeyType="next" onSubmitEditing={() => emailRef.current?.focus()} /></Field>
+            </View>
+            <Field label="Email Address" optional><IconInput ref={emailRef} icon="mail-outline" placeholder="Enter email address (optional)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" returnKeyType="done" /></Field>
+            <SectionTitle icon="location-outline">ADDRESS INFORMATION</SectionTitle>
+            <View style={styles.row}>
+              <Field label="Province" required>
+                <AddressDropdown
+                  placeholder="Select Province"
+                  value={province}
+                  options={provinces}
+                  onValueChange={setProvince}
+                  icon="business-outline"
+                />
+              </Field>
+
+              <Field label="Municipality" required>
+                <AddressDropdown
+                  placeholder="Select Municipality"
+                  value={municipality}
+                  options={municipalities}
+                  onValueChange={setMunicipality}
+                  icon="business-outline"
+                />
+              </Field>
+            </View>
+            <Field label="Barangay" required>
+            <BarangayDropdown
+                value={barangay}
+                onValueChange={setBarangay}
+            />
+            </Field>
+            <View style={styles.actionArea}>
+              <View style={styles.termsBox}>
+                <Pressable onPress={() => setAcceptedTerms((value) => !value)} accessibilityRole="checkbox" accessibilityLabel="Accept the Terms and Privacy Policy" accessibilityState={{ checked: acceptedTerms }} hitSlop={8}>
+                  <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>{acceptedTerms && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
+                </Pressable>
+                <Text style={styles.termsText}>I have read and agree to the <Text onPress={() => setShowTerms(true)} style={styles.termsLink}>Terms and Privacy Policy.</Text><Text style={styles.required}> *</Text></Text>
+              </View>
+
+              <Pressable style={[styles.createButton, isSubmitting && styles.createButtonDisabled]} onPress={handleRegister} disabled={isSubmitting} accessibilityRole="button" accessibilityState={{ disabled: isSubmitting }}><Text style={styles.createButtonText}>{isSubmitting ? "Creating Account..." : "Create Account"}</Text></Pressable>
+              <View style={styles.signInRow}><Text style={styles.signInText}>Already have an account? </Text><Pressable onPress={() => router.replace("/login")}><Text style={styles.signInLink}>Sign In</Text></Pressable></View>
+            </View>
+
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      {showDatePicker && <DateTimePicker value={birthdate ?? new Date()} mode="date" display="default" maximumDate={new Date()} onChange={(_, date) => { setShowDatePicker(Platform.OS === "ios"); if (date) setBirthdate(date); }} />}
+      <Modal transparent animationType="fade" visible={showSexPicker} onRequestClose={() => setShowSexPicker(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowSexPicker(false)}>
+          <View style={styles.sexMenu}>
+            <Text style={styles.sexMenuTitle}>Select sex</Text>
+            {[
+              { label: "Male", value: "M" },
+              { label: "Female", value: "F" },
+            ].map((option) => (
+              <Pressable
+                key={option.value}
+                style={styles.sexOption}
+                onPress={() => { setSex(option.value); setShowSexPicker(false); }}
+              >
+                <Text style={styles.sexOptionText}>{option.label}</Text>
+                {sex === option.value && <Ionicons name="checkmark" size={19} color="#1671FF" />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+      <Modal transparent animationType="fade" visible={showTerms} onRequestClose={() => setShowTerms(false)}>
+        <View style={styles.termsModalBackdrop}>
+          <View style={styles.termsModal}>
+            <View style={styles.termsModalHeader}><Text style={styles.termsModalTitle}>Terms and Privacy Policy</Text><Pressable onPress={() => setShowTerms(false)} accessibilityLabel="Close terms"><Ionicons name="close" size={23} color="#17366D" /></Pressable></View>
+            <ScrollView style={styles.termsModalScroll} contentContainerStyle={styles.termsModalContent} showsVerticalScrollIndicator={false}>
+              <Text style={styles.termsParagraph}>By creating a QuickQueue account, I certify that the information I provide is true, complete, and accurate to the best of my knowledge. I understand that this account is intended solely for booking barangay appointments and accessing queue-related services.</Text>
+              <Text style={styles.termsParagraph}>I consent to the collection, use, and storage of my personal information, including my name, contact number, email address (if provided), date of birth, and address, for the purposes of account registration, appointment scheduling, queue management, and communication related to barangay services.</Text>
+              <Text style={styles.termsParagraph}>I understand that my personal information will be treated confidentially and protected in accordance with applicable data privacy laws. My information will not be shared with unauthorized individuals or used for purposes unrelated to the QuickQueue system.</Text>
+              <Text style={styles.termsParagraph}>By checking this box, I acknowledge that I have read, understood, and agree to the Terms and Privacy Policy of QuickQueue.</Text>
+            </ScrollView>
+            <Pressable onPress={() => { setAcceptedTerms(true); setShowTerms(false); }} style={styles.agreeButton}><Text style={styles.agreeButtonText}>I Understand and Agree</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: "#FFFFFF" }, keyboardView: { flex: 1 }, scrollContent: { flexGrow: 1 },
+  card: { alignSelf: "center", backgroundColor: "#FFFFFF", flex: 1, maxWidth: 600, paddingBottom: 18, paddingHorizontal: 17, paddingTop: 8, width: "100%" },
+  title: { color: "#0E3978", fontSize: 22, fontWeight: "800", letterSpacing: -0.3, textAlign: "center" }, subtitle: { color: "#69738A", fontSize: 9, marginTop: 2, textAlign: "center" },
+  sectionTitle: { alignItems: "center", borderBottomColor: "#EEF3FA", borderBottomWidth: 1, flexDirection: "row", gap: 12, marginTop: 24, marginBottom: 13, paddingBottom: 7 }, sectionTitleText: { color: "#086DFF", fontSize: 9, fontWeight: "700" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 }, field: { flex: 1, flexBasis: 140, marginBottom: 14, minWidth: 0 }, fieldLabel: { color: "#17366D", fontSize: 9, fontWeight: "700", marginBottom: 6 }, optional: { color: "#8A94A8", fontSize: 9, fontWeight: "400" }, required: { color: "#F02D2D" },
+  inputShell: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 },
+  inputText: { color: "#273246", flex: 1, fontSize: 9, height: "100%", paddingVertical: 0 },
+  dateInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, dateText: { color: "#273246", fontSize: 9 }, placeholder: { color: "#98A2B7", fontSize: 9 },
+  selectInput: { alignItems: "center", backgroundColor: "#FFFFFF", borderColor: "#E8EEF6", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, height: 46, paddingHorizontal: 14, shadowColor: "#1D4F91", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.025, shadowRadius: 5, elevation: 1 }, selectText: { flex: 1 },
+  actionArea: { marginTop: "auto" },
+  termsBox: { alignItems: "center", backgroundColor: "#F0F7FF", borderRadius: 10, flexDirection: "row", marginTop: 1, minHeight: 44, paddingHorizontal: 18, paddingVertical: 8 }, checkbox: { alignItems: "center", borderColor: "#30445F", borderRadius: 4, borderWidth: 1.5, height: 17, justifyContent: "center", marginRight: 10, width: 17 }, checkboxChecked: { backgroundColor: "#1671FF", borderColor: "#1671FF" }, termsText: { color: "#647087", flex: 1, fontSize: 9 }, termsLink: { color: "#1671FF", fontWeight: "700", textDecorationLine: "underline" },
+  createButton: { alignItems: "center", backgroundColor: "#17468F", borderRadius: 10, height: 43, justifyContent: "center", marginTop: 12 }, createButtonDisabled: { opacity: 0.65 }, createButtonText: { color: "#FFFFFF", fontSize: 9, fontWeight: "700" },
+  signInRow: { alignItems: "center", flexDirection: "row", justifyContent: "center", marginVertical: 13 }, signInText: { color: "#69738A", fontSize: 9 }, signInLink: { color: "#1671FF", fontSize: 9, fontWeight: "600" },
+  modalBackdrop: { alignItems: "center", backgroundColor: "rgba(0, 0, 0, 0.35)", flex: 1, justifyContent: "center", padding: 28 }, sexMenu: { backgroundColor: "#FFFFFF", borderRadius: 14, overflow: "hidden", width: "100%" }, sexMenuTitle: { color: "#163C7D", fontSize: 9, fontWeight: "700", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 9 }, sexOption: { alignItems: "center", borderTopColor: "#E5E7EB", borderTopWidth: 1, flexDirection: "row", height: 50, justifyContent: "space-between", paddingHorizontal: 18 }, sexOptionText: { color: "#1D2738", fontSize: 9 },
+  termsModalBackdrop: { alignItems: "center", backgroundColor: "rgba(2, 18, 48, 0.58)", flex: 1, justifyContent: "center", padding: 22 }, termsModal: { backgroundColor: "#FFFFFF", borderRadius: 18, maxHeight: "78%", overflow: "hidden", width: "100%" }, termsModalHeader: { alignItems: "center", borderBottomColor: "#E8EEF6", borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 15 }, termsModalTitle: { color: "#0E3978", flex: 1, fontSize: 9, fontWeight: "800" }, termsModalScroll: { flexGrow: 0 }, termsModalContent: { padding: 18, paddingBottom: 6 }, termsParagraph: { color: "#46546B", fontSize: 9, lineHeight: 13, marginBottom: 14 }, agreeButton: { alignItems: "center", backgroundColor: "#075BCF", borderRadius: 10, margin: 18, marginTop: 10, paddingVertical: 13 }, agreeButtonText: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
+});

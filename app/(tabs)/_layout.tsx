@@ -1,0 +1,64 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Redirect, Tabs, useSegments } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { View } from 'react-native';
+
+import { ResidentTabBar } from '@/components/ResidentTabBar';
+import { FloatingAiAssistant } from '@/components/FloatingAiAssistant';
+import { ConnectionStatusBanner, useConnectivity } from '@/contexts/connectivity';
+import { useAssistantPreference } from '@/contexts/assistant-preference';
+import { securitySetupRoute } from '@/services/security-flow';
+import { QuickQueueLoadingScreen } from '@/components/QuickQueueLoadingScreen';
+import { useAuthSession } from '@/contexts/auth-session';
+import { useTutorial } from '@/contexts/tutorial';
+
+export default function TabLayout() {
+  const { notice } = useConnectivity();
+  const { enabled: assistantEnabled, loaded: assistantPreferenceLoaded } = useAssistantPreference();
+  const segments = useSegments();
+  const { isUnlocked } = useAuthSession();
+  const { isTutorialActive } = useTutorial();
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
+  const [setupStage, setSetupStage] = useState<string | null>(null);
+  const activeTab = segments[segments.length - 1];
+  const isHomeTab = activeTab === '(tabs)';
+  const isSupportedAssistantTab = useMemo(
+    () => isHomeTab || ['queue', 'booking', 'transactions', 'profile'].includes(activeTab),
+    [activeTab, isHomeTab],
+  );
+  const showAssistant = !isTutorialActive
+    && isSupportedAssistantTab
+    && (isHomeTab || (assistantPreferenceLoaded && assistantEnabled));
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([AsyncStorage.getItem('quickqueue.accessToken'), AsyncStorage.getItem('quickqueue.securitySetupStage')])
+      .then(([token, stage]) => {
+        if (!active) return;
+        setHasSession(Boolean(token));
+        setSetupStage(stage);
+      })
+      .catch(() => { if (active) setHasSession(false); })
+      .finally(() => { if (active) setCheckingSession(false); });
+    return () => { active = false; };
+  }, []);
+
+  if (checkingSession) return <QuickQueueLoadingScreen />;
+  if (!hasSession) return <Redirect href="/login" />;
+  if (setupStage && setupStage !== 'complete') return <Redirect href={securitySetupRoute(setupStage)} />;
+  if (!isUnlocked) return <Redirect href="/welcome-back" />;
+
+  return <View style={{ flex: 1 }}>
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <ResidentTabBar {...props} />}> 
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="queue" options={{ title: 'Queue' }} />
+      <Tabs.Screen name="booking" options={{ title: 'Book' }} />
+      <Tabs.Screen name="transactions" options={{ title: 'Transactions' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="explore" options={{ href: null }} />
+    </Tabs>
+    {showAssistant && <FloatingAiAssistant />}
+    {notice && <ConnectionStatusBanner />}
+  </View>;
+}

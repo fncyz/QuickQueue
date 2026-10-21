@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "28424886332",
+    "project_id": "quickqueue-a8a1d",
+    "storage_bucket": "quickqueue-a8a1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:28424886332:android:1daa19c05d56edb7a6cb39",
+        "android_client_info": {
+          "package_name": "com.y_wniz.quickqueuemobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBThSO5SIai6HDzMGQ_rODat7_MrpwxcPg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
