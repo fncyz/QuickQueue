@@ -3,9 +3,11 @@ import io
 import tempfile
 import zipfile
 from unittest.mock import patch
+from unittest import skipUnless
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -1130,6 +1132,55 @@ class AdminStaffWorkflowTests(TestCase):
         ticket.refresh_from_db()
         self.assertEqual(ticket.notes, "")
         self.assertEqual(ticket.appointment.status, Appointment.Status.CONFIRMED)
+
+    @skipUnless(
+        connection.vendor == "postgresql",
+        "PostgreSQL is required to exercise FOR UPDATE with a nullable join.",
+    )
+    def test_check_in_lock_allows_nullable_missing_time_slot_join_on_postgresql(self):
+        ticket = self._ticket("nullable-slot-check-in", "Nullable", self.service, "C17")
+        ticket.appointment.time_slot = None
+        ticket.appointment.save(update_fields=["time_slot", "updated_at"])
+        resident_client = APIClient()
+        resident_client.force_authenticate(ticket.appointment.resident.user)
+
+        response = resident_client.post(
+            "/api/queue-status/",
+            {"appointment_id": ticket.appointment_id, "action": "check_in"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["message"],
+            "Check-in is available only during your scheduled time slot.",
+        )
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.status, QueueTicket.Status.WAITING)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.CONFIRMED)
+
+    @skipUnless(
+        connection.vendor == "postgresql",
+        "PostgreSQL is required to exercise FOR UPDATE with a nullable join.",
+    )
+    def test_expiration_lock_allows_nullable_time_slot_join_on_postgresql(self):
+        ticket = self._ticket("nullable-slot-expiration", "Expiration", self.service, "C18")
+        at_slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, self.slot.end_time,
+        ))
+        resident_client = APIClient()
+        resident_client.force_authenticate(ticket.appointment.resident.user)
+
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=at_slot_end):
+            response = resident_client.get("/api/queue-status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["appointment"])
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.status, QueueTicket.Status.MISSED)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.MISSED)
 
     def test_unchecked_resident_expires_at_slot_end_and_cannot_check_in(self):
         for suffix, minute in (("exact", 0), ("late", 1)):

@@ -799,7 +799,7 @@ def queue_status_api(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             with transaction.atomic():
-                appointment = Appointment.objects.select_for_update().select_related(
+                appointment = Appointment.objects.select_for_update(of=("self",)).select_related(
                     "time_slot", "service"
                 ).get(pk=appointment.pk, resident=resident)
                 ticket = QueueTicket.objects.select_for_update().filter(

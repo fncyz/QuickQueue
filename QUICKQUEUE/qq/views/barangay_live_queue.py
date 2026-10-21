@@ -345,9 +345,8 @@ def barangay_queue_call_next(request):
             )
             return _redirect_live_queue(request, current_slot.id)
 
-        nxt = (
-            QueueTicket.objects.select_for_update()
-            .filter(
+        candidate_ids = (
+            QueueTicket.objects.filter(
                 appointment__barangay=barangay,
                 appointment__appointment_date=today,
                 appointment__time_slot=current_slot,
@@ -356,8 +355,33 @@ def barangay_queue_call_next(request):
                 notes=CHECKED_IN_NOTE,
             )
             .order_by("queue_number")
-            .first()
+            .values_list("pk", "appointment_id")
         )
+        nxt = None
+        for ticket_id, appointment_id in candidate_ids:
+            try:
+                appointment = Appointment.objects.select_for_update(of=("self",)).get(
+                    pk=appointment_id,
+                    barangay=barangay,
+                    appointment_date=today,
+                    time_slot=current_slot,
+                    service__is_temporary=False,
+                )
+            except Appointment.DoesNotExist:
+                continue
+            nxt = (
+                QueueTicket.objects.select_for_update()
+                .filter(
+                    pk=ticket_id,
+                    appointment_id=appointment.pk,
+                    status=QueueTicket.Status.WAITING,
+                    notes=CHECKED_IN_NOTE,
+                )
+                .first()
+            )
+            if nxt:
+                nxt.appointment = appointment
+                break
         if not nxt:
             messages.info(request, "No residents are waiting in this time slot.")
             return _redirect_live_queue(request, current_slot.id)
@@ -415,14 +439,27 @@ def barangay_queue_complete(request, pk):
     service_window = _service_window_for_user(request.user, barangay)
     is_regular_staff = hasattr(request.user, "staff_profile") and request.user.staff_profile.role != BarangayStaff.Role.ADMIN
     with transaction.atomic():
-        ticket = get_object_or_404(
-            QueueTicket.objects.select_for_update().select_related(
-                "appointment__resident", "appointment__time_slot"
-            ),
+        ticket_ref = get_object_or_404(
+            QueueTicket.objects.filter(
+                appointment__barangay=barangay,
+                appointment__service__is_temporary=False,
+            ).only("appointment_id"),
             pk=pk,
-            appointment__barangay=barangay,
-            appointment__service__is_temporary=False,
         )
+        appointment = get_object_or_404(
+            Appointment.objects.select_for_update(of=("self",)).select_related(
+                "resident", "time_slot"
+            ),
+            pk=ticket_ref.appointment_id,
+            barangay=barangay,
+            service__is_temporary=False,
+        )
+        ticket = get_object_or_404(
+            QueueTicket.objects.select_for_update(),
+            pk=pk,
+            appointment_id=appointment.pk,
+        )
+        ticket.appointment = appointment
         if is_regular_staff and (not service_window or ticket.service_window_id != service_window.id):
             messages.error(request, "This queue transaction belongs to another service window.")
             return _redirect_live_queue(request, ticket.appointment.time_slot_id)

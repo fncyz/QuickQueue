@@ -107,7 +107,7 @@ def expire_overdue_appointments(*, at=None, barangay=None, resident=None):
     expired = 0
     for appointment_id in candidates.values_list("pk", flat=True).iterator():
         with transaction.atomic():
-            appointment = Appointment.objects.select_for_update().select_related(
+            appointment = Appointment.objects.select_for_update(of=("self",)).select_related(
                 "time_slot"
             ).get(pk=appointment_id)
             ticket = QueueTicket.objects.select_for_update().filter(

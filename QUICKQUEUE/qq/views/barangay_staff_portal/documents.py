@@ -120,19 +120,23 @@ def staff_document_action(request, pk):
     )
     if action == "archive_expired":
         with transaction.atomic():
+            appointment = get_object_or_404(
+                Appointment.objects.select_for_update(of=("self",)).select_related("time_slot"),
+                pk=ticket.appointment_id,
+                barangay=staff.barangay,
+                service__is_temporary=False,
+            )
             locked_ticket = get_object_or_404(
-                QueueTicket.objects.select_for_update().select_related("appointment"),
+                QueueTicket.objects.select_for_update(),
                 pk=ticket.pk,
-                appointment__barangay=staff.barangay,
-                appointment__service__is_temporary=False,
+                appointment_id=appointment.pk,
             )
             if (
-                locked_ticket.appointment.status not in (Appointment.Status.CONFIRMED, Appointment.Status.PENDING)
-                or not is_appointment_expired(locked_ticket.appointment, ticket=locked_ticket)
+                appointment.status not in (Appointment.Status.CONFIRMED, Appointment.Status.PENDING)
+                or not is_appointment_expired(appointment, ticket=locked_ticket)
             ):
                 messages.error(request, "Only overdue, unfinished appointments can be archived.")
                 return redirect("staff_document_processing")
-            appointment = locked_ticket.appointment
             appointment.status = Appointment.Status.MISSED
             appointment.save(update_fields=["status", "updated_at"])
             locked_ticket.status = QueueTicket.Status.MISSED
@@ -143,13 +147,17 @@ def staff_document_action(request, pk):
         )
     elif action == "start":
         with transaction.atomic():
-            locked_ticket = get_object_or_404(
-                QueueTicket.objects.select_for_update().select_related("appointment__time_slot"),
-                pk=ticket.pk,
-                appointment__barangay=staff.barangay,
-                appointment__service__is_temporary=False,
+            appointment = get_object_or_404(
+                Appointment.objects.select_for_update(of=("self",)).select_related("time_slot"),
+                pk=ticket.appointment_id,
+                barangay=staff.barangay,
+                service__is_temporary=False,
             )
-            appointment = locked_ticket.appointment
+            locked_ticket = get_object_or_404(
+                QueueTicket.objects.select_for_update(),
+                pk=ticket.pk,
+                appointment_id=appointment.pk,
+            )
             if locked_ticket.served_by_id not in (None, staff.pk):
                 messages.error(request, "This document is assigned to another staff member.")
                 return redirect("staff_document_processing")
