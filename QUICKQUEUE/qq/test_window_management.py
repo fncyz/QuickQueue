@@ -1,7 +1,9 @@
-from datetime import date, time
+from datetime import date, datetime, time
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.utils import timezone
 
 from qq.models import Appointment, Barangay, BarangayStaff, QueueTicket, Resident, Service, ServiceWindow, TimeSlot
 from qq.services.queue_service import CHECKED_IN_NOTE
@@ -43,7 +45,9 @@ class WindowManagementTests(TestCase):
             notes=CHECKED_IN_NOTE,
         )
         self.client.force_login(self.staff_user)
-        response = self.client.post("/barangay/queue/call-next/", {"slot": slot.pk})
+        before_slot_end = timezone.make_aware(datetime.combine(appointment.appointment_date, time(8, 30)))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.post("/barangay/queue/call-next/", {"slot": slot.pk})
         self.assertEqual(response.status_code, 302)
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, QueueTicket.Status.NOW_SERVING)

@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password, make_password
@@ -387,7 +387,7 @@ class ResidentAppointmentApiTests(APITestCase):
         self.assertEqual(legacy.status_code, 200)
         self.assertEqual(len(legacy.data["transactions"]), 55)
         self.assertNotIn("pagination", legacy.data)
-        self.assertEqual(query_count, 1)
+        self.assertEqual(query_count, 2)
         self.assertEqual(
             [item["queue_number"] for item in legacy.data["transactions"]],
             [f"H-{index:03d}" for index in range(55)],
@@ -423,7 +423,7 @@ class ResidentAppointmentApiTests(APITestCase):
         ]
         self.assertEqual(len(ids), 55)
         self.assertEqual(len(set(ids)), 55)
-        self.assertEqual(query_count, 2)
+        self.assertEqual(query_count, 3)
         self.assertLess(len(first.content), 10000)
 
     def test_transaction_search_status_and_resident_isolation_cover_full_history(self):
@@ -777,11 +777,15 @@ class ResidentAppointmentApiTests(APITestCase):
             document_file="generated_documents/test.pdf",
         )
 
-        cancel = self.client.post(
-            "/api/transactions/",
-            {"appointment_id": appointment.pk, "action": "cancel"},
-            format="json",
-        )
+        before_slot_end = timezone.make_aware(datetime.combine(
+            appointment.appointment_date, time(9, 30),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            cancel = self.client.post(
+                "/api/transactions/",
+                {"appointment_id": appointment.pk, "action": "cancel"},
+                format="json",
+            )
         self.assertEqual(cancel.status_code, 200)
         self.assertTrue(cancel.data["success"])
         appointment.refresh_from_db()

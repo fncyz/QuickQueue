@@ -43,6 +43,13 @@ from qq.services.configuration_service import effective_service_duration, effect
 from qq.services.timeslot_service import ensure_default_time_slots, regular_daily_capacity, regular_slot_capacities
 from qq.services.notification_service import notify_barangay_staff, notify_resident
 from qq.services.queue_service import CHECKED_IN_NOTE, live_queue_participation_q
+from qq.services.appointment_expiration import (
+    appointment_checkin_window_open,
+    appointment_expiration_at,
+    appointment_start_at,
+    expire_overdue_appointments,
+    is_appointment_expired,
+)
 from qq.services.assistant_data import (
     assistant_data_for,
     money_label,
@@ -747,6 +754,7 @@ def appointments_api(request):
 def queue_status_api(request):
     """Return the resident's active queue or perform a queue action."""
     resident = request.user.resident_profile
+    expire_overdue_appointments(barangay=resident.barangay, resident=resident)
 
     if request.method == "POST":
         try:
@@ -791,7 +799,12 @@ def queue_status_api(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             with transaction.atomic():
-                ticket = QueueTicket.objects.select_for_update().filter(appointment=appointment).first()
+                appointment = Appointment.objects.select_for_update().select_related(
+                    "time_slot", "service"
+                ).get(pk=appointment.pk, resident=resident)
+                ticket = QueueTicket.objects.select_for_update().filter(
+                    appointment=appointment
+                ).first()
                 if not ticket:
                     return Response(
                         {"message": "A valid queue ticket is required before check-in."},
@@ -805,6 +818,28 @@ def queue_status_api(request):
                         "staff_notification_created": False,
                         "message": "You are already checked in.",
                     })
+                now = timezone.now()
+                if is_appointment_expired(appointment, at=now, ticket=ticket):
+                    appointment.status = Appointment.Status.MISSED
+                    appointment.save(update_fields=["status", "updated_at"])
+                    ticket.status = QueueTicket.Status.MISSED
+                    ticket.save(update_fields=["status", "updated_at"])
+                    return Response(
+                        {"message": "This appointment has expired and can no longer be checked in."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                start_at = appointment_start_at(appointment)
+                end_at = appointment_expiration_at(appointment)
+                if start_at is None or end_at is None or now < start_at:
+                    return Response(
+                        {"message": "Check-in is available only during your scheduled time slot."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not appointment_checkin_window_open(appointment, at=now):
+                    return Response(
+                        {"message": "This appointment has expired and can no longer be checked in."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 if appointment.status != Appointment.Status.CONFIRMED or ticket.status != QueueTicket.Status.WAITING:
                     return Response(
                         {"message": "This appointment is not eligible for check-in."},
@@ -892,6 +927,7 @@ def queue_status_api(request):
 def transactions_api(request):
     """List and manage the signed-in resident's appointment history."""
     resident = request.user.resident_profile
+    expire_overdue_appointments(barangay=resident.barangay, resident=resident)
 
     if request.method == "POST":
         try:

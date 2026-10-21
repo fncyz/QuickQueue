@@ -18,6 +18,7 @@ from qq.services.queue_service import (
     finalized_queue_q,
     live_queue_participation_q,
 )
+from qq.services.appointment_expiration import expire_overdue_appointments
 
 
 def _barangay_for(user):
@@ -173,6 +174,7 @@ def barangay_live_queue(request):
     ):
         return redirect("staff_live_queue")
     barangay = _barangay_for(request.user)
+    expire_overdue_appointments(barangay=barangay)
     today = timezone.localdate()
     now = timezone.localtime()
     current_slot, slots = _resolve_slot(
@@ -309,6 +311,7 @@ def barangay_queue_call_next(request):
     """Move the first waiting ticket to Now Serving."""
     _require_queue_operator(request.user)
     barangay = _barangay_for(request.user)
+    expire_overdue_appointments(barangay=barangay)
     today = timezone.localdate()
     slot_id = request.POST.get("slot")
     current_slot, _slots = _resolve_slot(

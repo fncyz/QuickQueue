@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 import io
 import tempfile
 import zipfile
@@ -481,9 +481,11 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertIn(event_booking.booking_reference, special_section)
         self.assertNotIn("Queue No.", special_section)
 
-        appointments = self.client.get(
-            f"/barangay/staff/appointments/?date={today.isoformat()}"
-        )
+        before_slot_end = timezone.make_aware(datetime.combine(today, time(8, 30)))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            appointments = self.client.get(
+                f"/barangay/staff/appointments/?date={today.isoformat()}"
+            )
         self.assertEqual(appointments.context["today_total"], 1)
         self.assertEqual(appointments.context["selected_count"], 1)
         self.assertEqual(
@@ -498,16 +500,18 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertContains(dashboard, special_service.name)
         self.assertNotIn(event_ticket, dashboard.context["waiting_tickets"])
 
-        live_queue = self.client.get(
-            f"/barangay/staff/queue/live/?slot={self.slot.pk}"
-        )
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            live_queue = self.client.get(
+                f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+            )
         self.assertEqual(
             [ticket.pk for ticket in live_queue.context["tickets"]],
             [regular_ticket.pk],
         )
         self.assertNotContains(live_queue, special_service.name)
 
-        documents = self.client.get("/barangay/staff/documents/")
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            documents = self.client.get("/barangay/staff/documents/")
         self.assertEqual(documents.context["processing_count"], 0)
         self.assertNotContains(documents, special_service.name)
         blocked_preview = self.client.get(
@@ -895,8 +899,12 @@ class AdminStaffWorkflowTests(TestCase):
         first = self._ticket("estimate-first", "First", self.service, "C01", checked_in=True)
         second = self._ticket("estimate-second", "Second", self.service, "C02", checked_in=True)
         url = f"/barangay/staff/queue/live/?slot={self.slot.pk}"
+        before_slot_end = timezone.make_aware(datetime.combine(
+            first.appointment.appointment_date, time(8, 30),
+        ))
 
-        response = self.client.get(url)
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<small>Estimated Time</small>", html=True)
@@ -906,7 +914,8 @@ class AdminStaffWorkflowTests(TestCase):
 
         first.status = QueueTicket.Status.NOW_SERVING
         first.save(update_fields=["status", "updated_at"])
-        serving_response = self.client.get(url)
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            serving_response = self.client.get(url)
         serving_estimates = {
             ticket.pk: ticket.wait_minutes for ticket in serving_response.context["tickets"]
         }
@@ -924,7 +933,8 @@ class AdminStaffWorkflowTests(TestCase):
 
         first.status = QueueTicket.Status.COMPLETED
         first.save(update_fields=["status", "updated_at"])
-        completed_response = self.client.get(url)
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            completed_response = self.client.get(url)
         completed_estimates = {
             ticket.pk: ticket.wait_minutes for ticket in completed_response.context["tickets"]
         }
@@ -994,7 +1004,11 @@ class AdminStaffWorkflowTests(TestCase):
         )
         self.client.force_login(self.admin_user)
 
-        response = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+        before_slot_end = timezone.make_aware(datetime.combine(
+            timezone.localdate(), time(8, 30),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([ticket.pk for ticket in response.context["tickets"]], [checked_in.pk])
@@ -1020,7 +1034,11 @@ class AdminStaffWorkflowTests(TestCase):
         ticket = self._ticket(
             "monitor-serving", "Serving", self.service, "C12", checked_in=True
         )
-        called = self.client.post("/barangay/queue/call-next/", {"slot": self.slot.pk})
+        before_slot_end = timezone.make_aware(datetime.combine(
+            timezone.localdate(), time(8, 30),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            called = self.client.post("/barangay/queue/call-next/", {"slot": self.slot.pk})
         self.assertRedirects(
             called,
             f"/barangay/staff/queue/live/?slot={self.slot.pk}",
@@ -1049,16 +1067,20 @@ class AdminStaffWorkflowTests(TestCase):
         resident_client = APIClient()
         resident_client.force_authenticate(ticket.appointment.resident.user)
 
-        first = resident_client.post(
-            "/api/queue-status/",
-            {"appointment_id": ticket.appointment_id, "action": "check_in"},
-            format="json",
-        )
-        second = resident_client.post(
-            "/api/queue-status/",
-            {"appointment_id": ticket.appointment_id, "action": "check_in"},
-            format="json",
-        )
+        before_slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, time(8, 30),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            first = resident_client.post(
+                "/api/queue-status/",
+                {"appointment_id": ticket.appointment_id, "action": "check_in"},
+                format="json",
+            )
+            second = resident_client.post(
+                "/api/queue-status/",
+                {"appointment_id": ticket.appointment_id, "action": "check_in"},
+                format="json",
+            )
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
@@ -1076,14 +1098,78 @@ class AdminStaffWorkflowTests(TestCase):
         )
         ticket.refresh_from_db()
         self.assertEqual(ticket.notes, CHECKED_IN_NOTE)
-        status_response = resident_client.get("/api/queue-status/")
+        at_slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, self.slot.end_time,
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=at_slot_end):
+            status_response = resident_client.get("/api/queue-status/")
         self.assertTrue(status_response.data["appointment"]["checked_in"])
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.status, Appointment.Status.CONFIRMED)
         self.client.force_login(self.admin_user)
-        monitor = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=at_slot_end):
+            monitor = self.client.get(f"/barangay/queue/live/?slot={self.slot.pk}")
         self.assertEqual([item.pk for item in monitor.context["tickets"]], [ticket.pk])
 
+    def test_resident_check_in_before_slot_start_is_rejected(self):
+        ticket = self._ticket("early-check-in", "Early", self.service, "C15")
+        resident_client = APIClient()
+        resident_client.force_authenticate(ticket.appointment.resident.user)
+        before_slot_start = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, time(7, 59),
+        ))
+
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_start):
+            response = resident_client.post(
+                "/api/queue-status/",
+                {"appointment_id": ticket.appointment_id, "action": "check_in"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.notes, "")
+        self.assertEqual(ticket.appointment.status, Appointment.Status.CONFIRMED)
+
+    def test_unchecked_resident_expires_at_slot_end_and_cannot_check_in(self):
+        for suffix, minute in (("exact", 0), ("late", 1)):
+            with self.subTest(boundary=suffix):
+                ticket = self._ticket(
+                    f"expiry-check-in-{suffix}", "Expiry", self.service,
+                    f"C{16 + minute}",
+                )
+                resident_client = APIClient()
+                resident_client.force_authenticate(ticket.appointment.resident.user)
+                at_or_after_end = timezone.make_aware(datetime.combine(
+                    ticket.appointment.appointment_date, self.slot.end_time,
+                )) + timedelta(minutes=minute)
+
+                with patch("qq.services.appointment_expiration.timezone.now", return_value=at_or_after_end):
+                    response = resident_client.post(
+                        "/api/queue-status/",
+                        {"appointment_id": ticket.appointment_id, "action": "check_in"},
+                        format="json",
+                    )
+                    queue_status = resident_client.get("/api/queue-status/")
+                    transactions = resident_client.get("/api/transactions/")
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIsNone(queue_status.data["appointment"])
+                transaction = next(
+                    item for item in transactions.data["transactions"]
+                    if item["id"] == ticket.appointment_id
+                )
+                self.assertEqual(transaction["status_code"], Appointment.Status.MISSED)
+                ticket.refresh_from_db()
+                ticket.appointment.refresh_from_db()
+                self.assertEqual(ticket.appointment.status, Appointment.Status.MISSED)
+                self.assertEqual(ticket.status, QueueTicket.Status.MISSED)
+
     def test_staff_documents_are_consolidated_with_processing_and_completed_tabs(self):
-        response = self.client.get("/barangay/staff/documents/")
+        today = timezone.localdate()
+        before_slot_end = timezone.make_aware(datetime.combine(today, time(8, 30)))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.get("/barangay/staff/documents/")
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, ">Documents</a>")
@@ -1146,17 +1232,132 @@ class AdminStaffWorkflowTests(TestCase):
         )
         self.assertNotContains(response, "?tab=pending#appointment-list")
 
+    def test_staff_appointment_lists_label_slot_expiry_without_relabeling_no_shows(self):
+        expired = self._ticket("staff-expired-label", "Expired", self.service, "E01")
+        missed = self._ticket("staff-missed-label", "Missed", self.service, "M01")
+        missed.appointment.status = Appointment.Status.MISSED
+        missed.appointment.save(update_fields=["status", "updated_at"])
+        missed.status = QueueTicket.Status.MISSED
+        missed.notes = "Resident did not show up"
+        missed.save(update_fields=["status", "notes", "updated_at"])
+        rejected = self._ticket("staff-rejected-label", "Rejected", self.service, "R01")
+        rejected.appointment.status = Appointment.Status.CANCELLED
+        rejected.appointment.save(update_fields=["status", "updated_at"])
+        rejected.status = QueueTicket.Status.CANCELLED
+        rejected.save(update_fields=["status", "updated_at"])
+
+        at_slot_end = timezone.make_aware(datetime.combine(
+            expired.appointment.appointment_date, self.slot.end_time,
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=at_slot_end):
+            all_appointments = self.client.get("/barangay/staff/appointments/?tab=all")
+            rejected_tab = self.client.get("/barangay/staff/appointments/?tab=rejected")
+
+        self.assertEqual(all_appointments.status_code, 200)
+        self.assertEqual(rejected_tab.status_code, 200)
+        all_statuses = {
+            item.pk: item.portal_status_display
+            for item in all_appointments.context["appointments"]
+        }
+        selected_statuses = {
+            item.pk: item.portal_status_display
+            for item in all_appointments.context["selected_appointments"]
+        }
+        rejected_statuses = {
+            item.pk: item.portal_status_display
+            for item in rejected_tab.context["appointments"]
+        }
+        self.assertEqual(all_statuses[expired.appointment_id], "Expired")
+        self.assertEqual(selected_statuses[expired.appointment_id], "Expired")
+        self.assertEqual(rejected_statuses[expired.appointment_id], "Expired")
+        self.assertEqual(rejected_statuses[missed.appointment_id], "Missed")
+        self.assertEqual(rejected_statuses[rejected.appointment_id], "Cancelled")
+        self.assertContains(all_appointments, "Expired")
+        self.assertContains(rejected_tab, "Expired")
+        self.assertContains(rejected_tab, "Missed")
+        self.assertContains(rejected_tab, "Cancelled")
+
     def test_document_processing_action_still_updates_existing_ticket(self):
         ticket = self._ticket("document-resident", "Document", self.service, "C09")
-
-        response = self.client.post(
-            f"/barangay/staff/documents/{ticket.pk}/action/",
-            {"action": "start"},
-        )
+        before_slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, time(8, 59),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.post(
+                f"/barangay/staff/documents/{ticket.pk}/action/",
+                {"action": "start"},
+            )
 
         self.assertRedirects(response, "/barangay/staff/documents/", fetch_redirect_response=False)
         ticket.refresh_from_db()
         self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+
+    def test_document_start_is_available_to_unassigned_confirmed_ticket_and_assigns_staff(self):
+        ticket = self._ticket("unassigned-document", "Unassigned", self.service, "C11")
+        ticket.served_by = None
+        ticket.save(update_fields=["served_by", "updated_at"])
+        slot_start = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, time(8, 59),
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=slot_start):
+            page = self.client.get("/barangay/staff/documents/")
+            self.assertContains(page, f'action="/barangay/staff/documents/{ticket.pk}/action/"')
+            self.assertContains(page, "Start Processing")
+            response = self.client.post(
+                f"/barangay/staff/documents/{ticket.pk}/action/", {"action": "start"},
+            )
+        self.assertRedirects(response, "/barangay/staff/documents/", fetch_redirect_response=False)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+        self.assertEqual(ticket.served_by_id, self.staff.pk)
+
+    def test_slot_end_boundary_expires_and_blocks_direct_document_start(self):
+        ticket = self._ticket("boundary-document", "Boundary", self.service, "C12")
+        ticket.served_by = None
+        ticket.save(update_fields=["served_by", "updated_at"])
+        slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, self.slot.end_time,
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=slot_end):
+            response = self.client.post(
+                f"/barangay/staff/documents/{ticket.pk}/action/", {"action": "start"},
+            )
+        self.assertRedirects(response, "/barangay/staff/documents/", fetch_redirect_response=False)
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.status, Appointment.Status.MISSED)
+        self.assertEqual(ticket.status, QueueTicket.Status.MISSED)
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.NONE)
+
+    def test_started_processing_is_protected_after_slot_end(self):
+        ticket = self._ticket("ongoing-document", "Ongoing", self.service, "C13")
+        ticket.appointment.status = Appointment.Status.ONGOING
+        ticket.appointment.save(update_fields=["status", "updated_at"])
+        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+        ticket.save(update_fields=["claim_status", "updated_at"])
+        slot_end = timezone.make_aware(datetime.combine(
+            ticket.appointment.appointment_date, self.slot.end_time,
+        ))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=slot_end):
+            self.client.get("/barangay/staff/documents/")
+        ticket.refresh_from_db()
+        ticket.appointment.refresh_from_db()
+        self.assertEqual(ticket.appointment.status, Appointment.Status.ONGOING)
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
+
+    def test_staff_cannot_start_document_from_another_barangay(self):
+        ticket = self._ticket("foreign-document", "Foreign", self.service, "C14")
+        other_barangay = Barangay.objects.create(
+            name="Foreign Document Barangay", address="Toledo City", contact_number="09440000000",
+        )
+        ticket.appointment.barangay = other_barangay
+        ticket.appointment.save(update_fields=["barangay", "updated_at"])
+        response = self.client.post(
+            f"/barangay/staff/documents/{ticket.pk}/action/", {"action": "start"},
+        )
+        self.assertEqual(response.status_code, 404)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.NONE)
 
     def test_documents_marks_only_overdue_unfinished_appointments_expired(self):
         today = timezone.localdate()
@@ -1180,7 +1381,9 @@ class AdminStaffWorkflowTests(TestCase):
         completed.appointment.status = Appointment.Status.COMPLETED
         completed.appointment.save(update_fields=["status", "updated_at"])
 
-        response = self.client.get("/barangay/staff/documents/")
+        before_slot_end = timezone.make_aware(datetime.combine(today, time(8, 30)))
+        with patch("qq.services.appointment_expiration.timezone.now", return_value=before_slot_end):
+            response = self.client.get("/barangay/staff/documents/")
 
         self.assertEqual(response.status_code, 200)
         tickets = {ticket.pk: ticket for ticket in response.context["tickets"]}
@@ -1191,12 +1394,8 @@ class AdminStaffWorkflowTests(TestCase):
         self.assertFalse(tickets[completed.pk].is_expired)
         self.assertNotIn(claimed.pk, tickets)
         self.assertContains(response, '<b class="pill expired">Expired</b>', count=1)
-        self.assertContains(response, "Archive Expired Appointment?")
-        self.assertContains(
-            response,
-            "Are you sure you want to archive this expired appointment? Its records will remain available in history.",
-        )
-        self.assertContains(response, "Yes, Archive")
+        self.assertContains(response, "Expired")
+        self.assertContains(response, '<span class="done">Expired</span>')
 
     def test_expired_document_archive_is_scoped_idempotent_and_notification_free(self):
         ticket = self._ticket("archive-expired", "Archive Expired", self.service, "X07")
@@ -1211,16 +1410,13 @@ class AdminStaffWorkflowTests(TestCase):
         archived = self.client.post(archive_url, {"action": "archive_expired"}, follow=True)
 
         self.assertRedirects(archived, "/barangay/staff/documents/")
-        self.assertContains(archived, "Archived expired appointment X07")
+        self.assertContains(archived, "Only overdue, unfinished appointments can be archived.")
         ticket.refresh_from_db()
         ticket.appointment.refresh_from_db()
-        self.assertEqual(ticket.appointment.status, Appointment.Status.MISSED)
+        self.assertEqual(ticket.appointment.status, Appointment.Status.CONFIRMED)
         self.assertEqual(ticket.claim_status, QueueTicket.ClaimStatus.PROCESSING)
         self.assertEqual(ticket.status, original_queue_status)
         self.assertEqual(Notification.objects.count(), notification_count)
-        history = self.client.get("/barangay/staff/appointments/?tab=rejected")
-        self.assertContains(history, "Archive Expired Resident")
-
         repeated = self.client.post(archive_url, {"action": "archive_expired"}, follow=True)
         self.assertContains(repeated, "Only overdue, unfinished appointments can be archived.")
         self.assertEqual(Notification.objects.count(), notification_count)

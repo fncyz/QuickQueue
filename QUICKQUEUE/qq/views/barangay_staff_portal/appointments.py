@@ -12,6 +12,10 @@ from django.views.decorators.http import require_POST
 from qq.models import Appointment, BarangayStaff, ClosedAppointmentDate, Notification, Service, TimeSlot
 from qq.services.notification_service import notify_resident
 from qq.services.timeslot_service import regular_daily_capacity, regular_slot_capacities
+from qq.services.appointment_expiration import (
+    expire_overdue_appointments,
+    is_recorded_appointment_expiration,
+)
 from qq.views.barangay_staff_portal.resident_logbook import resident_history_context
 
 ACTIVE_STATUSES = [Appointment.Status.PENDING, Appointment.Status.CONFIRMED, Appointment.Status.ONGOING]
@@ -34,6 +38,8 @@ def staff_appointments(request):
         return redirect("barangay_appointments")
 
     barangay = staff.barangay
+    now = timezone.now()
+    expire_overdue_appointments(at=now, barangay=barangay)
     today = timezone.localdate()
     selected_date = today
     try:
@@ -147,6 +153,21 @@ def staff_appointments(request):
     }
     if tab == "history":
         context.update(resident_history_context(request, staff))
+    else:
+        selected_appointments = list(selected_qs)
+        appointments = list(context["appointments"])
+        for appointment in (*selected_appointments, *appointments):
+            try:
+                ticket = appointment.queue_ticket
+            except QueueTicket.DoesNotExist:
+                ticket = None
+            appointment.portal_status_display = (
+                "Expired"
+                if is_recorded_appointment_expiration(appointment, at=now, ticket=ticket)
+                else appointment.workflow_status_display
+            )
+        context["selected_appointments"] = selected_appointments
+        context["appointments"] = appointments
     return render(request, "barangay_staff/appointments.html", context)
 
 
@@ -156,6 +177,8 @@ def staff_review_appointment(request, pk):
     staff = _regular_staff_for(request.user)
     if staff is None:
         return redirect("barangay_appointments")
+
+    expire_overdue_appointments(barangay=staff.barangay)
 
     appointment = get_object_or_404(
         Appointment.objects.select_related("resident", "service", "time_slot"),

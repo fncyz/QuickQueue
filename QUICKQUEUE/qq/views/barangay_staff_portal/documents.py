@@ -10,26 +10,16 @@ from django.views.decorators.http import require_POST
 from qq.models import Appointment, BarangayStaff, Notification, QueueTicket, Service
 from qq.views.barangay_staff_portal.completed_documents import completed_documents_context
 from qq.services.notification_service import notify_resident
-
-
-EXPIRED_DOCUMENT_APPOINTMENT_STATUSES = (
-    Appointment.Status.CONFIRMED,
-    Appointment.Status.ONGOING,
-)
-EXPIRED_DOCUMENT_CLAIM_STATUSES = (
-    QueueTicket.ClaimStatus.NONE,
-    QueueTicket.ClaimStatus.PROCESSING,
+from qq.services.appointment_expiration import (
+    expire_overdue_appointments,
+    is_appointment_expired,
 )
 
 
-def _is_expired_document(ticket, *, today=None):
-    today = today or timezone.localdate()
-    return (
-        ticket.appointment.appointment_date is not None
-        and ticket.appointment.appointment_date < today
-        and ticket.appointment.status in EXPIRED_DOCUMENT_APPOINTMENT_STATUSES
-        and ticket.claim_status in EXPIRED_DOCUMENT_CLAIM_STATUSES
-    )
+def _is_expired_document(ticket, *, at=None):
+    if ticket.appointment.status == Appointment.Status.MISSED:
+        return True
+    return is_appointment_expired(ticket.appointment, at=at, ticket=ticket)
 
 
 def _staff_for(user):
@@ -48,11 +38,13 @@ def staff_document_processing(request):
     active_tab = request.GET.get("tab", "processing")
     if active_tab not in {"processing", "completed"}:
         active_tab = "processing"
+    expire_overdue_appointments(barangay=staff.barangay)
     base = QueueTicket.objects.filter(
         appointment__barangay=staff.barangay,
         appointment__service__is_temporary=False,
         appointment__status__in=[
-            Appointment.Status.CONFIRMED, Appointment.Status.ONGOING, Appointment.Status.COMPLETED,
+            Appointment.Status.CONFIRMED, Appointment.Status.ONGOING,
+            Appointment.Status.COMPLETED, Appointment.Status.MISSED,
         ],
     ).exclude(claim_status=QueueTicket.ClaimStatus.CLAIMED).select_related(
         "appointment__resident", "appointment__service", "appointment__time_slot", "served_by"
@@ -83,10 +75,17 @@ def staff_document_processing(request):
     tickets = list(filtered.order_by(
         "appointment__appointment_date", "appointment__time_slot__start_time"
     ))
-    today = timezone.localdate()
+    now = timezone.now()
     for ticket in tickets:
-        ticket.is_expired = _is_expired_document(ticket, today=today)
+        ticket.is_expired = _is_expired_document(ticket, at=now)
         ticket.can_process = ticket.served_by_id == staff.pk
+        ticket.can_start = (
+            not ticket.is_expired
+            and ticket.appointment.status == Appointment.Status.CONFIRMED
+            and ticket.status == QueueTicket.Status.WAITING
+            and ticket.claim_status == QueueTicket.ClaimStatus.NONE
+            and ticket.served_by_id in (None, staff.pk)
+        )
     context = {
         "active_page": "documents", "staff": staff, "barangay": staff.barangay,
         "document_tab": active_tab,
@@ -111,16 +110,14 @@ def staff_document_action(request, pk):
     staff = _staff_for(request.user)
     if hasattr(request.user, "barangay_profile") or staff.role == BarangayStaff.Role.ADMIN:
         raise Http404("This action is available to barangay staff accounts only.")
+    action = request.POST.get("action")
+    expire_overdue_appointments(barangay=staff.barangay)
     ticket = get_object_or_404(
-        QueueTicket.objects.select_related("appointment__resident", "appointment__service"),
+        QueueTicket.objects.select_related("appointment__resident", "appointment__service", "appointment__time_slot"),
         pk=pk,
         appointment__barangay=staff.barangay,
         appointment__service__is_temporary=False,
     )
-    action = request.POST.get("action")
-    if action in {"start", "ready"} and ticket.served_by_id != staff.pk:
-        messages.error(request, "This document is assigned to another staff member.")
-        return redirect("staff_document_processing")
     if action == "archive_expired":
         with transaction.atomic():
             locked_ticket = get_object_or_404(
@@ -129,21 +126,57 @@ def staff_document_action(request, pk):
                 appointment__barangay=staff.barangay,
                 appointment__service__is_temporary=False,
             )
-            if not _is_expired_document(locked_ticket):
+            if (
+                locked_ticket.appointment.status not in (Appointment.Status.CONFIRMED, Appointment.Status.PENDING)
+                or not is_appointment_expired(locked_ticket.appointment, ticket=locked_ticket)
+            ):
                 messages.error(request, "Only overdue, unfinished appointments can be archived.")
                 return redirect("staff_document_processing")
             appointment = locked_ticket.appointment
             appointment.status = Appointment.Status.MISSED
             appointment.save(update_fields=["status", "updated_at"])
+            locked_ticket.status = QueueTicket.Status.MISSED
+            locked_ticket.save(update_fields=["status", "updated_at"])
         messages.success(
             request,
             f"Archived expired appointment {ticket.queue_number}. Its records remain available in history.",
         )
-    elif action == "start" and ticket.claim_status == QueueTicket.ClaimStatus.NONE:
-        ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
-        ticket.save(update_fields=["claim_status", "updated_at"])
+    elif action == "start":
+        with transaction.atomic():
+            locked_ticket = get_object_or_404(
+                QueueTicket.objects.select_for_update().select_related("appointment__time_slot"),
+                pk=ticket.pk,
+                appointment__barangay=staff.barangay,
+                appointment__service__is_temporary=False,
+            )
+            appointment = locked_ticket.appointment
+            if locked_ticket.served_by_id not in (None, staff.pk):
+                messages.error(request, "This document is assigned to another staff member.")
+                return redirect("staff_document_processing")
+            if (
+                is_appointment_expired(appointment, ticket=locked_ticket)
+                or appointment.status != Appointment.Status.CONFIRMED
+                or locked_ticket.status != QueueTicket.Status.WAITING
+                or locked_ticket.claim_status != QueueTicket.ClaimStatus.NONE
+            ):
+                if is_appointment_expired(appointment, ticket=locked_ticket):
+                    appointment.status = Appointment.Status.MISSED
+                    appointment.save(update_fields=["status", "updated_at"])
+                    locked_ticket.status = QueueTicket.Status.MISSED
+                    locked_ticket.save(update_fields=["status", "updated_at"])
+                    message = "This appointment has expired and cannot be processed."
+                else:
+                    message = "This document is no longer eligible for processing."
+                messages.error(request, message)
+                return redirect("staff_document_processing")
+            locked_ticket.served_by = staff
+            locked_ticket.claim_status = QueueTicket.ClaimStatus.PROCESSING
+            locked_ticket.save(update_fields=["served_by", "claim_status", "updated_at"])
         messages.success(request, f"Started processing {ticket.queue_number}.")
     elif action == "ready" and ticket.claim_status == QueueTicket.ClaimStatus.PROCESSING:
+        if ticket.served_by_id != staff.pk:
+            messages.error(request, "This document is assigned to another staff member.")
+            return redirect("staff_document_processing")
         ticket.claim_status = QueueTicket.ClaimStatus.READY
         ticket.save(update_fields=["claim_status", "updated_at"])
         notify_resident(
