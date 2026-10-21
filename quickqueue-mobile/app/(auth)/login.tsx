@@ -23,6 +23,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { loginResident, refreshResidentSession } from "@/services/api";
 import { getBiometricLogin, getBiometricStatuses, updateBiometricRefreshToken, type BiometricKind } from "@/services/secure-auth";
 import { saveRecentResidentProfile, setCurrentAccountId } from "@/services/offline-cache";
+import { registerForPushNotifications } from '@/services/push-notifications';
 import { useAuthSession } from '@/contexts/auth-session';
 
 const setupRoute = (stage: string) => {
@@ -111,6 +112,7 @@ export default function LoginScreen() {
       return;
     }
 
+    void registerForPushNotifications(false);
     setIsSubmitting(false);
     if (result.security_setup_stage === 'complete') unlock();
     router.replace(setupRoute(result.security_setup_stage));
@@ -162,7 +164,9 @@ export default function LoginScreen() {
         ["quickqueue.securitySetupStage", "complete"],
       ]);
       await AsyncStorage.removeItem('quickqueue.explicitLogout');
+      await setCurrentAccountId(username.trim() || createdUsername?.trim() || '');
       await updateBiometricRefreshToken(refreshToken);
+      void registerForPushNotifications(false);
       unlock();
       router.replace("/(tabs)");
     } catch (error: any) {

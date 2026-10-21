@@ -11,6 +11,7 @@ import { Text } from "@/components/Typography";
 import { loginResidentWithPin } from "@/services/api";
 import { saveRecentResidentProfile, setCurrentAccountId } from "@/services/offline-cache";
 import { useAuthSession } from '@/contexts/auth-session';
+import { registerForPushNotifications } from '@/services/push-notifications';
 
 const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 const letters: Record<string, string> = { "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO", "7": "PQRS", "8": "TUV", "9": "WXYZ" };
@@ -51,6 +52,7 @@ export default function PinLoginScreen() {
       await AsyncStorage.removeItem('quickqueue.explicitLogout');
       await setCurrentAccountId(username);
       await saveRecentResidentProfile({ displayName: `${result.resident.first_name} ${result.resident.last_name}`.trim(), username: username.trim() });
+      void registerForPushNotifications(false);
       unlock();
       router.replace("/(tabs)");
     } catch (requestError: any) {

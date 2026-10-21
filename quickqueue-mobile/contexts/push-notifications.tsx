@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { PropsWithChildren, useEffect, useRef } from 'react';
 
 import { useAuthSession } from '@/contexts/auth-session';
-import { notificationRoute, PENDING_ROUTE_KEY, registerForPushNotifications, syncChangedPushToken } from '@/services/push-notifications';
+import { notificationRoute, PENDING_ROUTE_KEY, syncChangedPushToken } from '@/services/push-notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }),
@@ -17,8 +17,7 @@ export function PushNotificationsProvider({ children }: PropsWithChildren) {
   useEffect(() => { isUnlockedRef.current = isUnlocked; }, [isUnlocked]);
 
   useEffect(() => {
-    registerForPushNotifications(false).catch(() => undefined);
-    const tokenSubscription = Notifications.addPushTokenListener(({ data }) => { syncChangedPushToken(data).catch(() => undefined); });
+    const tokenSubscription = Notifications.addPushTokenListener(({ data }) => { void syncChangedPushToken(data); });
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
       const target = notificationRoute(response.notification.request.content.data);
       if (isUnlockedRef.current) router.push(target);
